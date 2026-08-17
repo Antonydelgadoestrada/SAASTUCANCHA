@@ -642,7 +642,7 @@ export function ClubSchedulesContent() {
             <div>
               <CardTitle>Calendario de Disponibilidad</CardTitle>
               <CardDescription>
-                Visualiza y gestiona los horarios de tus canchas
+                Visualiza y gestiona los horarios de tus canchas. Cada bloque en la cuadrícula representa un intervalo de 30 minutos.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -791,8 +791,15 @@ export function ClubSchedulesContent() {
                         key={timeStr}
                         className="grid grid-cols-8 gap-2 border-b py-1"
                       >
-                        <div className="flex items-center px-2 text-sm">
-                          {timeStr}
+                        <div className="flex items-center px-2 text-xs font-semibold text-muted-foreground min-w-[90px]">
+                          {(() => {
+                            const [hours, minutes] = timeStr.split(":").map(Number);
+                            const d = new Date();
+                            d.setHours(hours, minutes + 30, 0, 0);
+                            const endHours = d.getHours().toString().padStart(2, "0");
+                            const endMinutes = d.getMinutes().toString().padStart(2, "0");
+                            return `${timeStr} - ${endHours}:${endMinutes}`;
+                          })()}
                         </div>
                         {weekDays.map((day, i) => {
                           const dateStr = format(day, "yyyy-MM-dd");

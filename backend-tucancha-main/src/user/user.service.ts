@@ -79,7 +79,10 @@ export class UserService {
   }
 
   async findByEmail(email: string): Promise<User | undefined> {
-    return this.userRepository.findOne({ where: { email } , relations:['club'] });
+    return this.userRepository.findOne({ 
+      where: { email: email.toLowerCase().trim() }, 
+      relations: ['club'] 
+    });
   }
 
   async create(user: Partial<User>): Promise<User> {
