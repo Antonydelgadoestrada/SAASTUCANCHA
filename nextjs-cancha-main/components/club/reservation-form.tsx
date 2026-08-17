@@ -242,7 +242,7 @@ export function ReservationForm({ venues, courts, onSubmit, isSubmitting }: Rese
 
           <div className="space-y-2" >
             <Label htmlFor="duration">Duración</Label>
-            <Select value={duration} onValueChange={setDuration} disabled={(!selectedCourt && !selectedDate )}>
+            <Select value={duration} onValueChange={setDuration} disabled={!selectedCourt || !selectedDate}>
               <SelectTrigger id="duration">
                 <SelectValue placeholder="Seleccionar duración" />
               </SelectTrigger>
@@ -258,24 +258,28 @@ export function ReservationForm({ venues, courts, onSubmit, isSubmitting }: Rese
 
           <div className="space-y-2">
             <Label htmlFor="start-time">Hora de inicio</Label>
-            {filteredtimeOptions.length > 0 ? (
-            <Select value={startTime} onValueChange={setStartTime}>
-              <SelectTrigger id="start-time">
-                <SelectValue placeholder="Seleccionar hora" />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredtimeOptions.map((time) => (
-                  <SelectItem key={time} value={time}>
-                    {time}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <div className="text-sm text-muted-foreground italic py-2">
-              No hay horarios disponibles para esta fecha y hora
-            </div>
-          )}
+            {!selectedCourt || !selectedDate || !duration ? (
+              <div className="text-sm text-muted-foreground italic py-2">
+                Selecciona cancha, fecha y duración
+              </div>
+            ) : filteredtimeOptions.length > 0 ? (
+              <Select value={startTime} onValueChange={setStartTime}>
+                <SelectTrigger id="start-time">
+                  <SelectValue placeholder="Seleccionar hora" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredtimeOptions.map((time) => (
+                    <SelectItem key={time} value={time}>
+                      {time}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="text-sm text-destructive font-medium italic py-2">
+                No hay horarios disponibles para esta fecha y hora
+              </div>
+            )}
           </div>
 
          

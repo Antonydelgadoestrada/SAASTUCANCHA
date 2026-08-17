@@ -67,29 +67,21 @@ export class BookingService {
 
   async checkAvailability(courtId: string, date: Date, startTime: string, duration:number) {
     const times = generateTimeSlots(startTime, duration); // ← Generamos bloques
-    const slots = await this.scheduleTemplateService.findByQuery({
-      where: {
-        courtId,
-        date,
-        time: In(times)
-      },
-    });
+    const dateStr = new Date(date).toISOString().split('T')[0];
+    const slots = await this.scheduleTemplateService.getAvailabilityByCourtAndDates(courtId, dateStr, dateStr);
+    const requestedSlots = slots.filter((s: any) => times.includes(s.time));
   
-    if (slots.length !== times.length || slots.some((s) => s.status !== 'available')) {
+    if (requestedSlots.length !== times.length || requestedSlots.some((s: any) => s.status !== 'available')) {
       throw new BadRequestException('Uno o más horarios no están disponibles.');
     }
-    return slots;
+    return requestedSlots;
   }
 
   async getSlots(courtId: string, date: Date, startTime: string, duration:number){
     const times = generateTimeSlots(startTime, duration); // ← Generamos bloques
-    return await this.scheduleTemplateService.findByQuery({
-      where: {
-        courtId,
-        date,
-        time: In(times)
-      },
-    });
+    const dateStr = new Date(date).toISOString().split('T')[0];
+    const slots = await this.scheduleTemplateService.getAvailabilityByCourtAndDates(courtId, dateStr, dateStr);
+    return slots.filter((s: any) => times.includes(s.time));
   }
 
   async findAllByUser(user: Partial<User>){

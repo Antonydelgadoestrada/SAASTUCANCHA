@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Between, Repository } from 'typeorm'
+import { Between, Repository, DataSource } from 'typeorm'
 import { CourtService } from '../court/court.service'
 import { CourtScheduleAvailability } from './court_schedule_availability.entity'
 import { ScheduleTemplate } from './schedule_template.entity'
@@ -25,6 +25,7 @@ export class ScheduleTemplateService {
     private readonly availabilityRepo: Repository<CourtScheduleAvailability>,
 
     private readonly courtsService: CourtService, // este servicio debe tener un método `findAllByVenue`
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -335,7 +336,7 @@ export class ScheduleTemplateService {
   }
 
   async getAvailabilityByCourtAndDates(courtId: string, start: string, end: string) {
-    return this.availabilityRepo.find({
+    const overrides = await this.availabilityRepo.find({
       where: {
         courtId,
         date: Between(start, end),
@@ -344,7 +345,77 @@ export class ScheduleTemplateService {
         date: 'ASC',
         time: 'ASC',
       },
-    })
+    });
+
+    const court = await this.dataSource.getRepository('Court').findOne({
+      where: { id: courtId },
+    });
+
+    if (!court || !court.schedule_template_id) {
+      return overrides;
+    }
+
+    const template = await this.dataSource.getRepository('ScheduleTemplate').findOne({
+      where: { id: court.schedule_template_id },
+    });
+
+    if (!template) {
+      return overrides;
+    }
+
+    // Generar slots virtuales basados en la plantilla
+    const startOffset = new Date(start + 'T00:00:00');
+    const endOffset = new Date(end + 'T00:00:00');
+    const daysMap = {
+      sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+    };
+    const enabledDays = template.days.map((d: string) => daysMap[d.toLowerCase()]);
+
+    const virtualSlots: any[] = [];
+    const currentDate = new Date(startOffset);
+
+    while (currentDate <= endOffset) {
+      const dayOfWeek = currentDate.getDay();
+      if (enabledDays.includes(dayOfWeek)) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+
+        for (const slot of template.slots) {
+          // Buscar si hay override
+          const override = overrides.find((o) => o.date === dateStr && o.time === slot.time);
+          if (override) {
+            virtualSlots.push(override);
+          } else {
+            virtualSlots.push({
+              courtId,
+              date: dateStr,
+              time: slot.time,
+              status: slot.status,
+            });
+          }
+        }
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Agregar overrides que estén fuera de los días habilitados de la plantilla
+    for (const override of overrides) {
+      const alreadyAdded = virtualSlots.some((s) => s.date === override.date && s.time === override.time);
+      if (!alreadyAdded) {
+        virtualSlots.push(override);
+      }
+    }
+
+    // Ordenar por fecha y hora
+    return virtualSlots.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.time.localeCompare(b.time);
+    });
   }
   
 
