@@ -450,4 +450,30 @@ export class MailerService {
       html,
     });
   }
+
+  async sendTrialExpiredEmail(to: string, clubName: string) {
+    const html = this.getEmailTemplate({
+      title: 'Prueba Gratuita Expirada - Canchas Suspendidas',
+      greeting: `Hola ${clubName},`,
+      message: `Tu periodo de prueba gratuita de 30 días en TuCancha ha finalizado.`,
+      bookingDetailsHtml: `
+        <p style="color: #dc2626; font-weight: bold;">
+          Tu acceso al panel y la visibilidad de tus canchas han sido suspendidos temporalmente. Para reactivar tu cuenta y continuar recibiendo reservas, por favor suscríbete a uno de nuestros planes.
+        </p>
+        <p style="margin-top: 15px;">
+          <a href="${process.env.WEB_SERVICES_URL}/club/membership" style="background-color: #16A34A; color: #fff; padding: 10px 18px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            Suscribirse Ahora
+          </a>
+        </p>
+      `,
+      footerNote: 'Puedes cancelar o renovar tu membresía en cualquier momento desde tu panel de usuario.',
+    });
+
+    await this.resend.emails.send({
+      from: 'TuCancha <noreply@tucancha.com.pe>',
+      to,
+      subject: 'Tu prueba gratuita en TuCancha ha vencido - Acceso suspendido',
+      html,
+    });
+  }
 }

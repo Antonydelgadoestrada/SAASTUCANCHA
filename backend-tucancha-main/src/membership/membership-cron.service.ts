@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, Between, MoreThan } from 'typeorm';
 import { addDays, subDays } from 'date-fns';
 import { ClubMembership } from './entities/club_membership.entity';
+import { Club } from '../club/club.entity';
 import { MembershipStatus } from './enums/membership-status.enum';
 import { MailerService } from '../mailer/mailer.service';
 
@@ -14,6 +15,8 @@ export class MembershipCronService {
   constructor(
     @InjectRepository(ClubMembership)
     private readonly membershipRepo: Repository<ClubMembership>,
+    @InjectRepository(Club)
+    private readonly clubRepo: Repository<Club>,
     private readonly mailerService: MailerService,
   ) {}
 
@@ -134,7 +137,41 @@ export class MembershipCronService {
             );
             this.logger.log(`Aviso de vencimiento en 3 días enviado a ${clubName} (${clubEmail}).`);
           } catch (err) {
-            this.logger.error(`Error enviando aviso preventivo a ${clubEmail}: ${err.message}`);
+            this.logger.error(`Error sending prevent notice to ${clubEmail}: ${err.message}`);
+          }
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // 4. EVALUAR EXPIRACIÓN DE PRUEBAS GRATUITAS DE CLUBES (30 DÍAS)
+      // ----------------------------------------------------------------------
+      this.logger.log('Iniciando verificación programada de expiración de pruebas gratuitas...');
+      const approvedClubs = await this.clubRepo.find({
+        where: { status: 'APPROVED' },
+      });
+
+      for (const club of approvedClubs) {
+        if (club.trialEndDate && new Date(club.trialEndDate) < now) {
+          // Verificar si tiene alguna membresía de pago activa o en periodo de gracia
+          const activeMembership = await this.membershipRepo.findOne({
+            where: [
+              { clubId: club.id, status: MembershipStatus.ACTIVE },
+              { clubId: club.id, status: MembershipStatus.GRACE },
+            ],
+          });
+
+          if (!activeMembership) {
+            club.status = 'SUSPENDED';
+            await this.clubRepo.save(club);
+            this.logger.warn(`Prueba gratuita del club ${club.name} (${club.id}) expiró. Acceso SUSPENDIDO.`);
+
+            if (club.email) {
+              try {
+                await (this.mailerService as any).sendTrialExpiredEmail(club.email, club.name);
+              } catch (err) {
+                this.logger.error(`Error enviando email de expiración de prueba a ${club.email}: ${err.message}`);
+              }
+            }
           }
         }
       }

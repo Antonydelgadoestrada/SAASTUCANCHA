@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { registerUser } from "@/lib/auth"
 import { GooglePlacesAutocomplete } from "../google-places-autocomplete"
 import { signIn } from "next-auth/react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // Distritos para el formulario de registro de clubes
 
@@ -108,6 +109,7 @@ export function RegisterForm() {
   const [activeTab, setActiveTab] = useState<"USER" | "CLUB">(defaultType)
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [showClubWelcomeDialog, setShowClubWelcomeDialog] = useState(false)
 
   // Servicios disponibles
   const availableServices = [
@@ -183,8 +185,9 @@ export function RegisterForm() {
 
       toast.success(`Registro exitoso. Bienvenido a ${process.env.NEXT_PUBLIC_APP_NAME}.`)
       router.push('/user/bookings')
-    } catch (error) {
-      toast.error("Error al registrar. Por favor intenta nuevamente.")
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || "Error al registrar. Por favor intenta nuevamente."
+      toast.error(msg)
     } finally {
       setIsLoading(false)
     }
@@ -203,10 +206,10 @@ export function RegisterForm() {
           coordinates: selectedLocation})
       })
 
-      toast.success("Registro exitoso. Tu cuenta será revisada por un administrador.")
-      router.push("/login")
-    } catch (error) {
-      toast.error("Error al registrar. Por favor intenta nuevamente.")
+      setShowClubWelcomeDialog(true)
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || "Error al registrar. Por favor intenta nuevamente."
+      toast.error(msg)
     } finally {
       setIsLoading(false)
     }
@@ -623,6 +626,39 @@ export function RegisterForm() {
         )}
         Registrarse con Google
       </Button> */}
+      <Dialog open={showClubWelcomeDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowClubWelcomeDialog(false);
+          router.push("/login");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-primary font-bold">¡Registro de Club Deportivo Exitoso!</DialogTitle>
+            <DialogDescription asChild>
+              <div className="pt-2 text-foreground space-y-3">
+                <p className="font-medium">
+                  La creación de tu cuenta como club ha sido registrada y requiere aprobación del administrador.
+                </p>
+                <p>
+                  Además, has accedido a la <strong>prueba gratuita de 30 días</strong> de Tu Cancha.
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  Pasados los 30 días, se te notificará al correo de Gmail sobre el vencimiento y podrás renovar o cancelar la suscripción desde tu cuenta.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button className="w-full" onClick={() => {
+              setShowClubWelcomeDialog(false);
+              router.push("/login");
+            }}>
+              Entendido, ir al Login
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

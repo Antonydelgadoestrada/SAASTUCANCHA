@@ -67,6 +67,12 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
   
     @Column({ nullable: true })
     approvedAt?: Date;
+
+    @Column({ type: 'timestamp', nullable: true })
+    trialStartDate?: Date;
+
+    @Column({ type: 'timestamp', nullable: true })
+    trialEndDate?: Date;
   
     @CreateDateColumn()
     createdAt: Date;

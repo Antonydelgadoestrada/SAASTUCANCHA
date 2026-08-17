@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { rejectClub, approveClub, getAllClubs } from "@/lib/club"
+import { rejectClub, approveClub, getAllClubs, suspendClub, reactivateClub } from "@/lib/club"
 
 export function AdminRequestsContent() {
   const [activeTab, setActiveTab] = useState("pending")
@@ -29,15 +29,23 @@ export function AdminRequestsContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [pendingClubsList, setPendingClubsList] = useState<any[]>([])
   const [approvedClubsList, setApprovedClubsList] = useState<any[]>([])
+  const [suspendedClubsList, setSuspendedClubsList] = useState<any[]>([])
 
-  useEffect(() => {
-    const fetchAllRequest = async()=>{
+  const fetchAllRequest = async()=>{
+    try {
       const clubs = await getAllClubs()
-      const pending = clubs.filter((club:any) => club.status== 'PENDING')
-      const approved = clubs.filter((club:any) => club.status == 'APPROVED')
+      const pending = clubs.filter((club:any) => club.status === 'PENDING')
+      const approved = clubs.filter((club:any) => club.status === 'APPROVED')
+      const suspended = clubs.filter((club:any) => club.status === 'SUSPENDED')
       setPendingClubsList(pending)
       setApprovedClubsList(approved)
+      setSuspendedClubsList(suspended)
+    } catch (err) {
+      console.error("Error fetching clubs:", err)
     }
+  }
+
+  useEffect(() => {
     fetchAllRequest()
   }, [])
 
@@ -46,14 +54,21 @@ export function AdminRequestsContent() {
     (club) =>
       club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       club.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      club.city.toLowerCase().includes(searchQuery.toLowerCase()),
+      (club.address && club.address.toLowerCase().includes(searchQuery.toLowerCase())),
   )
 
   const filteredApprovedClubs = approvedClubsList.filter(
     (club) =>
       club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       club.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      club.city.toLowerCase().includes(searchQuery.toLowerCase()),
+      (club.address && club.address.toLowerCase().includes(searchQuery.toLowerCase())),
+  )
+
+  const filteredSuspendedClubs = suspendedClubsList.filter(
+    (club) =>
+      club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      club.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (club.address && club.address.toLowerCase().includes(searchQuery.toLowerCase())),
   )
 
   const handleViewDetails = (club: any) => {
@@ -64,19 +79,8 @@ export function AdminRequestsContent() {
   const handleApprove = async (club: any) => {
     setIsLoading(true)
     try {
-
-     const data =  await approveClub(club.id)
-
-      // Actualizar listas
-      setPendingClubsList(pendingClubsList.filter((c) => c.id !== data.id))
-
-      const approvedClub = {
-        ...club,
-        approvedAt: new Date(),
-      }
-
-      setApprovedClubsList([approvedClub, ...approvedClubsList])
-
+      await approveClub(club.id)
+      await fetchAllRequest()
       toast.success(`Club "${club.name}" aprobado correctamente`)
       setIsDialogOpen(false)
     } catch (error) {
@@ -89,14 +93,40 @@ export function AdminRequestsContent() {
   const handleReject = async (club: any) => {
     setIsLoading(true)
     try {
-      const data = await rejectClub(club.id)
-      // Actualizar lista
-      setPendingClubsList(pendingClubsList.filter((c) => c.id !== data.id))
-
+      await rejectClub(club.id)
+      await fetchAllRequest()
       toast.error(`Club "${club.name}" rechazado`)
       setIsDialogOpen(false)
     } catch (error) {
       toast.error("Error al rechazar el club")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSuspend = async (club: any) => {
+    setIsLoading(true)
+    try {
+      await suspendClub(club.id)
+      await fetchAllRequest()
+      toast.success(`Acceso al club "${club.name}" suspendido correctamente`)
+      setIsDialogOpen(false)
+    } catch (error) {
+      toast.error("Error al suspender el club")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleReactivate = async (club: any) => {
+    setIsLoading(true)
+    try {
+      await reactivateClub(club.id)
+      await fetchAllRequest()
+      toast.success(`Acceso al club "${club.name}" reactivado correctamente`)
+      setIsDialogOpen(false)
+    } catch (error) {
+      toast.error("Error al reactivar el club")
     } finally {
       setIsLoading(false)
     }
@@ -122,6 +152,13 @@ export function AdminRequestsContent() {
             <TabsTrigger value="approved" className="flex items-center gap-2">
               <CheckIcon className="h-4 w-4" />
               Aprobados
+            </TabsTrigger>
+            <TabsTrigger value="suspended" className="flex items-center gap-2">
+              <XIcon className="h-4 w-4" />
+              Suspendidos
+              <span className="ml-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                {suspendedClubsList.length}
+              </span>
             </TabsTrigger>
           </TabsList>
 
@@ -238,14 +275,18 @@ export function AdminRequestsContent() {
                     </div>
                     <div>
                       <span className="font-medium">Fecha de aprobación:</span>{" "}
-                      {format(club.approvedAt, "d MMM yyyy", { locale: es })}
+                      {format(new Date(club.approvedAt), "d MMM yyyy", { locale: es })}
                     </div>
                     <p className="line-clamp-2 text-muted-foreground">{club.description}</p>
                   </div>
                 </CardContent>
-                <CardFooter>
-                  <Button variant="outline" className="w-full" onClick={() => handleViewDetails(club)}>
+                <CardFooter className="flex justify-between gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleViewDetails(club)}>
                     Ver detalles
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => handleSuspend(club)}>
+                    <XIcon className="mr-1 h-4 w-4" />
+                    Quitar Acceso
                   </Button>
                 </CardFooter>
               </Card>
@@ -261,68 +302,75 @@ export function AdminRequestsContent() {
           </Card>
         )}
       </TabsContent>
+
+      <TabsContent value="suspended" className="mt-0">
+        {filteredSuspendedClubs.length > 0 ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredSuspendedClubs.map((club) => (
+              <Card key={club.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback>
+                          {club.name
+                            .split(" ")
+                            .map((n:any) => n[0])
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <CardTitle>{club.name}</CardTitle>
+                        <CardDescription>{club.email}</CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex items-center rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:text-red-500">
+                      <XIcon className="mr-1 h-3 w-3" />
+                      Suspendido
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium">Ubicación:</span> {club.address}
+                    </div>
+                    {club.trialEndDate && (
+                      <div>
+                        <span className="font-medium">Prueba vencida el:</span>{" "}
+                        {format(new Date(club.trialEndDate), "d MMM yyyy", { locale: es })}
+                      </div>
+                    )}
+                    <p className="line-clamp-2 text-muted-foreground">{club.description}</p>
+                  </div>
+                </CardContent>
+                <CardFooter className="flex justify-between gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleViewDetails(club)}>
+                    Ver detalles
+                  </Button>
+                  <Button size="sm" onClick={() => handleReactivate(club)}>
+                    <CheckIcon className="mr-1 h-4 w-4" />
+                    Reactivar Acceso
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <CheckIcon className="mb-4 h-12 w-12 text-green-500" />
+              <h3 className="text-xl font-medium">No hay clubes suspendidos</h3>
+              <p className="mt-2 text-muted-foreground">Todos los clubes tienen acceso activo.</p>
+            </CardContent>
+          </Card>
+        )}
+      </TabsContent>
       </Tabs>
 
       {/* Diálogo de detalles del club */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-  <DialogContent className="sm:max-w-[600px]">
-    {selectedClub ? (
-      <>
-        <DialogHeader>
-          <DialogTitle>Detalles del Club</DialogTitle>
-          <DialogDescription>
-            Información completa del club deportivo {selectedClub.name}.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-4 py-4">
-          {/* ...todo el contenido de detalles... */}
-        </div>
-
-        <DialogFooter>
-          {!selectedClub.approvedAt ? (
-            <>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => handleReject(selectedClub)}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ClockIcon className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <XIcon className="mr-2 h-4 w-4" />
-                )}
-                Rechazar
-              </Button>
-              <Button onClick={() => handleApprove(selectedClub)} disabled={isLoading}>
-                {isLoading ? (
-                  <ClockIcon className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckIcon className="mr-2 h-4 w-4" />
-                )}
-                Aprobar
-              </Button>
-            </>
-          ) : (
-            <Button onClick={() => setIsDialogOpen(false)}>Cerrar</Button>
-          )}
-        </DialogFooter>
-      </>
-    ) : (
-      // fallback por accesibilidad
-      <DialogHeader>
-        <DialogTitle>Club no seleccionado</DialogTitle>
-        <DialogDescription>Selecciona un club para ver sus detalles.</DialogDescription>
-      </DialogHeader>
-    )}
-  </DialogContent>
-</Dialog>
-
-      {/* {selectedClub && (
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        {selectedClub && (
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle>Detalles del Club</DialogTitle>
@@ -333,7 +381,7 @@ export function AdminRequestsContent() {
                 <Avatar className="h-16 w-16">
                   <AvatarFallback className="text-lg">
                     {selectedClub.name
-                      .split(" ")
+                      ?.split(" ")
                       .map((n: string) => n[0])
                       .join("")}
                   </AvatarFallback>
@@ -345,7 +393,7 @@ export function AdminRequestsContent() {
               </div>
 
               <div className="grid gap-2">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <h4 className="text-sm font-medium">Teléfono</h4>
                     <p className="text-sm text-muted-foreground">{selectedClub.phone}</p>
@@ -366,25 +414,35 @@ export function AdminRequestsContent() {
                   <p className="text-sm text-muted-foreground">{selectedClub.description}</p>
                 </div>
 
-                <div>
-                  <h4 className="text-sm font-medium">Fecha de solicitud</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {format(selectedClub.createdAt, "d MMMM yyyy, HH:mm", { locale: es })}
-                  </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="text-sm font-medium">Fecha de solicitud</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {format(new Date(selectedClub.createdAt), "d MMMM yyyy, HH:mm", { locale: es })}
+                    </p>
+                  </div>
+                  {selectedClub.approvedAt && (
+                    <div>
+                      <h4 className="text-sm font-medium">Fecha de aprobación</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(selectedClub.approvedAt), "d MMMM yyyy, HH:mm", { locale: es })}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {selectedClub.approvedAt && (
+                {selectedClub.trialEndDate && (
                   <div>
-                    <h4 className="text-sm font-medium">Fecha de aprobación</h4>
+                    <h4 className="text-sm font-medium">Vencimiento de prueba gratuita</h4>
                     <p className="text-sm text-muted-foreground">
-                      {format(selectedClub.approvedAt, "d MMMM yyyy, HH:mm", { locale: es })}
+                      {format(new Date(selectedClub.trialEndDate), "d MMMM yyyy, HH:mm", { locale: es })}
                     </p>
                   </div>
                 )}
               </div>
             </div>
-            <DialogFooter>
-              {!selectedClub.approvedAt ? (
+            <DialogFooter className="gap-2 sm:gap-0">
+              {selectedClub.status === 'PENDING' && (
                 <>
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
@@ -406,13 +464,46 @@ export function AdminRequestsContent() {
                     Aprobar
                   </Button>
                 </>
-              ) : (
-                <Button onClick={() => setIsDialogOpen(false)}>Cerrar</Button>
+              )}
+              {selectedClub.status === 'APPROVED' && (
+                <>
+                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cerrar
+                  </Button>
+                  <Button variant="destructive" onClick={() => handleSuspend(selectedClub)} disabled={isLoading}>
+                    {isLoading ? (
+                      <ClockIcon className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <XIcon className="mr-2 h-4 w-4" />
+                    )}
+                    Quitar Acceso
+                  </Button>
+                </>
+              )}
+              {selectedClub.status === 'SUSPENDED' && (
+                <>
+                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cerrar
+                  </Button>
+                  <Button onClick={() => handleReactivate(selectedClub)} disabled={isLoading}>
+                    {isLoading ? (
+                      <ClockIcon className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckIcon className="mr-2 h-4 w-4" />
+                    )}
+                    Reactivar Acceso
+                  </Button>
+                </>
+              )}
+              {selectedClub.status === 'REJECTED' && (
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cerrar
+                </Button>
               )}
             </DialogFooter>
           </DialogContent>
-        </Dialog>
-      )} */}
+        )}
+      </Dialog>
     </div>
   )
 }

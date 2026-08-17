@@ -119,6 +119,8 @@ export class ClubPublicDto {
   @Expose() services: string[];
   @Expose() status: string;
   @Expose() approvedAt?: Date;
+  @Expose() trialStartDate?: Date;
+  @Expose() trialEndDate?: Date;
   @Expose() createdAt: Date;
   @Expose() updatedAt: Date;
 }

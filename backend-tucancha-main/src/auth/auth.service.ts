@@ -50,6 +50,7 @@ export class AuthService {
     // let payload = { id: user.id, name:user.name, email: user.email, role: user.role}
     let payload = { sub: user.id, name: user.name, email: user.email, role: user.role }
     if(user.club && (user.club.status == 'PENDING')) throw new UnauthorizedException('El administrador debe aceptar el club')
+    if(user.club && (user.club.status == 'SUSPENDED')) throw new UnauthorizedException('Tu cuenta de club ha sido suspendida. Contacta al administrador.')
     if(user.role == 'CLUB'){
       payload = Object.assign(payload, {clubId:user.club.id})
     }
@@ -193,7 +194,7 @@ export class AuthService {
           ...club,
           email: email,
           owner: savedUser,
-          status: isDev ? 'APPROVED' : 'PENDING',
+          status: 'PENDING',
         });
   
         createdClub = await this.clubRepository.save(newClub);

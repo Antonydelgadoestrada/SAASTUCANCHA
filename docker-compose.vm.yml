@@ -22,9 +22,9 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3001
-      SERVICES_URL: https://api.tucancha.com.pe
-      WEB_SERVICES_URL: https://tucancha.com.pe
-      CORS_ORIGINS: https://tucancha.com.pe,https://www.tucancha.com.pe
+      SERVICES_URL: ${SERVICES_URL:-https://api.tucancha.com.pe}
+      WEB_SERVICES_URL: ${WEB_SERVICES_URL:-https://tucancha.com.pe}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://tucancha.com.pe,https://www.tucancha.com.pe,http://localhost:3000}
       DATABASE_SSL: "true"
       DATABASE_SYNCHRONIZE: "false"
     healthcheck:
@@ -39,7 +39,7 @@ services:
       context: ./nextjs-cancha-main
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: https://api.tucancha.com.pe
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://api.tucancha.com.pe}
         NEXT_PUBLIC_APP_NAME: TuCancha
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
     image: tucancha-frontend:latest
@@ -53,8 +53,8 @@ services:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: 3000
-      NEXTAUTH_URL: https://tucancha.com.pe
-      NEXT_PUBLIC_API_BASE_URL: https://api.tucancha.com.pe
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://tucancha.com.pe}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://api.tucancha.com.pe}
       API_INTERNAL_BASE_URL: http://api:3001
     depends_on:
       api:

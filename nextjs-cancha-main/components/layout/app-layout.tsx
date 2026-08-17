@@ -4,6 +4,8 @@ import { AppSidebar } from "@/components/layout/app-sidebar"
 import { SiteHeader } from "@/components/layout/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { getCurrentUser } from "@/lib/session"
+import { TrialBanner } from "../club/trial-banner"
+
 interface AppLayoutProps {
   children: ReactNode
   title?: string
@@ -20,6 +22,7 @@ export async function AppLayout({ children, title }: AppLayoutProps) {
       <AppSidebar user={user} />
       <SidebarInset>
         <SiteHeader title={title} />
+        <TrialBanner />
         <main className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col">{children}</div>
         </main>

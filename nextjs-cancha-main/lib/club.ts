@@ -25,3 +25,11 @@ export const rejectClub = async (id:string)=>{
     const result = await api.patch(`/clubs/reject/${id}`);
     return result.data 
 }
+export const suspendClub = async (id:string)=>{
+    const result = await api.patch(`/clubs/suspend/${id}`);
+    return result.data 
+}
+export const reactivateClub = async (id:string)=>{
+    const result = await api.patch(`/clubs/reactivate/${id}`);
+    return result.data 
+}

@@ -65,6 +65,34 @@ export class ClubService {
   
     club.status = 'APPROVED';
     club.approvedAt = new Date();
+
+    if (!club.trialStartDate) {
+      club.trialStartDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 30);
+      club.trialEndDate = endDate;
+    }
+  
+    return this.repo.save(club);
+  }
+
+  async suspendClub(id: string) {
+    const club = await this.repo.findOne({ where: { id } });
+    if (!club) throw new NotFoundException('Club no encontrado');
+  
+    club.status = 'SUSPENDED';
+    return this.repo.save(club);
+  }
+
+  async reactivateClub(id: string) {
+    const club = await this.repo.findOne({ where: { id } });
+    if (!club) throw new NotFoundException('Club no encontrado');
+  
+    club.status = 'APPROVED';
+    club.trialStartDate = new Date();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30);
+    club.trialEndDate = endDate;
   
     return this.repo.save(club);
   }

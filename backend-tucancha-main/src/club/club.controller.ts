@@ -89,5 +89,14 @@ import { plainToInstance } from 'class-transformer';
       return this.service.rejectClub(id);
     }
 
+    @Patch('suspend/:id')
+    async suspendClub(@Param('id') id: string) {
+      return this.service.suspendClub(id);
+    }
+
+    @Patch('reactivate/:id')
+    async reactivateClub(@Param('id') id: string) {
+      return this.service.reactivateClub(id);
+    }
+
   }
-  
