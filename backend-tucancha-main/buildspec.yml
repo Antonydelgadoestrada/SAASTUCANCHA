@@ -1,0 +1,30 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      # Dev deps necesarias para compilar (rimraf, nest, tsc, etc.)
+      - npm ci
+  build:
+    commands:
+      - npm run build
+      # --- bundle mínimo para EB (SIN crear zip aquí) ---
+      - mkdir -p bundle
+      - cp -r dist bundle/dist
+      - cp package.json package-lock.json Procfile bundle/
+      - if [ -d ".ebextensions" ]; then cp -r .ebextensions bundle/.ebextensions; fi
+      # Incluir .platform y asegurar ejecutables + LF
+      - |
+        if [ -d ".platform" ]; then
+          cp -r .platform bundle/.platform
+          # Quitar CRLF por si el repo está en Windows y poner ejecutable
+          find bundle/.platform -type f -name "*.sh" -exec sed -i 's/\r$//' {} \;
+          find bundle/.platform -type f -name "*.sh" -exec chmod +x {} \;
+        fi
+
+artifacts:
+  base-directory: bundle
+  files:
+    - '**/*'

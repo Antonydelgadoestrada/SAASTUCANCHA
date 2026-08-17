@@ -1,0 +1,58 @@
+name: Deploy to Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repo
+        uses: actions/checkout@v3
+
+      - name: 🛠️ Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 🧹 Clean workspace
+        run: npx rimraf node_modules dist
+
+      - name: 📦 Install dependencies
+        run: npm install
+
+      - name: 🔨 Build project
+        run: npm run build
+
+      - name: ✅ Set executable permission for start-app.sh
+        run: chmod +x .platform/hooks/postdeploy/start-app.sh
+
+      - name: 📁 Prepare deployment package
+        run: |
+          zip -r deploy.zip . \
+            -x '*.git*' \
+               'node_modules/*' \
+               'test/*' \
+               '*.md' \
+               '.github/*' \
+               '.vscode/*' \
+               '.env' \
+               'coverage/*'
+
+      - name: 🧪 Verifica contenido del ZIP
+        run: unzip -l deploy.zip | grep -E "package.json|main.js|start-app.sh|Procfile|dist/"
+
+      - name: 🚀 Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: Web-service
+          environment_name: Web-service-env
+          version_label: ${{ github.sha }}
+          region: us-east-1
+          deployment_package: deploy.zip

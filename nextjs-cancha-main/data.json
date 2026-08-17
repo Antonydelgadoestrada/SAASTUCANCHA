@@ -1,0 +1,286 @@
+[
+    {
+        "id": "2330b35c-ee13-4f23-8bde-8672f0b24cb1",
+        "name": "Cancha de Fútbol 7",
+        "sport": "fútbol",
+        "surface": "sintético",
+        "capacity": 14,
+        "description": "Cancha sintética con iluminación y césped artificial.",
+        "images": [
+            "https://example.com/court1.jpg"
+        ],
+        "amenities": [
+            "iluminación",
+            "graderías",
+            "wifi"
+        ],
+        "dimensions": {
+            "length": 40,
+            "width": 20,
+            "unit": "meters"
+        },
+        "pricing": {
+            "basePrice": 80,
+            "morningPrice": 60,
+            "afternoonPrice": 80,
+            "eveningPrice": 100,
+            "weekendMultiplier": 1.2
+        },
+        "availability": {
+            "monday": {
+                "slots": [
+                    "08:00-09:00",
+                    "09:00-10:00"
+                ],
+                "closed": false
+            },
+            "tuesday": {
+                "slots": [
+                    "08:00-09:00",
+                    "09:00-10:00"
+                ],
+                "closed": false
+            },
+            "wednesday": {
+                "slots": [
+                    "08:00-09:00"
+                ],
+                "closed": false
+            },
+            "thursday": {
+                "slots": [],
+                "closed": true
+            },
+            "friday": {
+                "slots": [
+                    "18:00-19:00"
+                ],
+                "closed": false
+            },
+            "saturday": {
+                "slots": [
+                    "09:00-10:00",
+                    "10:00-11:00"
+                ],
+                "closed": false
+            },
+            "sunday": {
+                "slots": [
+                    "09:00-10:00"
+                ],
+                "closed": false
+            }
+        },
+        "isActive": true,
+        "createdAt": "2025-06-16T07:07:37.870Z",
+        "updatedAt": "2025-06-16T07:07:37.870Z",
+        "club": {
+            "id": "5d2c4c6b-63b8-4cfb-876b-c6e675f29750",
+            "name": "Club Deportivo Elite",
+            "email": "contacto@clubelite.com",
+            "phone": "987654321",
+            "address": "Av. Principal 456",
+            "district": null,
+            "description": "Club completo con canchas de fútbol, vóley y piscina.",
+            "logo": "https://example.com/logo.png",
+            "images": [
+                "https://example.com/image1.jpg",
+                "https://example.com/image2.jpg"
+            ],
+            "socialMedia": {
+                "facebook": "https://facebook.com/clubelite",
+                "instagram": "https://instagram.com/clubelite"
+            },
+            "coordinates": {
+                "lat": -12.0464,
+                "lng": -77.0428
+            },
+            "services": [
+                "cochera",
+                "wifi",
+                "piscina"
+            ],
+            "operatingHours": {
+                "monday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "tuesday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "wednesday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "thursday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "friday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "saturday": {
+                    "open": "09:00",
+                    "close": "20:00",
+                    "closed": false
+                },
+                "sunday": {
+                    "open": "09:00",
+                    "close": "18:00",
+                    "closed": false
+                }
+            },
+            "status": "APPROVED",
+            "approvedAt": "2025-06-16T02:07:37.861Z",
+            "createdAt": "2025-06-16T07:07:37.862Z",
+            "updatedAt": "2025-06-16T07:07:37.862Z"
+        }
+    },
+    {
+        "id": "88fcbdff-ed1d-43d4-b7d8-fb2f8b3e0216",
+        "name": "Cancha de Vóley",
+        "sport": "vóley",
+        "surface": "cemento",
+        "capacity": 10,
+        "description": "Piso antideslizante ideal para vóley recreativo.",
+        "images": [
+            "https://example.com/court2.jpg"
+        ],
+        "amenities": [
+            "iluminación",
+            "duchas",
+            "zona de espera"
+        ],
+        "dimensions": {
+            "length": 18,
+            "width": 9,
+            "unit": "meters"
+        },
+        "pricing": {
+            "basePrice": 60,
+            "morningPrice": 50,
+            "afternoonPrice": 60,
+            "eveningPrice": 70,
+            "weekendMultiplier": 1.15
+        },
+        "availability": {
+            "monday": {
+                "slots": [
+                    "10:00-11:00",
+                    "11:00-12:00"
+                ],
+                "closed": false
+            },
+            "tuesday": {
+                "slots": [
+                    "10:00-11:00"
+                ],
+                "closed": false
+            },
+            "wednesday": {
+                "slots": [],
+                "closed": true
+            },
+            "thursday": {
+                "slots": [
+                    "12:00-13:00"
+                ],
+                "closed": false
+            },
+            "friday": {
+                "slots": [
+                    "17:00-18:00"
+                ],
+                "closed": false
+            },
+            "saturday": {
+                "slots": [
+                    "10:00-11:00"
+                ],
+                "closed": false
+            },
+            "sunday": {
+                "slots": [],
+                "closed": true
+            }
+        },
+        "isActive": true,
+        "createdAt": "2025-06-16T07:07:37.870Z",
+        "updatedAt": "2025-06-16T07:07:37.870Z",
+        "club": {
+            "id": "5d2c4c6b-63b8-4cfb-876b-c6e675f29750",
+            "name": "Club Deportivo Elite",
+            "email": "contacto@clubelite.com",
+            "phone": "987654321",
+            "address": "Av. Principal 456",
+            "district": null,
+            "description": "Club completo con canchas de fútbol, vóley y piscina.",
+            "logo": "https://example.com/logo.png",
+            "images": [
+                "https://example.com/image1.jpg",
+                "https://example.com/image2.jpg"
+            ],
+            "socialMedia": {
+                "facebook": "https://facebook.com/clubelite",
+                "instagram": "https://instagram.com/clubelite"
+            },
+            "coordinates": {
+                "lat": -12.0464,
+                "lng": -77.0428
+            },
+            "services": [
+                "cochera",
+                "wifi",
+                "piscina"
+            ],
+            "operatingHours": {
+                "monday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "tuesday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "wednesday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "thursday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "friday": {
+                    "open": "08:00",
+                    "close": "22:00",
+                    "closed": false
+                },
+                "saturday": {
+                    "open": "09:00",
+                    "close": "20:00",
+                    "closed": false
+                },
+                "sunday": {
+                    "open": "09:00",
+                    "close": "18:00",
+                    "closed": false
+                }
+            },
+            "status": "APPROVED",
+            "approvedAt": "2025-06-16T02:07:37.861Z",
+            "createdAt": "2025-06-16T07:07:37.862Z",
+            "updatedAt": "2025-06-16T07:07:37.862Z"
+        }
+    }
+]

@@ -1,0 +1,61 @@
+# VM — https://tucancha.com.pe + https://api.tucancha.com.pe
+# Levanta API (3001) + Frontend (3000); el proxy/Nginx termina TLS
+#
+# En el servidor (desde la raíz del repo canchas/):
+#   cp backend-tucancha-main/.env.vm.example backend-tucancha-main/.env
+#   # Completar .env y nextjs-cancha-main/.env.local
+#   docker compose -f docker-compose.vm.yml up -d --build
+
+services:
+  api:
+    build:
+      context: ./backend-tucancha-main
+      dockerfile: Dockerfile
+    image: tucancha-api:latest
+    container_name: tucancha-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./backend-tucancha-main/.env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      SERVICES_URL: https://api.tucancha.com.pe
+      WEB_SERVICES_URL: https://tucancha.com.pe
+      CORS_ORIGINS: https://tucancha.com.pe,https://www.tucancha.com.pe
+      DATABASE_SSL: "true"
+      DATABASE_SYNCHRONIZE: "false"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 180s
+
+  frontend:
+    build:
+      context: ./nextjs-cancha-main
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://api.tucancha.com.pe
+        NEXT_PUBLIC_APP_NAME: TuCancha
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+    image: tucancha-frontend:latest
+    container_name: tucancha-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./nextjs-cancha-main/.env.local
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      NEXTAUTH_URL: https://tucancha.com.pe
+      NEXT_PUBLIC_API_BASE_URL: https://api.tucancha.com.pe
+      API_INTERNAL_BASE_URL: http://api:3001
+    depends_on:
+      api:
+        condition: service_started
