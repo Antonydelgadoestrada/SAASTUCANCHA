@@ -1023,7 +1023,14 @@ export function SearchResults({
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-4">
+              <Alert className="border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200">
+                <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-xs">
+                  <span className="font-bold text-amber-700 dark:text-amber-400">Aviso importante:</span> Estar 15 min antes en el local para esperar la cancha a la hora reservada. El club no se hace responsable por falta de integrantes de equipo ni demoras por tardanzas internas.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex gap-2 pt-2">
                 <Button variant="outline" onClick={() => setShowBooking(false)}>
                   Cancelar
                 </Button>
@@ -1074,13 +1081,19 @@ export function SearchResults({
                 </div>
               </div>
 
-            <div className="mt-4 flex  gap-4">
+              <Alert className="border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200">
+                <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-xs">
+                  <span className="font-bold text-amber-700 dark:text-amber-400">Aviso importante:</span> Estar 15 min antes en el local para esperar la cancha a la hora reservada. El club no se hace responsable por falta de integrantes de equipo ni demoras por tardanzas internas.
+                </AlertDescription>
+              </Alert>
+
+              <div className="mt-4 flex gap-4">
                 <Button variant="outline" onClick={handleSeparate} disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Separar Cancha
                 </Button>
                 <Button onClick={handleConfirmPayment} disabled={isLoading}>
-                  
                   Proceder a Pagar
                 </Button>
               </div>
