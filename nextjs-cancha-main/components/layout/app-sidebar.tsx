@@ -119,12 +119,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   // Menú para administradores
   const adminMenu = [
-    // {
-    //   title: "Dashboard",
-    //   icon: LayoutDashboardIcon,
-    //   href: "/admin/dashboard",
-    //   active: isActive("/admin/dashboard"),
-    // },
+    {
+      title: "Dashboard",
+      icon: LayoutDashboardIcon,
+      href: "/admin/dashboard",
+      active: isActive("/admin/dashboard"),
+    },
     {
       title: "Solicitudes",
       icon: ListIcon,

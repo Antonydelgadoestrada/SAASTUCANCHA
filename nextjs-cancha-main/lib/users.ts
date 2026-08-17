@@ -11,3 +11,8 @@ export const editUser = async (data:any)=>{
     const result = await api.put(`/users/${data.id}`, data);
     return result.data 
 }
+
+export const getAdminDashboardStats = async () => {
+    const result = await api.get("/users/admin/dashboard-stats");
+    return result.data;
+}

@@ -1,14 +1,47 @@
 "use client"
 
-import { CalendarIcon, DollarSignIcon, TrendingUpIcon, UsersIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { CalendarIcon, DollarSignIcon, TrendingUpIcon, UsersIcon, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AdminStatsChart } from "@/components/admin/stats-chart"
 import { AdminRecentUsers } from "@/components/admin/recent-users"
 import { AdminPendingRequests } from "@/components/admin/pending-requests"
+import { getAdminDashboardStats } from "@/lib/users"
+import Link from "next/link"
 
 export function AdminDashboardContent() {
+  const [data, setData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const stats = await getAdminDashboardStats()
+        setData(stats)
+      } catch (err) {
+        console.error("Error loading dashboard stats:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadData()
+  }, [])
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[80vh] w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  const stats = data?.stats || { totalUsers: 0, activeClubs: 0, totalIncome: 0, totalBookings: 0 }
+  const recentUsers = data?.recentUsers || []
+  const recentRequests = data?.recentRequests || []
+  const chartData = data?.chartData || []
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <section className="space-y-4">
@@ -24,8 +57,8 @@ export function AdminDashboardContent() {
               <UsersIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1,234</div>
-              <p className="text-xs text-muted-foreground">+12.5% respecto al mes anterior</p>
+              <div className="text-2xl font-bold">{stats.totalUsers}</div>
+              <p className="text-xs text-muted-foreground">Registrados en el sistema</p>
             </CardContent>
           </Card>
           <Card>
@@ -34,8 +67,8 @@ export function AdminDashboardContent() {
               <CalendarIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">45</div>
-              <p className="text-xs text-muted-foreground">+5.2% respecto al mes anterior</p>
+              <div className="text-2xl font-bold">{stats.activeClubs}</div>
+              <p className="text-xs text-muted-foreground">Cuentas de club aprobadas</p>
             </CardContent>
           </Card>
           <Card>
@@ -44,8 +77,8 @@ export function AdminDashboardContent() {
               <DollarSignIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">$24,500</div>
-              <p className="text-xs text-muted-foreground">+18.2% respecto al mes anterior</p>
+              <div className="text-2xl font-bold">S/. {stats.totalIncome.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground">Recaudación total por membresías</p>
             </CardContent>
           </Card>
           <Card>
@@ -54,8 +87,8 @@ export function AdminDashboardContent() {
               <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2,845</div>
-              <p className="text-xs text-muted-foreground">+15.4% respecto al mes anterior</p>
+              <div className="text-2xl font-bold">{stats.totalBookings}</div>
+              <p className="text-xs text-muted-foreground">Reservas realizadas en la plataforma</p>
             </CardContent>
           </Card>
         </div>
@@ -68,7 +101,7 @@ export function AdminDashboardContent() {
             <CardDescription>Usuarios, clubes y reservas en los últimos 6 meses</CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
-            <AdminStatsChart />
+            <AdminStatsChart chartData={chartData} />
           </CardContent>
         </Card>
       </section>
@@ -81,12 +114,9 @@ export function AdminDashboardContent() {
                 <CardTitle>Usuarios Recientes</CardTitle>
                 <CardDescription>Últimos usuarios registrados en la plataforma</CardDescription>
               </div>
-              <Button variant="outline" size="sm">
-                Ver todos
-              </Button>
             </CardHeader>
             <CardContent>
-              <AdminRecentUsers />
+              <AdminRecentUsers users={recentUsers} />
             </CardContent>
           </Card>
         </section>
@@ -98,12 +128,12 @@ export function AdminDashboardContent() {
                 <CardTitle>Solicitudes Pendientes</CardTitle>
                 <CardDescription>Clubes pendientes de aprobación</CardDescription>
               </div>
-              <Button variant="outline" size="sm">
-                Ver todas
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/admin/requests">Ver todas</Link>
               </Button>
             </CardHeader>
             <CardContent>
-              <AdminPendingRequests />
+              <AdminPendingRequests requests={recentRequests} />
             </CardContent>
           </Card>
         </section>

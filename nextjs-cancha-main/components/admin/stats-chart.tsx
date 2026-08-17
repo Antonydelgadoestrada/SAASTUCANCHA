@@ -5,21 +5,28 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-// Datos de ejemplo
-const data = [
-  { name: "Enero", usuarios: 120, clubes: 8, reservas: 450 },
-  { name: "Febrero", usuarios: 150, clubes: 10, reservas: 520 },
-  { name: "Marzo", usuarios: 180, clubes: 12, reservas: 580 },
-  { name: "Abril", usuarios: 220, clubes: 15, reservas: 650 },
-  { name: "Mayo", usuarios: 280, clubes: 18, reservas: 720 },
-  { name: "Junio", usuarios: 350, clubes: 22, reservas: 850 },
+// Datos de fallback
+const fallbackData = [
+  { name: "Ene", usuarios: 12, clubes: 1, reservas: 15 },
+  { name: "Feb", usuarios: 25, clubes: 2, reservas: 30 },
+  { name: "Mar", usuarios: 45, clubes: 4, reservas: 55 },
+  { name: "Abr", usuarios: 70, clubes: 6, reservas: 90 },
+  { name: "May", usuarios: 110, clubes: 8, reservas: 140 },
+  { name: "Jun", usuarios: 150, clubes: 10, reservas: 200 },
 ]
 
-export function AdminStatsChart() {
+interface StatsChartProps {
+  chartData?: any[]
+}
+
+export function AdminStatsChart({ chartData }: StatsChartProps) {
   const [timeRange, setTimeRange] = useState("6m")
 
+  // Usar datos dinámicos si están disponibles, si no, el fallback
+  const displayData = chartData && chartData.length > 0 ? chartData : fallbackData
+
   // Filtrar datos según el rango de tiempo seleccionado
-  const filteredData = timeRange === "3m" ? data.slice(-3) : timeRange === "6m" ? data : data
+  const filteredData = timeRange === "3m" ? displayData.slice(-3) : displayData
 
   return (
     <div className="space-y-4">
@@ -31,7 +38,6 @@ export function AdminStatsChart() {
           <SelectContent>
             <SelectItem value="3m">Últimos 3 meses</SelectItem>
             <SelectItem value="6m">Últimos 6 meses</SelectItem>
-            <SelectItem value="12m">Último año</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -30,6 +30,7 @@ export function AdminRequestsContent() {
   const [pendingClubsList, setPendingClubsList] = useState<any[]>([])
   const [approvedClubsList, setApprovedClubsList] = useState<any[]>([])
   const [suspendedClubsList, setSuspendedClubsList] = useState<any[]>([])
+  const [rejectedClubsList, setRejectedClubsList] = useState<any[]>([])
 
   const fetchAllRequest = async()=>{
     try {
@@ -37,9 +38,11 @@ export function AdminRequestsContent() {
       const pending = clubs.filter((club:any) => club.status === 'PENDING')
       const approved = clubs.filter((club:any) => club.status === 'APPROVED')
       const suspended = clubs.filter((club:any) => club.status === 'SUSPENDED')
+      const rejected = clubs.filter((club:any) => club.status === 'REJECTED')
       setPendingClubsList(pending)
       setApprovedClubsList(approved)
       setSuspendedClubsList(suspended)
+      setRejectedClubsList(rejected)
     } catch (err) {
       console.error("Error fetching clubs:", err)
     }
@@ -65,6 +68,13 @@ export function AdminRequestsContent() {
   )
 
   const filteredSuspendedClubs = suspendedClubsList.filter(
+    (club) =>
+      club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      club.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (club.address && club.address.toLowerCase().includes(searchQuery.toLowerCase())),
+  )
+
+  const filteredRejectedClubs = rejectedClubsList.filter(
     (club) =>
       club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       club.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -158,6 +168,13 @@ export function AdminRequestsContent() {
               Suspendidos
               <span className="ml-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                 {suspendedClubsList.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="flex items-center gap-2">
+              <XIcon className="h-4 w-4" />
+              Rechazados
+              <span className="ml-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
+                {rejectedClubsList.length}
               </span>
             </TabsTrigger>
           </TabsList>
@@ -362,6 +379,64 @@ export function AdminRequestsContent() {
               <CheckIcon className="mb-4 h-12 w-12 text-green-500" />
               <h3 className="text-xl font-medium">No hay clubes suspendidos</h3>
               <p className="mt-2 text-muted-foreground">Todos los clubes tienen acceso activo.</p>
+            </CardContent>
+          </Card>
+        )}
+      </TabsContent>
+
+      <TabsContent value="rejected" className="mt-0">
+        {filteredRejectedClubs.length > 0 ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredRejectedClubs.map((club) => (
+              <Card key={club.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback>
+                          {club.name
+                            ?.split(" ")
+                            .map((n:any) => n[0])
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <CardTitle>{club.name}</CardTitle>
+                        <CardDescription>{club.email}</CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex items-center rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:text-red-500">
+                      <XIcon className="mr-1 h-3 w-3" />
+                      Rechazado
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium">Ubicación:</span> {club.address}
+                    </div>
+                    <p className="line-clamp-2 text-muted-foreground">{club.description}</p>
+                  </div>
+                </CardContent>
+                <CardFooter className="flex justify-between gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleViewDetails(club)}>
+                    Ver detalles
+                  </Button>
+                  <Button size="sm" onClick={() => handleApprove(club)}>
+                    <CheckIcon className="mr-1 h-4 w-4" />
+                    Aprobar Club
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <CheckIcon className="mb-4 h-12 w-12 text-green-500" />
+              <h3 className="text-xl font-medium">No hay solicitudes rechazadas</h3>
+              <p className="mt-2 text-muted-foreground">No has rechazado ninguna solicitud de club.</p>
             </CardContent>
           </Card>
         )}

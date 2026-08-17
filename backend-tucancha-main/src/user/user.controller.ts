@@ -19,6 +19,15 @@ export class UserController {
     return this.userService.findAll();
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('/admin/dashboard-stats')
+  async getDashboardStats(@GetUser() user: User) {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('No tienes permisos para ver estadísticas');
+    }
+    return this.userService.getAdminDashboardStats();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string): Promise<User> {
     return this.userService.findOneById(id);
