@@ -49,10 +49,30 @@ export class AuthService {
     }
     // let payload = { id: user.id, name:user.name, email: user.email, role: user.role}
     let payload = { sub: user.id, name: user.name, email: user.email, role: user.role }
-    if(user.club && (user.club.status == 'PENDING')) throw new UnauthorizedException('El administrador debe aceptar el club')
-    if(user.club && (user.club.status == 'SUSPENDED')) throw new UnauthorizedException('Tu cuenta de club ha sido suspendida. Contacta al administrador.')
-    if(user.role == 'CLUB'){
-      payload = Object.assign(payload, {clubId:user.club.id})
+    
+    if (user.club) {
+      if (user.club.status === 'PENDING') {
+        throw new UnauthorizedException('El administrador debe aceptar el club');
+      }
+
+      // Chequeo dinámico de prueba gratuita
+      if (user.club.status === 'APPROVED' && user.club.trialEndDate && new Date(user.club.trialEndDate) < new Date()) {
+        const activeMembership = await this.clubRepository.manager.createQueryBuilder()
+          .select('cm')
+          .from('club_memberships', 'cm')
+          .where('cm.clubId = :clubId', { clubId: user.club.id })
+          .andWhere('cm.status IN (:...statuses)', { statuses: ['ACTIVE', 'GRACE'] })
+          .getOne();
+
+        if (!activeMembership) {
+          user.club.status = 'SUSPENDED';
+          await this.clubRepository.save(user.club);
+        }
+      }
+    }
+
+    if (user.role === 'CLUB') {
+      payload = Object.assign(payload, { clubId: user.club.id })
     }
     
     const refresh_token = this.jwtService.sign({ sub: user.id }, {
