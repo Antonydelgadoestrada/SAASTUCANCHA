@@ -29,8 +29,10 @@ Tareas:
 •	Revisar API/backend que guarda los horarios.
 •	Ajustar modelo de datos si los rangos/plantillas no se guardan bien.
 •	Sincronizar cambios con el calendario en tiempo real.
-Entregables:
-•	CRUD de horarios funcional.
+•	  - `[x]` Reemplazar AWS S3 por Supabase Storage en `s3.service.ts`
+  - `[x]` Configurar variables de Supabase Storage en `.env` y `.env.vm.example`
+  - `[x]` Limpiar docker-compose.vm.yml de volumen local y main.ts de estáticos
+- `[/]` Paso 3: Preparación para Producción (VPS)funcional.
 •	Posibilidad de crear/modificar rangos completos.
 •	Cambios reflejados automáticamente en calendario.
 Valor para el cliente: Ya puede gestionar horarios sin fallas.
