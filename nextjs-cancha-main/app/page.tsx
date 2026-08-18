@@ -9,6 +9,7 @@ import { TestimonialsSection } from "@/components/testimonials-section"
 import { PricingSection } from "@/components/pricing-section"
 import { AuthHeaderButtons } from "@/components/AuthHeaderButtons"
 import FeaturedCourtsSection from "@/components/featured-courts-section"
+import { FeaturesCarousel } from "@/components/features-carousel"
 
 export const dynamic = "force-dynamic"
 
@@ -51,7 +52,7 @@ export default async function HomePage() {
               </li>
               <li>
                 <Link href="#testimonials" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                  Testimonios
+                  Preguntas Frecuentes
                 </Link>
               </li>
             </ul>
@@ -155,63 +156,18 @@ export default async function HomePage() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="py-20 border-t border-border/40">
-          <div className="container">
-            <div className="mx-auto mb-16 max-w-3xl text-center space-y-4">
+        <section id="features" className="py-24 border-t border-border/40">
+          <div className="container space-y-16">
+            <div className="mx-auto max-w-3xl text-center space-y-4">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
                 Todo lo que necesitas en un solo lugar
               </h2>
               <p className="text-lg text-muted-foreground leading-relaxed">
-                {process.env.NEXT_PUBLIC_APP_NAME} ofrece las herramientas más avanzadas tanto para deportistas como para administradores de clubes.
+                {process.env.NEXT_PUBLIC_APP_NAME} ofrece las herramientas más avanzadas para digitalizar tu complejo deportivo y facilitar el juego a tus clientes.
               </p>
             </div>
 
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-              {[
-                {
-                  icon: <Calendar className="h-6 w-6" />,
-                  title: "Sistema de Reservas",
-                  desc: "Gestiona y separa canchas en tiempo real de forma automatizada y sin colisiones de horarios.",
-                },
-                {
-                  icon: <MapPin className="h-6 w-6" />,
-                  title: "Múltiples Sedes",
-                  desc: "Administra múltiples locales o sedes deportivas desde un panel de control único y centralizado.",
-                },
-                {
-                  icon: <Shield className="h-6 w-6" />,
-                  title: "Pasarela de Pago Segura",
-                  desc: "Pagos rápidos mediante Mercado Pago y registro manual de depósitos con comprobantes adjuntos.",
-                },
-                {
-                  icon: <Star className="h-6 w-6" />,
-                  title: "Promociones Dinámicas",
-                  desc: "Configura precios especiales diurnos y nocturnos y tarifas promocionales por horas específicas.",
-                },
-                {
-                  icon: <CheckCircle className="h-6 w-6" />,
-                  title: "Estadísticas y Reportes",
-                  desc: "Analiza reservas, ingresos totales y uso de instalaciones para optimizar la rentabilidad de tu negocio.",
-                },
-                {
-                  icon: <Search className="h-6 w-6" />,
-                  title: "Buscador Inteligente",
-                  desc: "Permite a los usuarios buscar canchas por deporte, cercanía geográfica y horarios disponibles.",
-                },
-              ].map((feature, i) => (
-                <Card key={i} className="group relative overflow-hidden border border-border/50 bg-background transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 rounded-2xl">
-                  <CardContent className="flex flex-col items-start gap-4 pt-6">
-                    <div className="rounded-xl bg-primary/10 p-3 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                      {feature.icon}
-                    </div>
-                    <div>
-                      <h3 className="mb-2 text-xl font-bold tracking-tight text-foreground">{feature.title}</h3>
-                      <p className="text-muted-foreground text-sm leading-relaxed">{feature.desc}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <FeaturesCarousel />
           </div>
         </section>
 
@@ -310,7 +266,9 @@ export default async function HomePage() {
                 </li>
                 <li className="flex items-center gap-2.5 transition-colors hover:text-foreground">
                   <Phone className="w-4.5 h-4.5 text-primary" />
-                  +51 959 493 759
+                  <a href="https://wa.me/51959493759" target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    +51 959 493 759
+                  </a>
                 </li>
               </ul>
             </div>

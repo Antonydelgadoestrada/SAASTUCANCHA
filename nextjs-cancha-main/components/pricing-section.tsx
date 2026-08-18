@@ -82,9 +82,9 @@ export function PricingSection() {
       <div className="mt-12 text-center">
         <p className="text-muted-foreground">
           ¿Necesitas un plan personalizado?{" "}
-          <Link href="#" className="text-primary hover:underline">
+          <a href="https://wa.me/51959493759" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
             Contáctanos
-          </Link>
+          </a>
         </p>
       </div>
     </div>
