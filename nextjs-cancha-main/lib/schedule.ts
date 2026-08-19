@@ -104,6 +104,7 @@ export type CreateCourtScheduleEventPayload = {
   recurrenceType: "weekly" | "monthly" | "custom";
   recurrenceConfig: Record<string, unknown>;
   timeRanges: { start: string; until: string }[];
+  price?: number;
   isActive?: boolean;
 };
 

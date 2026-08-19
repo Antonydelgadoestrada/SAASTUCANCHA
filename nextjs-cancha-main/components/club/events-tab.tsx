@@ -69,6 +69,7 @@ type ApiEventRow = {
   recurrenceType: string
   recurrenceConfig: Record<string, unknown>
   timeRanges: { start: string; until?: string; end?: string }[]
+  price?: number
   isActive: boolean
 }
 
@@ -227,6 +228,7 @@ export function EventsTab({
   const [formData, setFormData] = useState({
     nombre: "",
     descripcion: "",
+    precio: "",
     tipoBloqueo: "dia" as TipoBloqueo,
     estado: "activo" as "activo" | "inactivo",
     diasSemana: [] as string[],
@@ -256,6 +258,7 @@ export function EventsTab({
     setFormData({
       nombre: "",
       descripcion: "",
+      precio: "",
       tipoBloqueo: "dia",
       estado: "activo",
       diasSemana: [],
@@ -298,6 +301,7 @@ export function EventsTab({
           weekdays: formData.diasSemana.map((id) => SPANISH_DAY_TO_EN[id]).filter(Boolean),
         },
         timeRanges,
+        price: formData.precio ? parseFloat(formData.precio) : 0,
         isActive: formData.estado === "activo",
       }
     }
@@ -311,6 +315,7 @@ export function EventsTab({
         recurrenceType: "monthly",
         recurrenceConfig: { dayOfMonth: formData.diaMes },
         timeRanges,
+        price: formData.precio ? parseFloat(formData.precio) : 0,
         isActive: formData.estado === "activo",
       }
     }
@@ -328,6 +333,7 @@ export function EventsTab({
       recurrenceType: "custom",
       recurrenceConfig: { dates },
       timeRanges,
+      price: formData.precio ? parseFloat(formData.precio) : 0,
       isActive: formData.estado === "activo",
     }
   }
@@ -623,6 +629,11 @@ export function EventsTab({
           </CardTitle>
         </CardHeader>
         <CardContent className="text-xs space-y-1">
+          {formData.precio && (
+            <div className="font-semibold text-primary">
+              Costo/Ingreso: S/ {formData.precio}
+            </div>
+          )}
           <div className="text-muted-foreground">
             {formData.tipoBloqueo === "dia" && formData.diasSemana.length > 0 && (
               <span>
@@ -730,6 +741,11 @@ export function EventsTab({
                     ?.map((h) => `${normalizeHHmm(String(h.start ?? ""))} - ${rangeEndLabel(h)}`)
                     .join(", ")}
                 </div>
+                {ev.price != null && ev.price > 0 && (
+                  <div className="font-semibold text-primary mt-1">
+                    Costo/Ingreso: S/ {ev.price}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -762,6 +778,21 @@ export function EventsTab({
                   placeholder="Describe el evento…"
                   rows={2}
                 />
+              </div>
+              <div>
+                <Label htmlFor="precio">Precio / Costo del evento (S/)</Label>
+                <Input
+                  id="precio"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={formData.precio}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, precio: e.target.value }))}
+                  placeholder="Ej: 400.00"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Registra cuánto gana el club por alquilar el campo para este evento.
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox

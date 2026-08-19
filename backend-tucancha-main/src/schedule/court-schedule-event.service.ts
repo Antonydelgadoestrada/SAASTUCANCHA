@@ -464,6 +464,7 @@ export class CourtScheduleEventService {
         start: this.rangeStart(r),
         until: this.rangeUntil(r as any),
       })),
+      price: dto.price ?? 0,
       isActive: dto.isActive !== false,
     });
     return this.eventRepo.save(row);

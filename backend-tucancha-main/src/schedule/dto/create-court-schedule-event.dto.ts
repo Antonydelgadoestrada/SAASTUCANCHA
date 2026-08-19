@@ -8,6 +8,7 @@ import {
   ValidateNested,
   IsObject,
   IsNotEmpty,
+  IsNumber,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
@@ -60,6 +61,10 @@ export class CreateCourtScheduleEventDto {
   @ValidateNested({ each: true })
   @Type(() => TimeRangeDto)
   timeRanges: TimeRangeDto[];
+
+  @IsOptional()
+  @IsNumber()
+  price?: number;
 
   @IsOptional()
   @IsBoolean()
