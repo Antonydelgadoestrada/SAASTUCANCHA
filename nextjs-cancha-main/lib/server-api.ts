@@ -1,11 +1,11 @@
 import axios from "axios";
 
 function getServerApiBaseUrl(): string {
-  return (
+  const url =
     process.env.API_INTERNAL_BASE_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
-    "http://localhost:3001"
-  );
+    "http://127.0.0.1:3001";
+  return url.replace("localhost", "127.0.0.1");
 }
 
 // API client para Server Components (no usa localStorage ni next-auth)
