@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, format, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
 
 import {
   CalendarIcon,
@@ -70,6 +71,8 @@ type ScheduleTimeSlotProps = {
 };
 
 export function ClubSchedulesContent() {
+  const searchParams = useSearchParams();
+  const courtIdParam = searchParams.get("courtId");
   const [date, setDate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(false);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
@@ -202,6 +205,16 @@ export function ClubSchedulesContent() {
     fetchVenues();
     fetchTemplates();
   }, []);
+
+  useEffect(() => {
+    if (courtIdParam && courts.length > 0) {
+      const court = courts.find((c) => String(c.id) === String(courtIdParam));
+      if (court) {
+        setSelectedVenue(String(court.venue?.id));
+        setSelectedCourt(String(court.id));
+      }
+    }
+  }, [courtIdParam, courts]);
   // Filtrar canchas según la sede seleccionada
   const filteredCourts = courts.filter((court) => {
     if (selectedVenue == "all") return true;

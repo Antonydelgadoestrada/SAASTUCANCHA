@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 
+import { Suspense } from "react"
+
 import { AppLayout } from "@/components/layout/app-layout"
 import { ClubSchedulesContent } from "@/components/club/schedules-content"
 
@@ -11,7 +13,9 @@ export const metadata: Metadata = {
 export default async function ClubSchedulesPage() {
   return (
     <AppLayout title="Gestión de Horarios">
-      <ClubSchedulesContent />
+      <Suspense fallback={<div className="p-6 text-sm text-muted-foreground font-semibold">Cargando horarios...</div>}>
+        <ClubSchedulesContent />
+      </Suspense>
     </AppLayout>
   )
 }

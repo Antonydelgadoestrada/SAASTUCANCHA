@@ -16,12 +16,15 @@ import {
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { VenueForm } from "@/components/club/venue-form"
 import type { Venue } from "@/lib/types"
 import { create, deleteVenue, edit, getAllVenues } from "@/lib/venues"
+import { getAllCourtsByVenues } from "@/lib/courts"
 
 export function VenuesContent() {
   const [venues, setVenues] = useState<Venue[]>([])
+  const [courts, setCourts] = useState<any[]>([])
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingVenue, setEditingVenue] = useState<Venue | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -40,7 +43,17 @@ export function VenuesContent() {
       }
     }
 
+    const fetchCourts = async () => {
+      try {
+        const data = await getAllCourtsByVenues()
+        setCourts(data || [])
+      } catch (error) {
+        console.error("Error al cargar las canchas", error)
+      }
+    }
+
     fetchVenues()
+    fetchCourts()
   }, [])
 
   const filteredVenues = venues.filter(
@@ -195,7 +208,7 @@ export function VenuesContent() {
                 </DropdownMenu>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="space-y-2 text-sm">
                 {/* <div>
                   <span className="font-medium">Ciudad:</span> {venue.city}, {venue.state}
@@ -207,6 +220,30 @@ export function VenuesContent() {
                   <span className="font-medium">Email:</span> {venue.email}
                 </div>
                 <p className="line-clamp-2 text-muted-foreground">{venue.description}</p>
+              </div>
+
+              <div className="border-t pt-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                  Canchas ({(() => {
+                    const venueCourts = courts.filter((c) => c.venue?.id === venue.id || c.venueId === venue.id);
+                    return venueCourts.length;
+                  })()})
+                </span>
+                {(() => {
+                  const venueCourts = courts.filter((c) => c.venue?.id === venue.id || c.venueId === venue.id);
+                  if (venueCourts.length === 0) {
+                    return <p className="text-xs text-muted-foreground italic">No hay canchas registradas en esta sede.</p>;
+                  }
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      {venueCourts.map((court) => (
+                        <Badge key={court.id} variant="secondary" className="text-xs px-2 py-0.5 font-semibold">
+                          {court.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </CardContent>
             <CardFooter className="flex justify-between">
@@ -269,6 +306,29 @@ export function VenuesContent() {
                 <div>
                   <h3 className="font-medium">Descripción</h3>
                   <p className="text-sm text-muted-foreground">{viewingVenue.description}</p>
+                </div>
+
+                <div className="border-t pt-3 mt-2">
+                  <h3 className="font-bold text-sm mb-2 uppercase tracking-wider text-muted-foreground">Canchas en esta sede</h3>
+                  {(() => {
+                    const venueCourts = courts.filter((court) => court.venue?.id === viewingVenue.id || court.venueId === viewingVenue.id);
+                    if (venueCourts.length === 0) {
+                      return <p className="text-sm text-muted-foreground italic">No hay canchas registradas en esta sede.</p>;
+                    }
+                    return (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {venueCourts.map((court) => (
+                          <div key={court.id} className="p-3 border rounded-lg bg-muted/40 flex flex-col justify-between">
+                            <div>
+                              <h4 className="font-bold text-sm">{court.name}</h4>
+                              <p className="text-xs text-muted-foreground capitalize">Tipo: {court.type} | Superficie: {court.surface}</p>
+                            </div>
+                            <p className="text-xs font-semibold mt-2 text-primary">S/ {court.priceDay}/hora (Día) | S/ {court.priceNight}/hora (Noche)</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
