@@ -1010,8 +1010,23 @@ export function SearchResults({
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Hora:</span>
+                  <span>Hora de Inicio:</span>
                   <span>{selectedTime}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Horario:</span>
+                  <span>
+                    {selectedTime && duration
+                      ? `${selectedTime} a ${(() => {
+                          const [h, m] = selectedTime.split(":").map(Number);
+                          const d = new Date();
+                          d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
+                          const endH = d.getHours().toString().padStart(2, "0");
+                          const endM = d.getMinutes().toString().padStart(2, "0");
+                          return `${endH}:${endM}`;
+                        })()}`
+                      : selectedTime}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Duracion en horas:</span>
@@ -1067,8 +1082,23 @@ export function SearchResults({
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Hora:</span>
+                  <span>Hora de Inicio:</span>
                   <span>{selectedTime}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Horario:</span>
+                  <span>
+                    {selectedTime && duration
+                      ? `${selectedTime} a ${(() => {
+                          const [h, m] = selectedTime.split(":").map(Number);
+                          const d = new Date();
+                          d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
+                          const endH = d.getHours().toString().padStart(2, "0");
+                          const endM = d.getMinutes().toString().padStart(2, "0");
+                          return `${endH}:${endM}`;
+                        })()}`
+                      : selectedTime}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Duracion:</span>

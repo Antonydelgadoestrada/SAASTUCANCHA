@@ -266,6 +266,61 @@ async findFeaturedPublic(
       .filter(court => court.availability.length > 0);
   }
   
+  async getVirtualAvailability(court: Court, dateStr: string): Promise<any[]> {
+    const overrides = await this.availabilityRepo.find({
+      where: {
+        courtId: court.id,
+        date: dateStr,
+      },
+    });
+
+    if (!court.schedule_template_id) {
+      return overrides;
+    }
+
+    const template = await this.scheduleTemplateRepo.findOne({
+      where: { id: court.schedule_template_id },
+    });
+
+    if (!template) {
+      return overrides;
+    }
+
+    const daysMap = {
+      sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+    };
+    const enabledDays = template.days.map((d: string) => daysMap[d.toLowerCase()]);
+    const targetDate = new Date(dateStr + 'T00:00:00');
+    const dayOfWeek = targetDate.getDay();
+
+    if (!enabledDays.includes(dayOfWeek)) {
+      return overrides;
+    }
+
+    const virtualSlots: any[] = [];
+    for (const slot of template.slots) {
+      const override = overrides.find((o) => o.time === slot.time);
+      if (override) {
+        virtualSlots.push(override);
+      } else {
+        virtualSlots.push({
+          courtId: court.id,
+          date: dateStr,
+          time: slot.time,
+          status: slot.status,
+        });
+      }
+    }
+
+    return virtualSlots;
+  }
+
   async findAllWithFilters(query: any) {
     try {
       const { sport, club, date, time, query: textQuery, lat, lng } = query;
@@ -274,16 +329,7 @@ async findFeaturedPublic(
   
       const qb = this.courtRepo.createQueryBuilder("court")
         .leftJoinAndSelect("court.venue", "venue")
-        .leftJoinAndSelect("venue.club", "club")
-        .leftJoinAndSelect(
-          "court.availabilities",
-          "availability",
-          `
-            availability.date = :targetDate
-            AND availability.status = 'available'
-          `,
-          { targetDate }
-        );
+        .leftJoinAndSelect("venue.club", "club");
   
       // Filtro estricto: Club debe estar APROBADO y con membresía ACTIVA o en GRACIA
       qb.andWhere("club.status = 'APPROVED'");
@@ -311,20 +357,6 @@ async findFeaturedPublic(
         qb.andWhere(`
           (LOWER(court.name) LIKE :q OR LOWER(court.description) LIKE :q OR LOWER(venue.name) LIKE :q)
         `, { q: `%${textQuery.toLowerCase()}%` });
-      }
-  
-      // Si hay hora específica, verificar que al menos exista una disponibilidad con ese time
-      if (time && time !== 'all') {
-        qb.andWhere(`
-          EXISTS (
-            SELECT 1
-            FROM court_schedule_availability a
-            WHERE a."courtId" = court.id
-              AND a.date = :targetDate
-              AND a.time = :time
-              AND a.status = 'available'
-          )
-        `, { targetDate, time });
       }
   
       // Filtro por geolocalización
@@ -361,7 +393,21 @@ async findFeaturedPublic(
       const result = await qb.getMany();
       if (result.length === 0) return [];
   
-      return this.transformCourts(result);
+      const courtsWithVirtual = await Promise.all(
+        result.map(async (court) => {
+          const virtualAvailabilities = await this.getVirtualAvailability(court, targetDate);
+          (court as any).availabilities = virtualAvailabilities;
+          return court;
+        }),
+      );
+  
+      let transformed = this.transformCourts(courtsWithVirtual);
+
+      if (time && time !== 'all') {
+        transformed = transformed.filter((c) => c.availability.includes(time));
+      }
+
+      return transformed;
     } catch (error) {
       throw new Error(`Error al filtrar canchas: ${error.message}`);
     }

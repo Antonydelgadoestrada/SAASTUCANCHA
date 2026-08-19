@@ -31,7 +31,7 @@ export const AuthHeaderButtons = () => {
     } else if (user.role === "CLUB") {
       router.push("/club/dashboard")
     } else {
-      router.push('/user/bookings')
+      router.push('/user/dashboard')
     }
   }
 

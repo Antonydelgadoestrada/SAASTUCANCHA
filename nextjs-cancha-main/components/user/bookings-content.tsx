@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon, CheckCircleIcon, ClockIcon, CreditCardIcon, MapPinIcon, XCircleIcon } from "lucide-react"
 import { toast } from "sonner"
+import Link from "next/link"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -85,6 +86,16 @@ import { confirmPayment } from "@/lib/mercadopago"
 //     price: 20,
 //   },
 // ]
+
+const getBookingTimeRange = (startTime: string, duration: number) => {
+  if (!startTime) return "";
+  const [h, m] = startTime.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m + duration * 60, 0, 0);
+  const endH = d.getHours().toString().padStart(2, "0");
+  const endM = d.getMinutes().toString().padStart(2, "0");
+  return `${startTime} a ${endH}:${endM}`;
+};
 
 export function UserBookingsContent() {
   const [activeTab, setActiveTab] = useState("upcoming")
@@ -262,7 +273,10 @@ export function UserBookingsContent() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center">
                         <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>{format(booking.date, "EEEE d 'de' MMMM", { locale: es })}</span>
+                        <span>
+                          {format(booking.date, "EEEE d 'de' MMMM", { locale: es })}
+                          {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
+                        </span>
                       </div>
                       <div className="flex items-center">
                         <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -290,7 +304,9 @@ export function UserBookingsContent() {
                 <p className="mt-2 text-muted-foreground">
                   Busca y reserva canchas deportivas para ver tus próximas reservas aquí.
                 </p>
-                <Button className="mt-4">Buscar Canchas</Button>
+                <Link href="/user/search" passHref>
+                  <Button className="mt-4">Buscar Canchas</Button>
+                </Link>
               </CardContent>
             </Card>
           )}
@@ -321,8 +337,10 @@ export function UserBookingsContent() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center">
                         <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>{format(booking.date, "EEEE d 'de' MMMM", { locale: es })}</span> {", "}
-                        <span>{booking.startTime}</span>
+                        <span>
+                          {format(booking.date, "EEEE d 'de' MMMM", { locale: es })}
+                          {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
+                        </span>
                       </div>
     
                       <div className="flex items-center">
@@ -379,8 +397,10 @@ export function UserBookingsContent() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center">
                         <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>{format(booking.date, "EEEE d 'de' MMMM", { locale: es })}</span>
-
+                        <span>
+                          {format(booking.date, "EEEE d 'de' MMMM", { locale: es })}
+                          {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
+                        </span>
                       </div>
                       <div className="flex items-center">
                         <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -444,8 +464,8 @@ export function UserBookingsContent() {
                 <div>
                   <h4 className="text-sm font-medium">Fecha y hora</h4>
                   <p className="text-sm text-muted-foreground">
-                    {format(selectedBooking.date, "EEEE d 'de' MMMM, yyyy", { locale: es })} a las{" "}
-                    {selectedBooking.startTime}
+                    {format(selectedBooking.date, "EEEE d 'de' MMMM, yyyy", { locale: es })} de{" "}
+                    {getBookingTimeRange(selectedBooking.startTime, selectedBooking.duration)}
                   </p>
                 </div>
 

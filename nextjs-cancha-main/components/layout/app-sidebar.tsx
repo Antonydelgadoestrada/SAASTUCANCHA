@@ -44,12 +44,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   // Menú para usuarios normales
   const userMenu = [
-    // {
-    //   title: "Dashboard",
-    //   icon: LayoutDashboardIcon,
-    //   href: '/user/bookings',
-    //   active: isActive('/user/bookings'),
-    // },
+    {
+      title: "Dashboard",
+      icon: LayoutDashboardIcon,
+      href: "/user/dashboard",
+      active: isActive("/user/dashboard"),
+    },
     {
       title: "Buscar Canchas",
       icon: SearchIcon,
@@ -62,12 +62,6 @@ export function AppSidebar({ user }: AppSidebarProps) {
       href: "/user/bookings",
       active: isActive("/user/bookings"),
     },
-    // {
-    //   title: "Pagos",
-    //   icon: CreditCardIcon,
-    //   href: "/user/payments",
-    //   active: isActive("/user/payments"),
-    // },
   ]
 
   // Menú para clubes
@@ -162,11 +156,14 @@ export function AppSidebar({ user }: AppSidebarProps) {
               <SidebarMenu>
                 <SidebarMenuItem className="flex items-center gap-2">
                   <SidebarMenuButton
+                    asChild
                     tooltip="Reservar Cancha"
                     className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
                   >
-                    <PlusCircleIcon />
-                    <span>Reservar Cancha</span>
+                    <a href="/user/search">
+                      <PlusCircleIcon />
+                      <span>Reservar Cancha</span>
+                    </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

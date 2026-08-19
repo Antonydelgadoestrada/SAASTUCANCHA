@@ -88,7 +88,7 @@ export function LoginForm() {
           router.push(callbackUrl)
         }
         else {
-          router.push('/user/bookings')
+          router.push('/user/dashboard')
         }
       }
     } catch (error) {
@@ -116,7 +116,7 @@ export function LoginForm() {
   const handleGoogleSignIn = async () => {
     setShowGoogleLoading(true)
     try {
-      const callbackUrl = searchParams.get("callbackUrl") || '/user/bookings'
+      const callbackUrl = searchParams.get("callbackUrl") || '/user/dashboard'
       await signIn("google", { callbackUrl})
       toast.success(`Bienvenido`)
     } catch (error) {
