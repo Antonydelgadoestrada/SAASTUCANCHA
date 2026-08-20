@@ -9,7 +9,6 @@ import {
   CalendarDaysIcon,
   SettingsIcon,
   MapPinIcon,
-  BuildingIcon,
   PlusCircleIcon,
   ClockIcon,
   CreditCardIcon,
@@ -36,7 +35,7 @@ import { ClubPopularCourts, formatSoles } from "./popular-courts"
 import { DateRange } from "react-day-picker"
 import { getBookingsReportByClub, getCountByClub, getDailyStatsByClub, getDashboardSummary, getPopularCourtsByClub } from "@/lib/dashboard"
 import { getAllReservation } from "@/lib/reservation"
-import { getAllCourtsByVenues } from "@/lib/courts"
+import { getAllCourtsByClub } from "@/lib/courts"
 import { listCourtScheduleEvents } from "@/lib/schedule"
 
 // --- Helpers de traducción ---
@@ -72,7 +71,7 @@ export function ClubDashboardContent() {
   const [stats, setStats] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [tempDateRange, setTempDateRange] = useState<DateRange | undefined>()
-  const [countVenues, setCountVenues] = useState(0)
+
   const [countCourts, setCountCourts] = useState(0)
   const [summary, setSummary] = useState({revenue: "1", bookings: "1"})
   const [popularCourts, setPopularCourts] = useState([])
@@ -167,8 +166,7 @@ export function ClubDashboardContent() {
   useEffect(() => {
     const fetchCounts = async ()=>{
      try{
-      const {venues,courts}  = await getCountByClub()
-      setCountVenues(venues)
+      const {courts}  = await getCountByClub()
       setCountCourts(courts)
      }catch(error){
        toast.error('Error al cargar venues')
@@ -194,13 +192,13 @@ export function ClubDashboardContent() {
     const fetchEvents = async () => {
       setIsEventsLoading(true)
       try {
-        const courts = await getAllCourtsByVenues()
+        const courts = await getAllCourtsByClub()
         const allEvts: any[] = []
         for (const court of courts) {
           try {
             const events = await listCourtScheduleEvents(court.id)
             if (Array.isArray(events)) {
-              allEvts.push(...events.map((e: any) => ({ ...e, courtName: court.name, venueName: court.venue?.name || "" })))
+              allEvts.push(...events.map((e: any) => ({ ...e, courtName: court.name })))
             }
           } catch {
             // Ignore individual court errors
@@ -261,11 +259,26 @@ export function ClubDashboardContent() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="flex flex-col space-y-1">
-          <h2 className="text-2xl font-bold tracking-tight">Dashboard de Club</h2>
-          <p className="text-muted-foreground">Bienvenido al panel de control de tu club deportivo.</p>
+      {/* Cabecera y Resumen */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-muted-foreground">Resumen general de tu club deportivo.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all duration-300 hover:shadow-md">
+            <Link href="/club/schedules">
+              <CalendarIcon className="mr-2 h-4 w-4" /> Ver Horarios
+            </Link>
+          </Button>
+          <Button asChild className="bg-green-600 hover:bg-green-700 text-white shadow-sm transition-all duration-300 hover:shadow-md">
+            <Link href="/club/bookings">
+              <PlusCircleIcon className="mr-2 h-4 w-4" /> Nueva Reserva
+            </Link>
+          </Button>
+        </div>
+      </div>
+      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex flex-wrap items-center gap-2">
           {/* Selector de rango predefinido */}
           {/* isPopoverOpen */}
@@ -353,7 +366,7 @@ export function ClubDashboardContent() {
                   size="sm"
                   onClick={() => {
                     if (tempDateRange && tempDateRange?.from && tempDateRange?.to) {
-                      setDateRange(tempDateRange)
+                      setDateRange({ from: tempDateRange.from, to: tempDateRange.to })
                       setIsCustomDate(true)
                       setTimeRange("custom")
                       fetchStats(tempDateRange.from, tempDateRange.to)
@@ -407,19 +420,8 @@ export function ClubDashboardContent() {
       )}
 
       {/* Accesos rápidos a mantenimiento */}
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-          <Link href="/club/venues">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Gestión de Sedes</CardTitle>
-              <BuildingIcon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{countVenues}</div>
-              <p className="text-xs text-muted-foreground">Sedes activas</p>
-            </CardContent>
-          </Link>
-        </Card>
+      <section className="grid gap-4 md:grid-cols-2">
+
         <Card className="cursor-pointer transition-colors hover:bg-muted/50">
           <Link href="/club/courts">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -443,43 +445,6 @@ export function ClubDashboardContent() {
                 <SettingsIcon className="h-6 w-6" />
               </div>
               <p className="text-xs text-muted-foreground">Horarios y precios</p>
-            </CardContent>
-          </Link>
-        </Card>
-      </section>
-
-      {/* Atajos rápidos de acción */}
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card className="cursor-pointer border-dashed border-2 transition-all hover:border-primary hover:bg-primary/5">
-          <Link href="/club/bookings">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-primary">Nueva Reserva</CardTitle>
-              <PlusCircleIcon className="h-5 w-5 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">Registra una nueva reserva de cancha para un cliente</p>
-            </CardContent>
-          </Link>
-        </Card>
-        <Card className="cursor-pointer border-dashed border-2 transition-all hover:border-blue-500 hover:bg-blue-500/5">
-          <Link href="/club/schedules">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-600">Ver Horarios</CardTitle>
-              <ClockIcon className="h-5 w-5 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">Gestiona la disponibilidad y bloqueos de tus canchas</p>
-            </CardContent>
-          </Link>
-        </Card>
-        <Card className="cursor-pointer border-dashed border-2 transition-all hover:border-emerald-500 hover:bg-emerald-500/5">
-          <Link href="/club/payments">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-emerald-600">Ver Pagos</CardTitle>
-              <CreditCardIcon className="h-5 w-5 text-emerald-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">Revisa el estado de pagos y transacciones del club</p>
             </CardContent>
           </Link>
         </Card>
@@ -555,13 +520,13 @@ export function ClubDashboardContent() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Cliente</TableHead>
+                        <TableHead>Cliente/Reserva</TableHead>
                         <TableHead>Cancha</TableHead>
                         <TableHead>Fecha y Hora</TableHead>
                         <TableHead>Duración</TableHead>
                         <TableHead>Estado</TableHead>
                         <TableHead>Pago</TableHead>
-                        <TableHead className="text-right">Ingreso</TableHead>
+                        <TableHead className="text-right">Precio</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -573,7 +538,7 @@ export function ClubDashboardContent() {
                           </TableCell>
                           <TableCell>
                             <div className="font-medium">{r.court?.name || "N/A"}</div>
-                            <div className="text-xs text-muted-foreground">{r.court?.venue?.name || ""}</div>
+
                           </TableCell>
                           <TableCell>
                             <div className="font-medium">
@@ -595,7 +560,7 @@ export function ClubDashboardContent() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right font-semibold">
-                            S/ {r.pricing?.totalPrice || 0}
+                            S/ {r.pricing?.totalPrice || r.price || 0}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -616,7 +581,7 @@ export function ClubDashboardContent() {
                           {statusLabels[r.status] || r.status}
                         </Badge>
                       </div>
-                      <div className="text-xs text-muted-foreground">{r.court?.name} — {r.court?.venue?.name}</div>
+                      <div className="text-xs text-muted-foreground">{r.court?.name}</div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="font-mono">{format(new Date(r.date), "EEE d MMM", { locale: es })} · {r.startTime} - {r.endTime}</span>
                         <Badge className={paymentStatusColors[r.paymentStatus] || "bg-gray-100"}>
@@ -680,7 +645,7 @@ export function ClubDashboardContent() {
                       </Badge>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      🏟️ {evt.courtName}{evt.venueName ? ` — ${evt.venueName}` : ""}
+                      🏟️ {evt.courtName}
                     </div>
                     {evt.description && (
                       <div className="text-xs text-muted-foreground line-clamp-2">{evt.description}</div>
@@ -720,10 +685,10 @@ export function ClubDashboardContent() {
           <TabsTrigger value="overview">Resumen</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 ">
-            <Card className="">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+            <Card className="col-span-4 lg:col-span-4 shadow-sm border-0 ring-1 ring-border/50">
               <CardHeader>
-                <CardTitle>Reservas y Ingresos</CardTitle>
+                <CardTitle>Ingresos Estimados (Mensual)</CardTitle>
               </CardHeader>
               <CardContent className="pl-2">
                 <ClubBookingsChart data={stats} />

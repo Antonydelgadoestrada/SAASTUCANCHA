@@ -85,12 +85,6 @@ export function AppSidebar({ user }: AppSidebarProps) {
       active: isActive("/club/schedules"),
     },
     {
-      title: "Sedes",
-      icon: MapPinIcon,
-      href: "/club/venues",
-      active: isActive("/club/venues"),
-    },
-    {
       title: "Canchas",
       icon: HomeIcon,
       href: "/club/courts",

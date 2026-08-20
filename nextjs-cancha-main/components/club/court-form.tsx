@@ -31,7 +31,7 @@ const durationOptions = [
 ]
 type CourtFormData = {
   name: string
-  venue: { id: number; name: string }
+
   type: string
   surface: string
   priceDay: number
@@ -46,13 +46,7 @@ type CourtFormData = {
 interface Court {
   id: number
   name: string
-  venue: {
-    id: number
-    name: string
-    address: string
-    [key: string]: any // para evitar errores si vienen más propiedades
-  }
-  venueId: number
+
   minimumBookingTime?: string
   type: string
   surface: string
@@ -75,14 +69,12 @@ interface Court {
 type CourtFormProps = {
   // onSubmit: (data: Partial<Court> & { id?: number; images?: string[] }) => void
   onSubmit: (data: any) => void
-  venues: Partial<VenueDTO>[]
-  // venues: { id: number; name: string; address: string }[]
   court?: Court | null
   onCancel?: () => void
   templates?: any[]
 }
 
-export function CourtForm({ onSubmit, venues, court, onCancel, templates }: CourtFormProps) {
+export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormProps) {
   const MAX_FILE_SIZE_MB = 2
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
@@ -100,7 +92,7 @@ export function CourtForm({ onSubmit, venues, court, onCancel, templates }: Cour
     defaultValues: {
       name: "",
       minimumBookingTime: '1',
-      venue: undefined, // o null
+
       type: "",
       surface: "",
       priceDay: 0,
@@ -125,7 +117,7 @@ export function CourtForm({ onSubmit, venues, court, onCancel, templates }: Cour
       form.reset({
         name: court.name,
         type: court.type,
-        venue: court.venue,
+
         minimumBookingTime: court.minimumBookingTime,
         surface: court.surface,
         priceDay: court.priceDay,
@@ -143,7 +135,7 @@ export function CourtForm({ onSubmit, venues, court, onCancel, templates }: Cour
       form.reset({
         name: "",
         type: "",
-        venue: undefined, // o null
+
         surface: "",
         priceDay: 0,
         priceNight: 0,
@@ -201,7 +193,6 @@ export function CourtForm({ onSubmit, venues, court, onCancel, templates }: Cour
       // Incluir las imágenes en los valores
       const dataToSubmit = {
         ...values,
-        venue: venues.find((v) => v.id == values.venue.id)!,
         existingImages,
         selectedFiles,
         ...(court && { id: court.id }),
@@ -258,36 +249,6 @@ export function CourtForm({ onSubmit, venues, court, onCancel, templates }: Cour
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="venue"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Sede</FormLabel>
-                <Select
-                  value={field.value?.id?.toString() ?? undefined}
-                  onValueChange={(value) => {
-                    const selected = venues.find((v) => v.id === parseInt(value))
-                    if (selected) field.onChange(selected) // <-- Seteas todo el objeto
-                  }}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar sede" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {venues.map((venue) => (
-                      <SelectItem key={venue.id} value={`${venue.id}`}>
-                        {venue.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
           <FormField
             control={form.control}

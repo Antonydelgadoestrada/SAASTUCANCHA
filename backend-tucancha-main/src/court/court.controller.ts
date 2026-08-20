@@ -35,9 +35,9 @@ import { GetUser } from '../auth/get-user.decorator';
     @Get('/club')
     findAllByClub(@GetUser() user: User): Promise<Court[]> {
       if (user.role !== 'CLUB') {
-        throw new ForbiddenException('No tienes permisos para listar sedes');
+        throw new ForbiddenException('No tienes permisos para listar canchas');
       }
-      return this.service.findAllByVenueByClub(user.club.id);
+      return this.service.findAllByClub(user.club.id);
     }
     
     @Get('query')
@@ -74,9 +74,13 @@ import { GetUser } from '../auth/get-user.decorator';
     )
     async create(
       @Body() data: Partial<Court>,
-      @UploadedFiles() images: MulterFile[]
+      @UploadedFiles() images: MulterFile[],
+      @GetUser() user: User
     ) {
       const urls = images?.length ? await this.service.uploadFiles(images) : []
+      if (user?.club?.id) {
+          (data as any).club = user.club.id;
+      }
       return this.service.create({ ...data, images: urls })
     }
     

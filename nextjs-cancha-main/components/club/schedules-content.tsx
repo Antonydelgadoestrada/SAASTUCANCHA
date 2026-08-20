@@ -51,8 +51,7 @@ import {
   parseCourtTemplateByCourtResponse,
   listCourtScheduleEvents,
 } from "@/lib/schedule";
-import { getAllCourtsByVenues } from "@/lib/courts";
-import { getAllVenues } from "@/lib/venues";
+import { getAllCourtsByClub } from "@/lib/courts";
 import { FormSidebar } from "@/components/ui/form-sidebar";
 import { ScheduleTemplateForm } from "./schedule-template-form";
 import { EventsTab } from "./events-tab";
@@ -95,7 +94,6 @@ export function ClubSchedulesContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
 
-  const [selectedVenue, setSelectedVenue] = useState<string>("all");
   const [selectedCourt, setSelectedCourt] = useState<string>("all");
   const [sidebarDefaultTab, setSidebarDefaultTab] = useState<"horarios" | "eventos">("horarios");
   const [allReservations, setAllReservations] = useState<any[]>([]);
@@ -127,7 +125,7 @@ export function ClubSchedulesContent() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
   const [courts, setCourts] = useState<any[]>([]);
-  const [venues, setVenues] = useState<any[]>([]);
+
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -226,16 +224,11 @@ export function ClubSchedulesContent() {
         setIsTemplatesLoading(false);
       }
     };
-    const fetchVenues = async () => {
-      const data = await getAllVenues();
-      setVenues([...data]);
-    };
     const fetchCourts = async () => {
-      const data = await getAllCourtsByVenues();
+      const data = await getAllCourtsByClub();
       setCourts([...data]);
     };
     fetchCourts();
-    fetchVenues();
     fetchTemplates();
   }, []);
 
@@ -243,16 +236,12 @@ export function ClubSchedulesContent() {
     if (courtIdParam && courts.length > 0) {
       const court = courts.find((c) => String(c.id) === String(courtIdParam));
       if (court) {
-        setSelectedVenue(String(court.venue?.id));
         setSelectedCourt(String(court.id));
       }
     }
   }, [courtIdParam, courts]);
-  // Filtrar canchas según la sede seleccionada
-  const filteredCourts = courts.filter((court) => {
-    if (selectedVenue == "all") return true;
-    return court.venue.id == selectedVenue;
-  });
+
+  const filteredCourts = courts;
 
   const templateSlotTimes = useMemo(() => {
     const slots = Array.isArray(courtTemplate?.slots)
@@ -937,19 +926,6 @@ export function ClubSchedulesContent() {
                 <FilterIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Filtrar:</span>
               </div>
-              <Select value={selectedVenue} onValueChange={setSelectedVenue}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Todas las sedes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las sedes</SelectItem>
-                  {venues.map((venue) => (
-                    <SelectItem key={venue.id} value={venue.id}>
-                      {venue.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={selectedCourt} onValueChange={handleCourtChange}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Todas las canchas" />
@@ -1057,6 +1033,13 @@ export function ClubSchedulesContent() {
 
                           const eventForSlot = eventSlots.find((e) => e.date === dateStr && e.time === timeStr);
                           
+                          let finalStatus = cellStatus;
+                          if (bookingForSlot) {
+                            finalStatus = (bookingForSlot.status === "PENDING" || bookingForSlot.status === "pending") ? "on-hold" : "occupied";
+                          } else if (eventForSlot) {
+                            finalStatus = "event";
+                          }
+
                           const reservedByName = bookingForSlot 
                             ? bookingForSlot.customerInfo?.name 
                             : eventForSlot 
@@ -1066,7 +1049,7 @@ export function ClubSchedulesContent() {
                           return (
                             <ScheduleTimeSlot
                               key={matchingSlot?.id ?? `${dateStr}-${timeStr}`}
-                              status={cellStatus}
+                              status={finalStatus}
                               time={timeStr}
                               date={day}
                               disabled={!isDayEnabledByTemplate(day)}
@@ -1097,9 +1080,7 @@ export function ClubSchedulesContent() {
                       .map((court) => (
                         <div key={court.id} className="space-y-2">
                           <h3 className="text-lg font-medium">{court.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {court.venue.name}
-                          </p>
+
 
                           <div className="space-y-4">
                             {weekDays.slice(0, 3).map((day, dayIndex) => (
@@ -1130,6 +1111,13 @@ export function ClubSchedulesContent() {
 
                                     const eventForSlot = eventSlots.find((e) => e.date === dateStr && e.time === timeStr);
                                     
+                                    let finalStatus = cellStatus;
+                                    if (bookingForSlot) {
+                                      finalStatus = (bookingForSlot.status === "PENDING" || bookingForSlot.status === "pending") ? "on-hold" : "occupied";
+                                    } else if (eventForSlot) {
+                                      finalStatus = "event";
+                                    }
+
                                     const reservedByName = bookingForSlot 
                                       ? bookingForSlot.customerInfo?.name 
                                       : eventForSlot 
@@ -1139,7 +1127,7 @@ export function ClubSchedulesContent() {
                                     return (
                                       <ScheduleTimeSlot
                                         key={timeStr}
-                                        status={cellStatus}
+                                        status={finalStatus}
                                         time={timeStr}
                                         date={day}
                                         compact

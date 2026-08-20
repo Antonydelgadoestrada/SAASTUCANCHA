@@ -33,9 +33,6 @@ export class CreateScheduleTemplateDto {
   @IsString()
   clubId: string
 
-  @IsOptional()
-  @IsNumber()
-  venueId?: number // null si aplica a todas las sedes
 }
 
 export class UpdateScheduleTemplateDto {

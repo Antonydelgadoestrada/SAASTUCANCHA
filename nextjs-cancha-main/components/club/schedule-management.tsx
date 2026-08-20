@@ -25,17 +25,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { getAllCourts } from "@/lib/courts"
-import { getAllVenues } from "@/lib/venues"
-
+import { getAllCourtsByClub } from "@/lib/courts"
 
 export function ScheduleManagement() {
   const [date, setDate] = useState<Date>(new Date())
   const [courts, setCourts] = useState([])
-  const [venues, setVenues] = useState([])
   const [scheduleChanges, setScheduleChanges] = useState<{[key: string]: any}>({})
-
-  const [selectedVenue, setSelectedVenue] = useState<string>("all")
   const [selectedCourt, setSelectedCourt] = useState<string>("all")
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
   
@@ -44,31 +39,16 @@ export function ScheduleManagement() {
   useEffect(()=>{
     const fetchCourts = async () => {
       try {
-        const data = await getAllCourts()
-        const transformed = data.map((court: any) => ({
-          ...court,
-          venueId: court.venue?.id ?? 0,
-        }))
-        setCourts(transformed)
+        const data = await getAllCourtsByClub()
+        setCourts(data)
       } catch (error) {
         toast.error("Error al cargar las canchas")
       }
     }
-    const fetchVenues = async ()=>{
-      try {
-        const result = await getAllVenues()
-        setVenues(result)
-      } catch (error) {
-        toast.error("Error al cargar las canchas")
-      }
-      
-    }
-    fetchVenues()
     fetchCourts()
   },[])
-  // Filtrar canchas según la sede seleccionada
-  const filteredCourts = selectedVenue !== "all" ? courts.filter((court:any) => court.venue === selectedVenue) : courts
-
+  // Canchas sin filtro
+  const filteredCourts = courts
   // Generar días de la semana a partir de la fecha seleccionada
   const weekStart = startOfWeek(date, { weekStartsOn: 1 })
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -187,19 +167,7 @@ export function ScheduleManagement() {
                 <FilterIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Filtrar:</span>
               </div>
-              <Select value={selectedVenue} onValueChange={setSelectedVenue}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Todas las sedes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las sedes</SelectItem>
-                  {venues.map((venue:any) => (
-                    <SelectItem key={venue.id} value={venue.name}>
-                      {venue.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
               <Select value={selectedCourt} onValueChange={setSelectedCourt}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Todas las canchas" />

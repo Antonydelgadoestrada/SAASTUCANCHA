@@ -10,7 +10,7 @@ import {
 import { Booking } from '../booking/booking.entity';
 import { Review } from '../review/review.entity';
 import { Promotion } from '../promotion/promotion.entity';
-import { Venue } from '../venue/entities/venue.entity';
+import { Club } from '../club/club.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
 
 @Entity()
@@ -60,8 +60,8 @@ export class Court {
   @OneToMany(() => CourtScheduleAvailability, (a) => a.court)
   availabilities: CourtScheduleAvailability[]
 
-  @ManyToOne(() => Venue, (venue) => venue.courts)
-  venue: Venue  
+  @ManyToOne(() => Club, (club) => club.courts, { onDelete: 'CASCADE' })
+  club: Club
   @OneToMany(() => Promotion, (promotion) => promotion.court)
   promotions: Promotion[];
 
@@ -91,5 +91,5 @@ export type CourtUpdateDto = {
   promoNight?: string | null // Opcional o null si no se envía
   description: string
   existingImages?: string[]  // URLs de imágenes existentes
-  venue?: any                // Si estás enviando la sede como objeto JSON
+
 }

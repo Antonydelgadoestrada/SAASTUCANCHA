@@ -36,7 +36,7 @@ export class ScheduleTemplateService {
     template: ScheduleTemplate | null
     linkedTemplateId: string | null
   }> {
-    const court: any = await this.courtsService.findOne(courtId, ['venue', 'venue.club'])
+    const court: any = await this.courtsService.findOne(courtId, ['club'])
     if (!court) {
       return { template: null, linkedTemplateId: null }
     }
@@ -47,7 +47,7 @@ export class ScheduleTemplateService {
       return { template: template ?? null, linkedTemplateId: linkedId }
     }
 
-    const clubId = court?.venue?.club?.id
+    const clubId = court?.club?.id
     if (!clubId) {
       return { template: null, linkedTemplateId: null }
     }
@@ -56,7 +56,7 @@ export class ScheduleTemplateService {
       .createQueryBuilder('t')
       .innerJoin('t.club', 'club', 'club.id = :clubId', { clubId })
       .orderBy('t.createdAt', 'ASC')
-      .select(['t.id', 't.name', 't.description', 't.venueId', 't.days', 't.slots', 't.createdAt', 't.updatedAt'])
+      .select(['t.id', 't.name', 't.description', 't.days', 't.slots', 't.createdAt', 't.updatedAt'])
       .getOne()
 
     return { template: fallback ?? null, linkedTemplateId: null }
@@ -71,7 +71,7 @@ export class ScheduleTemplateService {
     return this.templateRepo.findOne({ where: { id }, relations: ['club'] })
   }
   async update(id: string, data: Partial<ScheduleTemplate>) {
-    const allowed = ['name', 'description', 'days', 'slots', 'venueId'] as const;
+    const allowed = ['name', 'description', 'days', 'slots'] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in data && (data as Record<string, unknown>)[key] !== undefined) {
@@ -103,8 +103,8 @@ export class ScheduleTemplateService {
     if (clubId) {
       const courtIds = Array.from(new Set(slots.map(s => s.courtId).filter(Boolean)))
       for (const courtId of courtIds) {
-        const court: any = await this.courtsService.findOne(courtId as string, ['venue', 'venue.club'])
-        if (!court || court?.venue?.club?.id !== clubId) {
+        const court: any = await this.courtsService.findOne(courtId as string, ['club'])
+        if (!court || court?.club?.id !== clubId) {
           throw new ForbiddenException(`No tienes permisos sobre la cancha ID ${courtId}`)
         }
       }
@@ -165,9 +165,8 @@ export class ScheduleTemplateService {
   async applyTemplateToCourts(template: any): Promise<number> {
     // Deshabilitado: ya no se crean slots masivos.
     return 0;
-    const courts = await this.courtsService.findAllByVenueByClub(
-      template.club.id,
-      template.venueId,
+    const courts = await this.courtsService.findAllByClub(
+      template.club.id
     );
     if(courts.length == 0) return 0
     const today = new Date();
@@ -314,26 +313,7 @@ export class ScheduleTemplateService {
   
   
 
-  async getAvailabilityByVenueAndDates(venueId: string, start: string, end: string) {
-    const availabilities = await this.availabilityRepo.find({
-      where: {
-        date: Between(start, end),
-        court: {
-          venue: {
-            id: +venueId,
-          },
-        },
-      },
-      relations: ['court', 'court.venue'],
-    })
-  
-    return availabilities.map((a) => ({
-      courtId: a.court.id,
-      date: a.date,
-      time: a.time,
-      status: a.status,
-    }))
-  }
+
 
   async getAvailabilityByCourtAndDates(courtId: string, start: string, end: string) {
     const overrides = await this.availabilityRepo.find({

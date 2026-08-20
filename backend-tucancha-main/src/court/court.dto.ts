@@ -8,6 +8,6 @@ export type FeaturedCourtDto = {
   promoNight: number | null;
   rating?: number | null;
   reviews?: number | null;
-  venue?: { id: number; name: string; address?: string };
+  venue?: { id: string; name: string; address?: string };
   time:string;
 };

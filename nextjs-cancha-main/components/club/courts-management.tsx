@@ -22,8 +22,7 @@ import { CourtForm } from "@/components/club/court-form"
 interface Court {
   id: number
   name: string
-  venue: string
-  venueId: number
+
   type: string
   surface: string
   priceDay: number
@@ -40,8 +39,7 @@ const initialCourtsData: Court[] = [
   {
     id: 1,
     name: "Cancha de Fútbol 5",
-    venue: "Sede Central",
-    venueId: 1,
+
     type: "futbol",
     surface: "Césped sintético",
     priceDay: 35,
@@ -54,8 +52,7 @@ const initialCourtsData: Court[] = [
   {
     id: 2,
     name: "Cancha de Tenis #1",
-    venue: "Sede Central",
-    venueId: 1,
+
     type: "tenis",
     surface: "Cemento",
     priceDay: 40,
@@ -67,18 +64,14 @@ const initialCourtsData: Court[] = [
   },
 ]
 
-const venues = [
-  { id: 1, name: "Sede Central", address: "Av. Principal 123" },
-  { id: 2, name: "Sede Norte", address: "Calle Norte 456" },
-  { id: 3, name: "Sede Sur", address: "Av. Sur 789" },
-]
+
 
 export function CourtsManagement() {
   const [courts, setCourts] = useState<Court[]>(initialCourtsData)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingCourt, setEditingCourt] = useState<Court | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedVenue, setSelectedVenue] = useState<string>("all")
+
 
   // Filtrar canchas según la búsqueda y la sede seleccionada
   const filteredCourts = courts.filter((court) => {
@@ -87,18 +80,15 @@ export function CourtsManagement() {
       court.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       court.surface.toLowerCase().includes(searchQuery.toLowerCase())
 
-    const matchesVenue = selectedVenue === "all" || court.venue === selectedVenue
-
-    return matchesSearch && matchesVenue
+    return matchesSearch
   })
 
   const handleAddCourt = (courtData: any) => {
-    const venue = venues.find((v) => v.id.toString() === courtData.venueId)
+
     const newCourt: Court = {
       ...courtData,
       id: Math.max(...courts.map((c) => c.id), 0) + 1,
-      venue: venue?.name || "",
-      venueId: Number.parseInt(courtData.venueId),
+
     }
     setCourts([...courts, newCourt])
     setIsAddDialogOpen(false)
@@ -106,11 +96,10 @@ export function CourtsManagement() {
   }
 
   const handleEditCourt = (courtData: any) => {
-    const venue = venues.find((v) => v.id.toString() === courtData.venueId)
+
     const updatedCourt: Court = {
       ...courtData,
-      venue: venue?.name || "",
-      venueId: Number.parseInt(courtData.venueId),
+
     }
     setCourts(courts.map((c) => (c.id === courtData.id ? updatedCourt : c)))
     setEditingCourt(null)
@@ -126,19 +115,7 @@ export function CourtsManagement() {
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex flex-1 items-center gap-4">
-          <Select value={selectedVenue} onValueChange={setSelectedVenue}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Todas las sedes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las sedes</SelectItem>
-              {venues.map((venue) => (
-                <SelectItem key={venue.id} value={venue.name}>
-                  {venue.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
 
           <div className="relative flex-1">
             <Input
@@ -175,7 +152,7 @@ export function CourtsManagement() {
               <DialogTitle>Agregar Nueva Cancha</DialogTitle>
               <DialogDescription>Completa los detalles para agregar una nueva cancha a tu club.</DialogDescription>
             </DialogHeader>
-            <CourtForm onSubmit={handleAddCourt} venues={venues} onCancel={() => setIsAddDialogOpen(false)} />
+            <CourtForm onSubmit={handleAddCourt} onCancel={() => setIsAddDialogOpen(false)} />
           </DialogContent>
         </Dialog>
       </div>
@@ -195,8 +172,7 @@ export function CourtsManagement() {
                 <div>
                   <CardTitle>{court.name}</CardTitle>
                   <CardDescription className="flex items-center">
-                    <MapPinIcon className="mr-1 h-4 w-4" />
-                    {court.venue}
+
                   </CardDescription>
                 </div>
                 <DropdownMenu>
@@ -285,12 +261,11 @@ export function CourtsManagement() {
               <DialogTitle>Editar Cancha</DialogTitle>
               <DialogDescription>Modifica los detalles de la cancha.</DialogDescription>
             </DialogHeader>
-            <CourtForm
-              court={editingCourt}
-              onSubmit={handleEditCourt}
-              venues={venues}
-              onCancel={() => setEditingCourt(null)}
-            />
+              <CourtForm
+                court={editingCourt}
+                onSubmit={handleEditCourt}
+                onCancel={() => setEditingCourt(null)}
+              />
           </DialogContent>
         </Dialog>
       )}
