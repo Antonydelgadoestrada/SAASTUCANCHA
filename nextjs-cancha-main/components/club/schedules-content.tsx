@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, format, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
 
 import {
   CalendarIcon,
@@ -48,12 +49,30 @@ import {
   getTemplateByClub,
   getTemplateByCourtId,
   parseCourtTemplateByCourtResponse,
+  listCourtScheduleEvents,
 } from "@/lib/schedule";
 import { getAllCourtsByVenues } from "@/lib/courts";
 import { getAllVenues } from "@/lib/venues";
 import { FormSidebar } from "@/components/ui/form-sidebar";
 import { ScheduleTemplateForm } from "./schedule-template-form";
 import { EventsTab } from "./events-tab";
+import { getAllReservation, createReservationManual } from "@/lib/reservation";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export type statusEnum = "occupied" | "blocked" | "available" | "on-hold" | "event";
 
@@ -70,12 +89,29 @@ type ScheduleTimeSlotProps = {
 };
 
 export function ClubSchedulesContent() {
+  const searchParams = useSearchParams();
+  const courtIdParam = searchParams.get("courtId");
   const [date, setDate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(false);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
 
   const [selectedVenue, setSelectedVenue] = useState<string>("all");
   const [selectedCourt, setSelectedCourt] = useState<string>("all");
+  const [sidebarDefaultTab, setSidebarDefaultTab] = useState<"horarios" | "eventos">("horarios");
+  const [allReservations, setAllReservations] = useState<any[]>([]);
+  const [courtEvents, setCourtEvents] = useState<any[]>([]);
+  const [selectedItemDetails, setSelectedItemDetails] = useState<any>(null);
+  const [isDetailsSidebarOpen, setIsDetailsSidebarOpen] = useState(false);
+  const [selectedSlotForAction, setSelectedSlotForAction] = useState<{ time: string; date: Date } | null>(null);
+  const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
+  const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
+
+  // Formulario de reserva manual
+  const [bookingUserEmail, setBookingUserEmail] = useState("");
+  const [bookingDuration, setBookingDuration] = useState("1");
+  const [bookingPrice, setBookingPrice] = useState("");
+  const [isBookingSaving, setIsBookingSaving] = useState(false);
+
   const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(false);
   const [editionTemplate, setEditionTemplate] = useState(false);
   /** Plantilla de la fila que se abrió para editar (no siempre `templates[0]`). */
@@ -202,6 +238,16 @@ export function ClubSchedulesContent() {
     fetchVenues();
     fetchTemplates();
   }, []);
+
+  useEffect(() => {
+    if (courtIdParam && courts.length > 0) {
+      const court = courts.find((c) => String(c.id) === String(courtIdParam));
+      if (court) {
+        setSelectedVenue(String(court.venue?.id));
+        setSelectedCourt(String(court.id));
+      }
+    }
+  }, [courtIdParam, courts]);
   // Filtrar canchas según la sede seleccionada
   const filteredCourts = courts.filter((court) => {
     if (selectedVenue == "all") return true;
@@ -231,20 +277,192 @@ export function ClubSchedulesContent() {
     const weekEnd = addDays(ws, 6);
     const end = format(weekEnd, "yyyy-MM-dd");
     try {
-      const [data, templateRes, events] = await Promise.all([
+      const [data, templateRes, events, reservationsRes, eventsListRes] = await Promise.all([
         getByCourt(start, end, selectedCourt),
         getTemplateByCourtId(selectedCourt),
         getCourtScheduleEvents(selectedCourt, start, end).catch(() => []),
+        getAllReservation().catch(() => []),
+        listCourtScheduleEvents(selectedCourt).catch(() => []),
       ]);
       const { template, linkedTemplateId } = parseCourtTemplateByCourtResponse(templateRes);
       setTimeSlots(Array.isArray(data) ? data : []);
       setCourtTemplate((template as any) ?? null);
       setCourtLinkedTemplateId(linkedTemplateId);
       setEventSlots(Array.isArray(events) ? events : []);
+      setAllReservations(Array.isArray(reservationsRes) ? reservationsRes : []);
+      setCourtEvents(Array.isArray(eventsListRes) ? eventsListRes : []);
     } catch (err) {
       console.error(err);
     }
   }, [selectedCourt, date]);
+
+  const getBookingSlots = (startTime: string, duration: number) => {
+    const [h, m] = startTime.split(":").map(Number);
+    const slots: string[] = [];
+    let currentMinutes = h * 60 + m;
+    const totalSlots = duration * 2;
+    for (let i = 0; i < totalSlots; i++) {
+      const hh = Math.floor(currentMinutes / 60).toString().padStart(2, "0");
+      const mm = (currentMinutes % 60).toString().padStart(2, "0");
+      slots.push(`${hh}:${mm}`);
+      currentMinutes += 30;
+    }
+    return slots;
+  };
+
+  const isSlotOccupiedByBooking = useCallback((booking: any, dateStr: string, timeStr: string) => {
+    if (!booking || booking.status === "CANCELLED" || booking.status === "cancelled") return false;
+    const bookingDateStr = new Date(booking.date).toISOString().split("T")[0];
+    if (bookingDateStr !== dateStr) return false;
+    const times = getBookingSlots(booking.startTime, booking.duration);
+    return times.includes(timeStr);
+  }, []);
+
+  const translateStatus = (status: string) => {
+    const map: Record<string, string> = {
+      pending: "Pendiente",
+      PENDING: "Pendiente",
+      confirmed: "Confirmado",
+      CONFIRMED: "Confirmado",
+      completed: "Completado",
+      COMPLETED: "Completado",
+      cancelled: "Cancelado",
+      CANCELLED: "Cancelado",
+    };
+    return map[status] || status;
+  };
+
+  const translatePaymentStatus = (status: string) => {
+    const map: Record<string, string> = {
+      pending: "Pendiente",
+      PENDING: "Pendiente",
+      paid: "Pagado",
+      PAID: "Pagado",
+      rejected: "Rechazado",
+      REJECTED: "Rechazado",
+      refunded: "Reembolsado",
+      REFUNDED: "Reembolsado",
+    };
+    return map[status] || status;
+  };
+
+  const translatePaymentMethod = (method: string) => {
+    const map: Record<string, string> = {
+      online: "En línea (MercadoPago)",
+      manual: "Manual (Efectivo / Transferencia)",
+    };
+    return map[method] || method;
+  };
+
+  const translateRecurrence = (type: string) => {
+    const map: Record<string, string> = {
+      weekly: "Semanal",
+      monthly: "Mensual",
+      custom: "Personalizado",
+    };
+    return map[type] || type;
+  };
+
+  const handleCellClick = (
+    status: statusEnum,
+    time: string,
+    date: Date,
+    booking?: any,
+    eventSlot?: any
+  ) => {
+    if (status === "occupied" || status === "on-hold") {
+      if (booking) {
+        setSelectedItemDetails({ type: "booking", data: booking });
+        setIsDetailsSidebarOpen(true);
+      } else {
+        toast.error("No se encontraron detalles para esta reserva.");
+      }
+    } else if (status === "event") {
+      const eventDetail = courtEvents.find(e => e.id === eventSlot?.eventId);
+      setSelectedItemDetails({
+        type: "event",
+        data: eventDetail || { name: eventSlot?.name || "Evento", id: eventSlot?.eventId }
+      });
+      setIsDetailsSidebarOpen(true);
+    } else if (status === "available" || status === "blocked") {
+      setSelectedSlotForAction({ time, date });
+      setIsActionDialogOpen(true);
+    }
+  };
+
+  const activeCourtObj = useMemo(() => {
+    return courts.find(c => String(c.id) === String(selectedCourt));
+  }, [courts, selectedCourt]);
+
+  // Calcular precio sugerido al cambiar duración o cancha
+  useEffect(() => {
+    if (!selectedSlotForAction || !activeCourtObj) return;
+    const hourPrice = Number(activeCourtObj.priceDay || 0);
+    const total = hourPrice * Number(bookingDuration);
+    setBookingPrice(String(total));
+  }, [bookingDuration, selectedSlotForAction, activeCourtObj]);
+
+  const handleSaveManualBooking = async () => {
+    if (!selectedSlotForAction) return;
+    if (!bookingUserEmail.trim()) {
+      toast.error("El email del usuario es obligatorio");
+      return;
+    }
+
+    setIsBookingSaving(true);
+    try {
+      const [h, m] = selectedSlotForAction.time.split(":").map(Number);
+      const totalMinutesToAdd = Number(bookingDuration) * 60;
+      const d = new Date();
+      d.setHours(h, m, 0, 0);
+      d.setMinutes(d.getMinutes() + totalMinutesToAdd);
+      const endHours = d.getHours().toString().padStart(2, "0");
+      const endMinutes = d.getMinutes().toString().padStart(2, "0");
+      const endTime = `${endHours}:${endMinutes}`;
+
+      const payload = {
+        courtId: selectedCourt,
+        date: format(selectedSlotForAction.date, "yyyy-MM-dd"),
+        startTime: selectedSlotForAction.time,
+        endTime,
+        duration: Number(bookingDuration),
+        price: bookingPrice,
+        userEmail: bookingUserEmail,
+        pricing: JSON.stringify({
+          basePrice: Number(bookingPrice) / Number(bookingDuration),
+          discounts: 0,
+          taxes: 0,
+          totalPrice: Number(bookingPrice)
+        })
+      };
+
+      await createReservationManual(payload);
+
+      // Limpiar los slots que abarca la reserva de la lista local de pendientes por guardar (timeSlotsToUpdate)
+      const bookingSlots = getBookingSlots(selectedSlotForAction.time, Number(bookingDuration));
+      const dateStr = format(selectedSlotForAction.date, "yyyy-MM-dd");
+      setTimeSlotsToUpdate((prev) => {
+        const next = new Map(prev);
+        bookingSlots.forEach((slotTime) => {
+          next.delete(`${dateStr}-${slotTime}`);
+        });
+        return next;
+      });
+
+      toast.success("Reserva manual registrada exitosamente");
+      setIsBookingFormOpen(false);
+      setSelectedSlotForAction(null);
+      setBookingUserEmail("");
+      setBookingDuration("1");
+      await refetchWeekCalendar();
+    } catch (err: any) {
+      console.error(err);
+      const msg = err.response?.data?.message || "Error al crear la reserva. Verifica que el email ingresado pertenezca a un usuario registrado.";
+      toast.error(msg);
+    } finally {
+      setIsBookingSaving(false);
+    }
+  };
 
   const eventsTabProps = useMemo(
     () => ({
@@ -311,10 +529,12 @@ export function ClubSchedulesContent() {
       const end = format(weekEnd, "yyyy-MM-dd");
 
       try {
-        const [data, templateRes, events] = await Promise.all([
+        const [data, templateRes, events, reservationsRes, eventsListRes] = await Promise.all([
           getByCourt(start, end, selectedCourt),
           getTemplateByCourtId(selectedCourt),
           getCourtScheduleEvents(selectedCourt, start, end).catch(() => []),
+          getAllReservation().catch(() => []),
+          listCourtScheduleEvents(selectedCourt).catch(() => []),
         ]);
         if (cancelled) return;
         const { template, linkedTemplateId } = parseCourtTemplateByCourtResponse(templateRes);
@@ -322,6 +542,8 @@ export function ClubSchedulesContent() {
         setCourtTemplate((template as any) ?? null);
         setCourtLinkedTemplateId(linkedTemplateId);
         setEventSlots(Array.isArray(events) ? events : []);
+        setAllReservations(Array.isArray(reservationsRes) ? reservationsRes : []);
+        setCourtEvents(Array.isArray(eventsListRes) ? eventsListRes : []);
       } catch (err) {
         console.error("Error al obtener horarios", err);
         if (!cancelled) {
@@ -329,6 +551,8 @@ export function ClubSchedulesContent() {
           setEventSlots([]);
           setCourtTemplate(null);
           setCourtLinkedTemplateId(null);
+          setAllReservations([]);
+          setCourtEvents([]);
         }
       } finally {
         if (!cancelled) setIsCalendarLoading(false);
@@ -428,7 +652,26 @@ export function ClubSchedulesContent() {
 
   const handleEditionSidebarOpenChange = (open: boolean) => {
     setEditionTemplate(open);
-    if (!open) setTemplateToEdit(null);
+    if (!open) {
+      setTemplateToEdit(null);
+      setSidebarDefaultTab("horarios");
+    }
+  };
+
+  const handleTriggerCreateEvent = () => {
+    setIsActionDialogOpen(false);
+    if (!courtLinkedTemplateId) {
+      toast.error("La cancha debe tener una plantilla asignada para poder crear eventos.");
+      return;
+    }
+    const linkedTemplate = templates.find((t) => String(t.id) === String(courtLinkedTemplateId));
+    if (!linkedTemplate) {
+      toast.error("No se encontró la plantilla vinculada a esta cancha.");
+      return;
+    }
+    setTemplateToEdit(linkedTemplate);
+    setSidebarDefaultTab("eventos");
+    setEditionTemplate(true);
   };
 
   const handleSlotStatusChange = async (
@@ -626,7 +869,7 @@ export function ClubSchedulesContent() {
                       ]
                     : []),
                 ]}
-                defaultTab="horarios"
+                defaultTab={sidebarDefaultTab}
               />
 
             </>
@@ -806,33 +1049,38 @@ export function ClubSchedulesContent() {
 
                           const matchingSlot = timeSlotsByKey.get(`${dateStr}-${timeStr}`);
                           const cellStatus = resolveCellStatus(dateStr, timeStr, day, matchingSlot);
-                          if(matchingSlot){
-                            return (
-                              <ScheduleTimeSlot
-                                key={matchingSlot?.id ?? `${dateStr}-${timeStr}`}
-                                status={cellStatus}
-                                time={timeStr}
-                                date={day}
-                                disabled={!isDayEnabledByTemplate(day) || cellStatus === "event"}
-                                onStatusChange={(newStatus) =>
-                                  handleSlotStatusChange(newStatus, timeStr, day,matchingSlot)
-                                }
-                              />
-                            );
-                          }
+                          
+                          const bookingForSlot = allReservations.find((b) => 
+                            String(b.court?.id) === String(selectedCourt) &&
+                            isSlotOccupiedByBooking(b, dateStr, timeStr)
+                          );
+
+                          const eventForSlot = eventSlots.find((e) => e.date === dateStr && e.time === timeStr);
+                          
+                          const reservedByName = bookingForSlot 
+                            ? bookingForSlot.customerInfo?.name 
+                            : eventForSlot 
+                              ? `Evento: ${eventForSlot.name}` 
+                              : undefined;
+
                           return (
                             <ScheduleTimeSlot
                               key={matchingSlot?.id ?? `${dateStr}-${timeStr}`}
                               status={cellStatus}
                               time={timeStr}
                               date={day}
-                              disabled={!isDayEnabledByTemplate(day) || cellStatus === "event"}
-                              onStatusChange={(newStatus) =>
-                                handleNewSlotStatusChange(newStatus, timeStr, day)
-                              }
+                              disabled={!isDayEnabledByTemplate(day)}
+                              reservedByName={reservedByName}
+                              onClick={(status, time, date) => handleCellClick(status, time, date, bookingForSlot, eventForSlot)}
+                              onStatusChange={(newStatus) => {
+                                if (matchingSlot) {
+                                  handleSlotStatusChange(newStatus, timeStr, day, matchingSlot);
+                                } else {
+                                  handleNewSlotStatusChange(newStatus, timeStr, day);
+                                }
+                              }}
                             />
                           );
-                        
                         })}
                       </div>
                     );
@@ -875,6 +1123,19 @@ export function ClubSchedulesContent() {
                                     const matchingSlot = timeSlotsByKey.get(`${dateStr}-${timeStr}`);
                                     const cellStatus = resolveCellStatus(dateStr, timeStr, day, matchingSlot);
 
+                                    const bookingForSlot = allReservations.find((b) => 
+                                      String(b.court?.id) === String(selectedCourt) &&
+                                      isSlotOccupiedByBooking(b, dateStr, timeStr)
+                                    );
+
+                                    const eventForSlot = eventSlots.find((e) => e.date === dateStr && e.time === timeStr);
+                                    
+                                    const reservedByName = bookingForSlot 
+                                      ? bookingForSlot.customerInfo?.name 
+                                      : eventForSlot 
+                                        ? `Evento: ${eventForSlot.name}` 
+                                        : undefined;
+
                                     return (
                                       <ScheduleTimeSlot
                                         key={timeStr}
@@ -882,7 +1143,16 @@ export function ClubSchedulesContent() {
                                         time={timeStr}
                                         date={day}
                                         compact
-                                        disabled={!isDayEnabledByTemplate(day) || cellStatus === "event"}
+                                        disabled={!isDayEnabledByTemplate(day)}
+                                        reservedByName={reservedByName}
+                                        onClick={(status, time, date) => handleCellClick(status, time, date, bookingForSlot, eventForSlot)}
+                                        onStatusChange={(newStatus) => {
+                                          if (matchingSlot) {
+                                            handleSlotStatusChange(newStatus, timeStr, day, matchingSlot);
+                                          } else {
+                                            handleNewSlotStatusChange(newStatus, timeStr, day);
+                                          }
+                                        }}
                                       />
                                     );
                                   })}
@@ -929,6 +1199,227 @@ export function ClubSchedulesContent() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Detalle lateral (Sheet) para reservas u ocupaciones */}
+      <Sheet open={isDetailsSidebarOpen} onOpenChange={setIsDetailsSidebarOpen}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>
+              {selectedItemDetails?.type === "booking" ? "Detalles de Reserva" : "Detalles del Evento"}
+            </SheetTitle>
+            <SheetDescription>
+              Información completa del horario seleccionado.
+            </SheetDescription>
+          </SheetHeader>
+
+          {selectedItemDetails?.type === "booking" && (
+            <div className="space-y-4 py-4 text-sm">
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Cliente</span>
+                <span className="font-bold text-foreground">{selectedItemDetails.data.customerInfo?.name || "N/A"}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Email</span>
+                <span className="font-medium text-foreground">{selectedItemDetails.data.customerInfo?.email || "N/A"}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Teléfono</span>
+                <span className="font-medium text-foreground">{selectedItemDetails.data.customerInfo?.phone || "N/A"}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Fecha</span>
+                <span className="font-medium text-foreground">
+                  {format(new Date(selectedItemDetails.data.date), "EEEE d 'de' MMMM, yyyy", { locale: es })}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Horario</span>
+                <span className="font-bold text-primary font-mono">
+                  {selectedItemDetails.data.startTime} a {selectedItemDetails.data.endTime} ({selectedItemDetails.data.duration} {selectedItemDetails.data.duration === 1 ? "hora" : "horas"})
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Referencia</span>
+                <span className="font-mono text-xs">{selectedItemDetails.data.bookingReference || "N/A"}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Estado Reserva</span>
+                <span className={`font-bold ${
+                  selectedItemDetails.data.status === "CONFIRMED" || selectedItemDetails.data.status === "confirmed"
+                    ? "text-green-600"
+                    : "text-amber-500"
+                }`}>
+                  {translateStatus(selectedItemDetails.data.status)}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Estado Pago</span>
+                <span className={`font-bold ${
+                  selectedItemDetails.data.paymentStatus === "PAID" || selectedItemDetails.data.paymentStatus === "paid"
+                    ? "text-green-600"
+                    : "text-amber-500"
+                }`}>
+                  {translatePaymentStatus(selectedItemDetails.data.paymentStatus)}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Método Pago</span>
+                <span className="font-semibold">{translatePaymentMethod(selectedItemDetails.data.paymentMethod)}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2 pt-2 border-t font-semibold">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Ingreso Total</span>
+                <span className="font-extrabold text-primary text-base">S/ {selectedItemDetails.data.pricing?.totalPrice || 0}</span>
+              </div>
+            </div>
+          )}
+
+          {selectedItemDetails?.type === "event" && (
+            <div className="space-y-4 py-4 text-sm">
+              <div className="flex flex-col border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase mb-1">Nombre del Evento</span>
+                <span className="font-bold text-lg text-primary">{selectedItemDetails.data.name}</span>
+              </div>
+              <div className="flex flex-col border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase mb-1">Descripción</span>
+                <span className="font-medium text-foreground">{selectedItemDetails.data.description || "Sin descripción"}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Recurrencia</span>
+                <span className="font-semibold text-foreground">{translateRecurrence(selectedItemDetails.data.recurrenceType)}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-semibold text-muted-foreground text-xs uppercase">Costo de Alquiler</span>
+                <span className="font-extrabold text-purple-600">
+                  {selectedItemDetails.data.price ? `S/ ${selectedItemDetails.data.price}` : "S/ 0.00"}
+                </span>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Modal para decidir acción del slot */}
+      <Dialog open={isActionDialogOpen} onOpenChange={setIsActionDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Administrar Horario</DialogTitle>
+            <DialogDescription>
+              ¿Qué acción deseas realizar para el día{" "}
+              {selectedSlotForAction && format(selectedSlotForAction.date, "EEEE d 'de' MMMM", { locale: es })} a las{" "}
+              {selectedSlotForAction?.time}?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 py-4">
+            <Button
+              variant="outline"
+              className="flex justify-start gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => {
+                setIsActionDialogOpen(false);
+                if (selectedSlotForAction) {
+                  // Ejecutar comportamiento de bloqueo simple
+                  const dateStr = format(selectedSlotForAction.date, "yyyy-MM-dd");
+                  const matchingSlot = timeSlotsByKey.get(`${dateStr}-${selectedSlotForAction.time}`);
+                  const currentCellStatus = resolveCellStatus(dateStr, selectedSlotForAction.time, selectedSlotForAction.date, matchingSlot);
+                  const newStatus: statusEnum = currentCellStatus === "available" ? "blocked" : "available";
+                  if (matchingSlot) {
+                    handleSlotStatusChange(newStatus, selectedSlotForAction.time, selectedSlotForAction.date, matchingSlot);
+                  } else {
+                    handleNewSlotStatusChange(newStatus, selectedSlotForAction.time, selectedSlotForAction.date);
+                  }
+                  setSelectedSlotForAction(null);
+                }
+              }}
+            >
+              🔒 Bloqueo simple (Tensionar Disponible / Bloqueado)
+            </Button>
+            <Button
+              variant="outline"
+              className="flex justify-start gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => {
+                setIsActionDialogOpen(false);
+                setIsBookingFormOpen(true);
+              }}
+            >
+              📅 Registrar Reserva de Cancha (Manual)
+            </Button>
+            <Button
+              variant="outline"
+              className="flex justify-start gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={handleTriggerCreateEvent}
+            >
+              🏆 Crear Evento o Alquiler recurrente (Academia)
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para formulario de reserva manual */}
+      <Dialog open={isBookingFormOpen} onOpenChange={setIsBookingFormOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar Reserva Manual</DialogTitle>
+            <DialogDescription>
+              Completa los detalles para reservar la cancha {activeCourtObj?.name} el día{" "}
+              {selectedSlotForAction && format(selectedSlotForAction.date, "EEEE d 'de' MMMM", { locale: es })} a las{" "}
+              {selectedSlotForAction?.time}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="userEmail">Email del Cliente (Debe estar registrado)</Label>
+              <Input
+                id="userEmail"
+                type="email"
+                placeholder="ejemplo@usuario.com"
+                value={bookingUserEmail}
+                onChange={(e) => setBookingUserEmail(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="duration">Duración de la Reserva</Label>
+              <Select value={bookingDuration} onValueChange={setBookingDuration}>
+                <SelectTrigger id="duration">
+                  <SelectValue placeholder="Selecciona duración" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0.5">30 minutos</SelectItem>
+                  <SelectItem value="1.0">1 hora</SelectItem>
+                  <SelectItem value="1.5">1.5 horas</SelectItem>
+                  <SelectItem value="2.0">2 horas</SelectItem>
+                  <SelectItem value="2.5">2.5 horas</SelectItem>
+                  <SelectItem value="3.0">3 horas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="price">Costo sugerido de la reserva (S/)</Label>
+              <Input
+                id="price"
+                type="number"
+                value={bookingPrice}
+                onChange={(e) => setBookingPrice(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={isBookingSaving}
+              onClick={() => {
+                setIsBookingFormOpen(false);
+                setSelectedSlotForAction(null);
+                setBookingUserEmail("");
+                setBookingDuration("1");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button disabled={isBookingSaving} onClick={handleSaveManualBooking}>
+              {isBookingSaving ? "Guardando..." : "Guardar Reserva"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

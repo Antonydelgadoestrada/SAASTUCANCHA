@@ -2,170 +2,182 @@
 
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarIcon, CheckCircleIcon, ClockIcon, XCircleIcon } from "lucide-react"
+import { CalendarIcon, CheckCircleIcon, ClockIcon, XCircleIcon, HistoryIcon } from "lucide-react"
+import Link from "next/link"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 
-// Datos de ejemplo
-const recentBookings = [
-  {
-    id: 1,
-    courtName: "Cancha de Fútbol 7",
-    venueName: "Club Deportivo Sur",
-    date: new Date(2025, 5, 1, 16, 0),
-    duration: 2,
-    status: "completed",
-    price: 70,
-  },
-  {
-    id: 2,
-    courtName: "Cancha de Pádel #2",
-    venueName: "Club Deportivo Este",
-    date: new Date(2025, 5, 5, 19, 0),
-    duration: 1,
-    status: "completed",
-    price: 25,
-  },
-  {
-    id: 3,
-    courtName: "Cancha de Tenis #1",
-    venueName: "Club Deportivo Central",
-    date: new Date(2025, 5, 8, 10, 0),
-    duration: 1.5,
-    status: "cancelled",
-    price: 45,
-  },
-  {
-    id: 4,
-    courtName: "Cancha de Básquet",
-    venueName: "Polideportivo Municipal",
-    date: new Date(2025, 5, 10, 17, 0),
-    duration: 1,
-    status: "completed",
-    price: 30,
-  },
-]
+interface UserRecentBookingsProps {
+  bookings: any[]
+}
 
-export function UserRecentBookings() {
+export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
+  // Filtrar reservas que ya pasaron o están finalizadas/canceladas
+  const recentBookings = bookings
+    .filter((booking) => {
+      const isPastStatus = booking.status === "completed" || booking.status === "cancelled"
+      if (isPastStatus) return true
+      
+      const bookingDateTime = new Date(`${booking.date}T${booking.startTime}:00`)
+      return bookingDateTime < new Date()
+    })
+    .slice(0, 5) // Mostrar máximo 5
+
+  if (recentBookings.length === 0) {
+    return (
+      <Card className="border-dashed border-2 py-8 flex flex-col items-center justify-center text-center">
+        <CardContent className="space-y-3">
+          <HistoryIcon className="h-10 w-10 text-muted-foreground mx-auto" />
+          <div className="space-y-1">
+            <h3 className="font-semibold text-lg">Sin historial reciente</h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Aquí aparecerán tus reservas finalizadas o canceladas una vez que empieces a jugar.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "completed":
+      case "confirmed":
+        return (
+          <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600 flex w-fit items-center gap-1">
+            <CheckCircleIcon className="h-3 w-3" />
+            <span>Completada</span>
+          </Badge>
+        )
+      case "cancelled":
+        return (
+          <Badge variant="destructive" className="flex w-fit items-center gap-1">
+            <XCircleIcon className="h-3 w-3" />
+            <span>Cancelada</span>
+          </Badge>
+        )
+      default:
+        return (
+          <Badge variant="secondary" className="flex w-fit items-center gap-1">
+            <span>Finalizada</span>
+          </Badge>
+        )
+    }
+  }
+
   return (
     <>
       {/* Vista para escritorio */}
       <div className="hidden md:block">
-        <Card>
+        <Card className="shadow-sm">
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Cancha</TableHead>
                   <TableHead>Fecha</TableHead>
-                  <TableHead>Duración</TableHead>
+                  <TableHead>Horario</TableHead>
                   <TableHead>Precio</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentBookings.map((booking) => (
-                  <TableRow key={booking.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{booking.courtName}</div>
-                        <div className="text-sm text-muted-foreground">{booking.venueName}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        {format(booking.date, "d MMM yyyy, HH:mm", { locale: es })}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
-                      </div>
-                    </TableCell>
-                    <TableCell>${booking.price}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={booking.status === "completed" ? "default" : "destructive"}
-                        className="flex w-fit items-center gap-1"
-                      >
-                        {booking.status === "completed" ? (
-                          <CheckCircleIcon className="h-3 w-3" />
-                        ) : (
-                          <XCircleIcon className="h-3 w-3" />
-                        )}
-                        {booking.status === "completed" ? "Completada" : "Cancelada"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver detalles
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {recentBookings.map((booking) => {
+                  const formattedDate = format(new Date(booking.date + "T00:00:00"), "d MMM yyyy", { locale: es })
+                  const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
+                  return (
+                    <TableRow key={booking.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-semibold text-foreground">{booking.court?.name || "Cancha Deportiva"}</div>
+                          <div className="text-xs text-muted-foreground font-medium">{booking.court?.venue?.name || "Complejo Deportivo"}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center text-muted-foreground font-medium">
+                          <CalendarIcon className="mr-2 h-4 w-4 text-primary shrink-0" />
+                          <span className="capitalize">{formattedDate}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center text-muted-foreground font-medium">
+                          <ClockIcon className="mr-2 h-4 w-4 text-primary shrink-0" />
+                          <span>
+                            {booking.startTime} - {booking.endTime} ({booking.duration} {booking.duration === 1 ? "hora" : "horas"})
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-bold text-foreground">S/ {price}</TableCell>
+                      <TableCell>{getStatusBadge(booking.status)}</TableCell>
+                      <TableCell className="text-right">
+                        <Link href="/user/bookings">
+                          <Button variant="ghost" size="sm">
+                            Ver detalles
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </CardContent>
           <CardFooter className="flex justify-between border-t p-4">
-            <div className="text-sm text-muted-foreground">Mostrando {recentBookings.length} reservas recientes</div>
-            <Button variant="outline" size="sm">
-              Ver todas
-            </Button>
+            <div className="text-sm text-muted-foreground font-semibold">
+              Mostrando {recentBookings.length} reservas recientes
+            </div>
+            <Link href="/user/bookings">
+              <Button variant="outline" size="sm">
+                Ver todas
+              </Button>
+            </Link>
           </CardFooter>
         </Card>
       </div>
 
       {/* Vista para móvil */}
       <div className="grid gap-4 md:hidden">
-        {recentBookings.map((booking) => (
-          <Card key={booking.id}>
-            <CardHeader className="pb-2">
-              <div className="flex justify-between">
-                <div>
-                  <h3 className="font-medium">{booking.courtName}</h3>
-                  <p className="text-sm text-muted-foreground">{booking.venueName}</p>
+        {recentBookings.map((booking) => {
+          const formattedDate = format(new Date(booking.date + "T00:00:00"), "d MMM yyyy", { locale: es })
+          const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
+          return (
+            <Card key={booking.id} className="shadow-sm">
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-bold text-foreground">{booking.court?.name || "Cancha Deportiva"}</h3>
+                    <p className="text-xs text-muted-foreground font-medium">{booking.court?.venue?.name || "Complejo"}</p>
+                  </div>
+                  {getStatusBadge(booking.status)}
                 </div>
-                <Badge
-                  variant={booking.status === "completed" ? "default" : "destructive"}
-                  className="flex items-center gap-1"
-                >
-                  {booking.status === "completed" ? (
-                    <CheckCircleIcon className="h-3 w-3" />
-                  ) : (
-                    <XCircleIcon className="h-3 w-3" />
-                  )}
-                  {booking.status === "completed" ? "Completada" : "Cancelada"}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="pb-2">
-              <div className="space-y-2 text-sm">
+              </CardHeader>
+              <CardContent className="pb-2 text-sm text-muted-foreground font-medium space-y-2">
                 <div className="flex items-center">
-                  <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                  <span>{format(booking.date, "d MMM yyyy, HH:mm", { locale: es })}</span>
+                  <CalendarIcon className="mr-2 h-4 w-4 text-primary shrink-0" />
+                  <span className="capitalize">{formattedDate}</span>
                 </div>
                 <div className="flex items-center">
-                  <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <ClockIcon className="mr-2 h-4 w-4 text-primary shrink-0" />
                   <span>
-                    {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
+                    {booking.startTime} - {booking.endTime} ({booking.duration} {booking.duration === 1 ? "hora" : "horas"})
                   </span>
                 </div>
-                <div className="font-medium">Precio: ${booking.price}</div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button variant="outline" size="sm" className="w-full">
-                Ver detalles
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
+                <div className="font-bold text-foreground">Precio: S/ {price}</div>
+              </CardContent>
+              <CardFooter className="pt-3 border-t border-border/40">
+                <Link href="/user/bookings" className="w-full">
+                  <Button variant="outline" size="sm" className="w-full">
+                    Ver detalles
+                  </Button>
+                </Link>
+              </CardFooter>
+            </Card>
+          )
+        })}
       </div>
     </>
   )

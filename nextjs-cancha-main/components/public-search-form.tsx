@@ -32,21 +32,14 @@ export function PublicSearchForm() {
     setSelectedLocation(coordinates)
     setLocationQuery(place)
   }
-  // const isFormValid = sport && date && selectedTime && selectedLocation
-  const isFormValid = sport && date && selectedTime && selectedLocation?.lat && selectedLocation?.lng
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isFormValid) {
-      toast.error("Por favor completa todos los campos requeridos.")
-      return
-    }
     // Construir la URL de búsqueda con los parámetros seleccionados
     const searchParams = new URLSearchParams()
     
     if (sport) searchParams.append("sport", sport)
     if (date) searchParams.append("date", date.toISOString())
-    if (selectedLocation) {
+    if (selectedLocation?.lat && selectedLocation?.lng) {
       searchParams.append("lat", selectedLocation.lat.toString())
       searchParams.append("lng", selectedLocation.lng.toString())
     }
@@ -134,7 +127,7 @@ export function PublicSearchForm() {
             </div>
 
             <div className="flex items-end">
-              <Button type="submit" className="w-full gap-2" disabled={!isFormValid}>
+              <Button type="submit" className="w-full gap-2">
                 <SearchIcon className="h-4 w-4" />
                 Buscar Canchas
               </Button>

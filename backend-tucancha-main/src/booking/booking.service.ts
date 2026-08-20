@@ -71,7 +71,7 @@ export class BookingService {
     const slots = await this.scheduleTemplateService.getAvailabilityByCourtAndDates(courtId, dateStr, dateStr);
     const requestedSlots = slots.filter((s: any) => times.includes(s.time));
   
-    if (requestedSlots.length !== times.length || requestedSlots.some((s: any) => s.status !== 'available')) {
+    if (requestedSlots.length !== times.length || requestedSlots.some((s: any) => s.status === 'occupied' || s.status === 'on-hold' || s.status === 'event')) {
       throw new BadRequestException('Uno o más horarios no están disponibles.');
     }
     return requestedSlots;

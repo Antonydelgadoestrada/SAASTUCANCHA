@@ -46,6 +46,9 @@ export class CourtScheduleEvent {
   @Column({ type: 'jsonb', name: 'timeRanges', default: () => "'[]'::jsonb" })
   timeRanges: { start: string; until?: string; end?: string }[];
 
+  @Column({ type: 'float', default: 0 })
+  price: number;
+
   @Column({ name: 'isActive', default: true })
   isActive: boolean;
 

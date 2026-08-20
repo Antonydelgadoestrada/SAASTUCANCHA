@@ -184,7 +184,7 @@ export function RegisterForm() {
       })
 
       toast.success(`Registro exitoso. Bienvenido a ${process.env.NEXT_PUBLIC_APP_NAME}.`)
-      router.push('/user/bookings')
+      router.push('/user/dashboard')
     } catch (error: any) {
       const msg = error?.response?.data?.message || "Error al registrar. Por favor intenta nuevamente."
       toast.error(msg)
@@ -218,7 +218,7 @@ export function RegisterForm() {
   const handleGoogleSignUp = async () => {
     setShowGoogleLoading(true)
     try {
-      const callbackUrl = searchParams.get("callbackUrl") || '/user/bookings'
+      const callbackUrl = searchParams.get("callbackUrl") || '/user/dashboard'
       await signIn("google", { callbackUrl})
       toast.success(`Bienvenido`)
     } catch (error) {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { EditIcon, MapPinIcon, PlusIcon, TrashIcon } from "lucide-react"
+import { EditIcon, MapPinIcon, PlusIcon, TrashIcon, CalendarIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -281,6 +281,10 @@ export function ClubCourtsContent() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => window.location.href = `/club/schedules?courtId=${court.id}`}>
+                          <CalendarIcon className="mr-2 h-4 w-4 text-primary shrink-0" />
+                          <span>Ver disponibilidad</span>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openEditDialog(court)}>
                           <EditIcon className="mr-2 h-4 w-4" />
                           Editar
@@ -378,6 +382,15 @@ export function ClubCourtsContent() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => window.location.href = `/club/schedules?courtId=${court.id}`}
+                              title="Ver disponibilidad"
+                            >
+                              <CalendarIcon className="h-4 w-4 text-primary shrink-0" />
+                              <span className="sr-only">Ver disponibilidad</span>
+                            </Button>
                             <Button variant="ghost" size="icon" onClick={() => openEditDialog(court)}>
                               <EditIcon className="h-4 w-4" />
                               <span className="sr-only">Editar</span>

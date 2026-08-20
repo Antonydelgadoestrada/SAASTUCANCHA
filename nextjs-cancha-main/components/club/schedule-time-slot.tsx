@@ -29,9 +29,11 @@ type ScheduleTimeSlotProps = {
     date: Date
   ) => void;
   compact?: boolean
+  onClick?: (status: statusEnum, time: string, date: Date) => void
+  reservedByName?: string
 }
 
-export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact = false, disabled = false }: ScheduleTimeSlotProps) {
+export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact = false, disabled = false, onClick, reservedByName }: ScheduleTimeSlotProps) {
   const [currentStatus, setCurrentStatus] = useState(status)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
@@ -77,7 +79,13 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
         variant="ghost"
         className={`h-10 w-full justify-center rounded-md p-0 text-white ${statusColors[currentStatus]}`}
         disabled={disabled}
-        onClick={() => setIsDialogOpen(true)}
+        onClick={() => {
+          if (onClick) {
+            onClick(currentStatus, time, date);
+          } else {
+            setIsDialogOpen(true);
+          }
+        }}
       >
         {time}
       </Button>
@@ -99,15 +107,23 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
       <Button
         variant="ghost"
         className={`h-10 w-full justify-center rounded-md p-0 text-white ${statusColors[currentStatus]}`}
-        disabled={disabled || (currentStatus == 'occupied' || currentStatus == 'on-hold' || currentStatus == 'event')}
-        onClick={handleToggle}
+        disabled={disabled}
+        onClick={() => {
+          if (onClick) {
+            onClick(currentStatus, time, date)
+          } else {
+            handleToggle()
+          }
+        }}
         aria-label={ariaDescription}
         title={
-          currentStatus === 'event'
-            ? 'Evento (no editable)'
-            : currentStatus === 'available'
-              ? 'Click para bloquear'
-              : 'Click para disponible'
+          reservedByName
+            ? `Reservado: ${reservedByName}`
+            : currentStatus === 'event'
+              ? 'Evento'
+              : currentStatus === 'available'
+                ? 'Disponible (Click para administrar)'
+                : 'Click para disponible'
         }
       >
         {statusIcons[currentStatus]}
