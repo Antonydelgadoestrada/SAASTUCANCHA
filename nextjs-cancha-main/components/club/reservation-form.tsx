@@ -19,11 +19,10 @@ import { toast } from "sonner"
 import * as z from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { VenueDTO } from "./courts-content"
 
 
 export const reservationSchema = z.object({
-  venueId: z.string().min(1, { message: "Selecciona una sede." }),
+
   courtId: z.string().min(1, { message: "Selecciona una cancha." }),
   date: z.date({ required_error: "Selecciona una fecha válida." }),
   duration: z.string().min(1, { message: "Selecciona duración." }),
@@ -42,7 +41,7 @@ export const reservationSchema = z.object({
 type ReservationFormValues = z.infer<typeof reservationSchema>
 
 interface ReservationFormProps {
-  venues: Partial<VenueDTO>[]
+
   courts: any[]
   isSubmitting:boolean
   onSubmit: (data:any) => void
@@ -79,11 +78,11 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string) 
 }
 
 
-export function ReservationForm({ venues, courts, onSubmit, isSubmitting }: ReservationFormProps) {
+export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationFormProps) {
   const form = useForm<ReservationFormValues>({
     resolver: zodResolver(reservationSchema),
     defaultValues: {
-      venueId: "",
+
       courtId: "",
       date: undefined,
       duration: "",
@@ -96,7 +95,7 @@ export function ReservationForm({ venues, courts, onSubmit, isSubmitting }: Rese
   
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string>('')
-  const [selectedVenue, setSelectedVenue] = useState<string>("")
+
   const [selectedCourt, setSelectedCourt] = useState<string>("")
   const [selectedDate, setSelectedDate] = useState<Date>()
   const [startTime, setStartTime] = useState<string>("")
@@ -107,7 +106,7 @@ export function ReservationForm({ venues, courts, onSubmit, isSubmitting }: Rese
   const [isLoading, setIsLoading] = useState(false)
 
   // Filtrar canchas según la sede seleccionada
-  const filteredCourts = courts.filter((court) => court.venue.id == selectedVenue)
+  const filteredCourts = courts
   const filteredtimeOptions = getValidStartTimes(timeOptions, duration)
   // Opciones de duración
   const durationOptions = [
@@ -154,7 +153,7 @@ export function ReservationForm({ venues, courts, onSubmit, isSubmitting }: Rese
     setIsLoading(true)
     e.preventDefault()
     await onSubmit({
-      venueId:selectedVenue,
+
       courtId:selectedCourt,
       date:selectedDate?.toISOString() || "",
       startTime,
@@ -172,31 +171,10 @@ export function ReservationForm({ venues, courts, onSubmit, isSubmitting }: Rese
     <form onSubmit={handleSubmit}>
       <div className="grid gap-4 py-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="venue">Sede</Label>
-            <Select
-              value={selectedVenue}
-              onValueChange={(value) => {
-                setSelectedVenue(value)
-                setSelectedCourt("")
-              }}
-            >
-              <SelectTrigger id="venue">
-                <SelectValue placeholder="Seleccionar sede" />
-              </SelectTrigger>
-              <SelectContent>
-                {venues.map((venue) => (
-                  <SelectItem key={venue.id} value={venue?.id.toString()}>
-                    {venue.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="court">Cancha</Label>
-            <Select value={selectedCourt} onValueChange={setSelectedCourt} disabled={!selectedVenue}>
+            <Select value={selectedCourt} onValueChange={setSelectedCourt}>
               <SelectTrigger id="court">
                 <SelectValue placeholder="Seleccionar cancha" />
               </SelectTrigger>

@@ -14,7 +14,6 @@ import { PromotionType } from '../promotion/promotion-type.enum';
 import { Payment } from '../payment/payment.entity';
 import { PaymentMethod } from '../payment/payment-method.enum';
 import { PaymentStatus } from '../payment/payment-status.enum';
-import { Venue } from '../venue/entities/venue.entity';
 
 import * as dotenv from 'dotenv';
 dotenv.config();
@@ -42,7 +41,7 @@ const AppDataSource = new DataSource({
     Promotion,
     Review,
     Payment,
-    Venue,
+
     MembershipPlan,
     ClubMembership,
     MembershipPayment,
@@ -64,7 +63,6 @@ async function seed() {
   const reviewRepo = AppDataSource.getRepository(Review);
   const paymentRepo = AppDataSource.getRepository(Payment);
 // ...
-const venueRepo = AppDataSource.getRepository(Venue)
 
 
 await AppDataSource.query(`
@@ -75,8 +73,7 @@ await AppDataSource.query(`
     "booking",
     "court",
     "club",
-    "user",
-    "venue"
+    "user"
   CASCADE
 `);
 
@@ -165,26 +162,6 @@ await AppDataSource.query(`
   });
   await membershipRepo.save(clubMembership);
 
-  const sedeCentral = venueRepo.create({
-    name: 'Sede Central',
-    phone: '123456789',
-    email: 'sede@central.com',
-    description: 'Sede principal con múltiples canchas.',
-    image: 'https://images.unsplash.com/photo-1529900241943-41cbe7868ff1',
-    capacity: '500',
-    parkingSpots: '50',
-    openingHours: '08:00 - 22:00',
-    services: ['wifi', 'cafetería', 'estacionamiento'],
-    accessibilityFeatures: 'Rampa, ascensor',
-    nearbyTransport: 'Paradero Metropolitano Central',
-    specialInstructions: 'Entrada por la Av. Principal',
-    club: club,
-    location: {
-      address: "Av. Universitaria 123, Comas",
-      coordinates: { lat: -11.935, lng: -77.054 },
-    },
-  });
-  await venueRepo.save(sedeCentral); 
 
   // Crear canchas
   const court1 = courtRepo.create({
@@ -203,7 +180,7 @@ await AppDataSource.query(`
       unit: 'meters',
     },
     isActive: true,
-    venue: sedeCentral,
+    club: club,
   });
 
   const court2 = courtRepo.create({
@@ -222,7 +199,7 @@ await AppDataSource.query(`
       unit: 'meters',
     },
     isActive: true,
-    venue: sedeCentral,
+    club: club,
   });
 
   await courtRepo.save([court1, court2]);

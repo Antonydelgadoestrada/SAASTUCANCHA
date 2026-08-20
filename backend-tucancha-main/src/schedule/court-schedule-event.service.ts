@@ -379,9 +379,9 @@ export class CourtScheduleEventService {
   }
 
   private async assertCourtInClub(courtId: string, clubId: string) {
-    const court: any = await this.courtService.findOne(courtId, ['venue', 'venue.club']);
-    if (!court?.venue?.club?.id) throw new ForbiddenException('Cancha no encontrada');
-    if (court.venue.club.id !== clubId) {
+    const court: any = await this.courtService.findOne(courtId, ['club']);
+    if (!court?.club?.id) throw new ForbiddenException('Cancha no encontrada');
+    if (court.club.id !== clubId) {
       throw new ForbiddenException('No tienes acceso a esta cancha');
     }
     return court;
