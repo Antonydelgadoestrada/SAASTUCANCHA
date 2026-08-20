@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import {
@@ -10,23 +10,63 @@ import {
   SettingsIcon,
   MapPinIcon,
   BuildingIcon,
+  PlusCircleIcon,
+  ClockIcon,
+  CreditCardIcon,
+  TrophyIcon,
+  ArrowRightIcon,
+  UserIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Skeleton } from "@/components/ui/skeleton"
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subDays } from "date-fns"
 
 import { ClubBookingsChart } from "./bookings-chart"
 import { ClubPopularCourts, formatSoles } from "./popular-courts"
 import { DateRange } from "react-day-picker"
 import { getBookingsReportByClub, getCountByClub, getDailyStatsByClub, getDashboardSummary, getPopularCourtsByClub } from "@/lib/dashboard"
+import { getAllReservation } from "@/lib/reservation"
+import { getAllCourtsByVenues } from "@/lib/courts"
+import { listCourtScheduleEvents } from "@/lib/schedule"
+
+// --- Helpers de traducción ---
+const statusColors: Record<string, string> = {
+  confirmed: "bg-green-100 text-green-800",
+  pending: "bg-yellow-100 text-yellow-800",
+  cancelled: "bg-red-100 text-red-800",
+  completed: "bg-blue-100 text-blue-800",
+}
+const paymentStatusColors: Record<string, string> = {
+  paid: "bg-emerald-100 text-emerald-800",
+  pending: "bg-amber-100 text-amber-800",
+  refunded: "bg-purple-100 text-purple-800",
+}
+const statusLabels: Record<string, string> = {
+  confirmed: "Confirmada",
+  pending: "Pendiente",
+  cancelled: "Cancelada",
+  completed: "Completada",
+}
+const paymentLabels: Record<string, string> = {
+  paid: "Pagado",
+  pending: "Pendiente",
+  refunded: "Reembolsado",
+}
+const recurrenceLabels: Record<string, string> = {
+  weekly: "Semanal",
+  monthly: "Mensual",
+  custom: "Personalizado",
+}
 
 export function ClubDashboardContent() {
   const [stats, setStats] = useState([])
@@ -49,6 +89,12 @@ export function ClubDashboardContent() {
   })
   const [isCustomDate, setIsCustomDate] = useState(false)
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+
+  // --- Nuevos estados para Próximas Reservas y Eventos ---
+  const [allReservations, setAllReservations] = useState<any[]>([])
+  const [allEvents, setAllEvents] = useState<any[]>([])
+  const [isReservationsLoading, setIsReservationsLoading] = useState(true)
+  const [isEventsLoading, setIsEventsLoading] = useState(true)
 
   // Función para exportar datos a CSV
   const exportToCSV = () => {
@@ -130,6 +176,70 @@ export function ClubDashboardContent() {
     }
     fetchCounts()
   }, [])
+
+  // --- Cargar Reservas y Eventos al montar ---
+  useEffect(() => {
+    const fetchReservations = async () => {
+      setIsReservationsLoading(true)
+      try {
+        const res = await getAllReservation()
+        setAllReservations(Array.isArray(res) ? res : [])
+      } catch (err) {
+        console.error("Error al cargar reservas para dashboard:", err)
+      } finally {
+        setIsReservationsLoading(false)
+      }
+    }
+
+    const fetchEvents = async () => {
+      setIsEventsLoading(true)
+      try {
+        const courts = await getAllCourtsByVenues()
+        const allEvts: any[] = []
+        for (const court of courts) {
+          try {
+            const events = await listCourtScheduleEvents(court.id)
+            if (Array.isArray(events)) {
+              allEvts.push(...events.map((e: any) => ({ ...e, courtName: court.name, venueName: court.venue?.name || "" })))
+            }
+          } catch {
+            // Ignore individual court errors
+          }
+        }
+        setAllEvents(allEvts)
+      } catch (err) {
+        console.error("Error al cargar eventos para dashboard:", err)
+      } finally {
+        setIsEventsLoading(false)
+      }
+    }
+
+    fetchReservations()
+    fetchEvents()
+  }, [])
+
+  // --- Próximas Reservas: filtradas y ordenadas ---
+  const upcomingReservations = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return allReservations
+      .filter((r) => {
+        const d = new Date(r.date)
+        d.setHours(0, 0, 0, 0)
+        return d >= today && r.status !== "cancelled"
+      })
+      .sort((a, b) => {
+        const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime()
+        if (dateCompare !== 0) return dateCompare
+        return (a.startTime || "").localeCompare(b.startTime || "")
+      })
+      .slice(0, 10)
+  }, [allReservations])
+
+  // --- Eventos activos ---
+  const activeEvents = useMemo(() => {
+    return allEvents.filter((e) => e.isActive !== false)
+  }, [allEvents])
   
 
   // Manejar cambio de rango de fechas
@@ -338,6 +448,44 @@ export function ClubDashboardContent() {
         </Card>
       </section>
 
+      {/* Atajos rápidos de acción */}
+      <section className="grid gap-4 md:grid-cols-3">
+        <Card className="cursor-pointer border-dashed border-2 transition-all hover:border-primary hover:bg-primary/5">
+          <Link href="/club/bookings">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-primary">Nueva Reserva</CardTitle>
+              <PlusCircleIcon className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">Registra una nueva reserva de cancha para un cliente</p>
+            </CardContent>
+          </Link>
+        </Card>
+        <Card className="cursor-pointer border-dashed border-2 transition-all hover:border-blue-500 hover:bg-blue-500/5">
+          <Link href="/club/schedules">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-blue-600">Ver Horarios</CardTitle>
+              <ClockIcon className="h-5 w-5 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">Gestiona la disponibilidad y bloqueos de tus canchas</p>
+            </CardContent>
+          </Link>
+        </Card>
+        <Card className="cursor-pointer border-dashed border-2 transition-all hover:border-emerald-500 hover:bg-emerald-500/5">
+          <Link href="/club/payments">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-emerald-600">Ver Pagos</CardTitle>
+              <CreditCardIcon className="h-5 w-5 text-emerald-600" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">Revisa el estado de pagos y transacciones del club</p>
+            </CardContent>
+          </Link>
+        </Card>
+      </section>
+
+      {/* Estadísticas resumidas */}
       <section className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
           <Card>
@@ -359,6 +507,196 @@ export function ClubDashboardContent() {
             </CardContent>
           </Card>
         </div>
+      </section>
+
+      {/* ====== PRÓXIMAS RESERVAS ====== */}
+      <section>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Próximas Reservas</CardTitle>
+              <CardDescription>Reservas de hoy en adelante ordenadas por fecha y hora</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/club/bookings">
+                Ver todas <ArrowRightIcon className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {isReservationsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-[250px]" />
+                      <Skeleton className="h-3 w-[180px]" />
+                    </div>
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                ))}
+              </div>
+            ) : upcomingReservations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground font-medium">No hay reservas próximas</p>
+                <p className="text-sm text-muted-foreground mt-1">Las nuevas reservas aparecerán aquí automáticamente</p>
+                <Button variant="outline" size="sm" className="mt-4" asChild>
+                  <Link href="/club/bookings">
+                    <PlusCircleIcon className="mr-2 h-4 w-4" /> Crear Reserva
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* Tabla escritorio */}
+                <div className="hidden md:block rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Cancha</TableHead>
+                        <TableHead>Fecha y Hora</TableHead>
+                        <TableHead>Duración</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Pago</TableHead>
+                        <TableHead className="text-right">Ingreso</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {upcomingReservations.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell>
+                            <div className="font-medium">{r.customerInfo?.name || "N/A"}</div>
+                            <div className="text-xs text-muted-foreground">{r.customerInfo?.email || ""}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">{r.court?.name || "N/A"}</div>
+                            <div className="text-xs text-muted-foreground">{r.court?.venue?.name || ""}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">
+                              {format(new Date(r.date), "EEE d MMM", { locale: es })}
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono">
+                              {r.startTime} - {r.endTime}
+                            </div>
+                          </TableCell>
+                          <TableCell>{r.duration} {r.duration === 1 ? "hora" : "horas"}</TableCell>
+                          <TableCell>
+                            <Badge className={statusColors[r.status] || "bg-gray-100 text-gray-800"}>
+                              {statusLabels[r.status] || r.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={paymentStatusColors[r.paymentStatus] || "bg-gray-100 text-gray-800"}>
+                              {paymentLabels[r.paymentStatus] || r.paymentStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            S/ {r.pricing?.totalPrice || 0}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Tarjetas móvil */}
+                <div className="md:hidden space-y-3">
+                  {upcomingReservations.map((r) => (
+                    <div key={r.id} className="rounded-lg border p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-semibold text-sm">{r.customerInfo?.name || "N/A"}</span>
+                        </div>
+                        <Badge className={statusColors[r.status] || "bg-gray-100"}>
+                          {statusLabels[r.status] || r.status}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{r.court?.name} — {r.court?.venue?.name}</div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-mono">{format(new Date(r.date), "EEE d MMM", { locale: es })} · {r.startTime} - {r.endTime}</span>
+                        <Badge className={paymentStatusColors[r.paymentStatus] || "bg-gray-100"}>
+                          {paymentLabels[r.paymentStatus] || r.paymentStatus}
+                        </Badge>
+                      </div>
+                      <div className="text-right text-sm font-bold text-primary">S/ {r.pricing?.totalPrice || 0}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ====== PRÓXIMOS EVENTOS ====== */}
+      <section>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Eventos Activos</CardTitle>
+              <CardDescription>Alquileres recurrentes y academias registradas en tus canchas</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/club/schedules">
+                Gestionar <ArrowRightIcon className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {isEventsLoading ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="rounded-lg border p-4 space-y-2">
+                    <Skeleton className="h-5 w-[200px]" />
+                    <Skeleton className="h-3 w-[140px]" />
+                    <Skeleton className="h-3 w-[100px]" />
+                  </div>
+                ))}
+              </div>
+            ) : activeEvents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <TrophyIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground font-medium">No hay eventos activos</p>
+                <p className="text-sm text-muted-foreground mt-1">Crea eventos recurrentes para academias u organizaciones</p>
+                <Button variant="outline" size="sm" className="mt-4" asChild>
+                  <Link href="/club/schedules">
+                    <PlusCircleIcon className="mr-2 h-4 w-4" /> Crear Evento
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {activeEvents.map((evt) => (
+                  <div key={evt.id} className="rounded-lg border p-4 space-y-2 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-primary">{evt.name}</span>
+                      <Badge variant="outline" className="text-purple-600 border-purple-300">
+                        {recurrenceLabels[evt.recurrenceType] || evt.recurrenceType}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      🏟️ {evt.courtName}{evt.venueName ? ` — ${evt.venueName}` : ""}
+                    </div>
+                    {evt.description && (
+                      <div className="text-xs text-muted-foreground line-clamp-2">{evt.description}</div>
+                    )}
+                    <div className="flex items-center justify-between pt-1 border-t">
+                      <span className="text-xs text-muted-foreground">Costo de alquiler</span>
+                      <span className="font-bold text-purple-600">
+                        {evt.price ? `S/ ${evt.price}` : "S/ 0.00"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       {/* Sección de exportación de datos */}
