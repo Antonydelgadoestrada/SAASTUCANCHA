@@ -1,7 +1,7 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { Payment } from './payment.entity';
+import { Payment, PaymentType } from './payment.entity';
 import { PaymentStatus } from './payment-status.enum';
 import { BookingStatus } from '../booking/booking-status.enum';
 import { BookingService } from '../booking/booking.service';
@@ -9,6 +9,7 @@ import { ClubService } from '../club/club.service';
 import {MercadoPagoConfig, Preference, OAuth} from "mercadopago";
 import {Payment as PaymentMp} from "mercadopago";
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { CreateManualBookingDto } from '../booking/create-booking.dto';
 import { addMinutes, addSeconds, isBefore, format} from 'date-fns'
 import { PaymentMethod } from './payment-method.enum';
@@ -18,16 +19,16 @@ import { Booking } from '../booking/booking.entity';
 
 @Injectable()
 export class PaymentService {
-  private mercadopago: MercadoPagoConfig; ;
+  private mercadopago: MercadoPagoConfig;;
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
+    @InjectRepository(Booking)
+    private readonly bookingRepo: Repository<Booking>,
     private readonly bookingService: BookingService,
     private readonly clubsService: ClubService,
     private readonly scheduleTemplateService: ScheduleTemplateService,
     private readonly mailerService: MailerService,
-
-
   ) {
     this.mercadopago = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN})
   }
@@ -354,7 +355,135 @@ export class PaymentService {
       throw error;
     }
   }
-  
+
+  // ─── MÉTRICAS DEL CLUB ─────────────────────────────────────────────────────
+
+  async getClubPaymentMetrics(user: User, clubIdParam?: string) {
+    const clubId = clubIdParam || user.club?.id;
+    if (!clubId) {
+      throw new BadRequestException('El usuario no tiene un club asociado');
+    }
+
+    const payments = await this.paymentRepo.find({
+      where: { booking: { club: { id: clubId } } },
+      relations: ['booking', 'booking.club', 'user'],
+    });
+
+    const bookings = await this.bookingRepo.find({
+      where: { club: { id: clubId } },
+    });
+
+    let totalRecaudado = 0;
+    let recaudadoMercadoPago = 0;
+    let recaudadoYape = 0;
+    let recaudadoPlin = 0;
+    let recaudadoTransfer = 0;
+    let recaudadoEfectivo = 0;
+    let comprobantesPendientesCount = 0;
+    let totalConfirmadosCount = 0;
+    let totalRechazadosCount = 0;
+
+    for (const p of payments) {
+      const isConfirmed = p.status === PaymentStatus.PAID || (p.status as string) === 'CONFIRMADO';
+      const isPending = p.status === PaymentStatus.PENDING || (p.status as string) === 'PENDIENTE';
+      const isRejected = p.status === PaymentStatus.REJECTED || (p.status as string) === 'RECHAZADO';
+      const amount = Number(p.amount) || 0;
+
+      if (isConfirmed) {
+        totalRecaudado += amount;
+        totalConfirmadosCount++;
+        if (p.method === PaymentMethod.YAPE) recaudadoYape += amount;
+        else if (p.method === PaymentMethod.PLIN) recaudadoPlin += amount;
+        else if ((p.method as string) === 'TRANSFERENCIA') recaudadoTransfer += amount;
+        else if ((p.method as string) === 'EFECTIVO') recaudadoEfectivo += amount;
+        else recaudadoMercadoPago += amount;
+      } else if (isPending) {
+        comprobantesPendientesCount++;
+      } else if (isRejected) {
+        totalRechazadosCount++;
+      }
+    }
+
+    const recaudadoManual = recaudadoYape + recaudadoPlin + recaudadoTransfer + recaudadoEfectivo;
+    const saldoPendienteTotal = bookings.reduce((sum, b) => sum + (Number((b as any).saldoPendiente) || 0), 0);
+
+    return {
+      clubId,
+      totalRecaudado: Number(totalRecaudado.toFixed(2)),
+      recaudadoMercadoPago: Number(recaudadoMercadoPago.toFixed(2)),
+      recaudadoManual: Number(recaudadoManual.toFixed(2)),
+      saldoPendienteTotal: Number(saldoPendienteTotal.toFixed(2)),
+      comprobantesPendientesCount,
+      totalConfirmadosCount,
+      totalRechazadosCount,
+      desgloseMetodos: {
+        mercadopago: Number(recaudadoMercadoPago.toFixed(2)),
+        yape: Number(recaudadoYape.toFixed(2)),
+        plin: Number(recaudadoPlin.toFixed(2)),
+        transferencia: Number(recaudadoTransfer.toFixed(2)),
+        efectivo: Number(recaudadoEfectivo.toFixed(2)),
+      },
+    };
+  }
+
+  // ─── LISTA DE PAGOS CON FILTROS ────────────────────────────────────────────
+
+  async getClubPaymentsList(
+    user: User,
+    filters: { status?: string; method?: string; type?: string; search?: string },
+  ) {
+    const clubId = user.club?.id;
+    if (!clubId && (user.role as string) !== 'ADMIN') {
+      throw new BadRequestException('El usuario no tiene un club asociado');
+    }
+
+    const query = this.paymentRepo
+      .createQueryBuilder('payment')
+      .leftJoinAndSelect('payment.booking', 'booking')
+      .leftJoinAndSelect('booking.court', 'court')
+      .leftJoinAndSelect('booking.user', 'customer')
+      .leftJoinAndSelect('payment.user', 'payer')
+      .leftJoinAndSelect('payment.confirmadoPor', 'confirmadoPor')
+      .orderBy('payment.createdAt', 'DESC');
+
+    if (clubId) {
+      query.where('booking.clubId = :clubId', { clubId });
+    }
+
+    if (filters.status && filters.status !== 'all') {
+      if (filters.status === 'pending') {
+        query.andWhere('payment.status IN (:...ps)', { ps: ['PENDING', 'PENDIENTE'] });
+      } else if (filters.status === 'confirmed' || filters.status === 'completed') {
+        query.andWhere('payment.status IN (:...cs)', { cs: ['PAID', 'CONFIRMADO'] });
+      } else if (filters.status === 'rejected') {
+        query.andWhere('payment.status IN (:...rs)', { rs: ['REJECTED', 'RECHAZADO'] });
+      }
+    }
+
+    if (filters.method && filters.method !== 'all') {
+      query.andWhere('payment.method = :method', { method: filters.method });
+    }
+
+    if (filters.type && filters.type !== 'all') {
+      query.andWhere('payment.type = :type', { type: filters.type });
+    }
+
+    const rawList = await query.getMany();
+
+    if (filters.search) {
+      const s = filters.search.toLowerCase();
+      return rawList.filter((p) => {
+        const ref = (p.booking as any)?.bookingReference?.toLowerCase() || '';
+        const court = p.booking?.court?.name?.toLowerCase() || '';
+        const name = (p.booking as any)?.customerInfo?.name?.toLowerCase() || (p.booking as any)?.user?.name?.toLowerCase() || '';
+        const email = (p.booking as any)?.customerInfo?.email?.toLowerCase() || (p.booking as any)?.user?.email?.toLowerCase() || '';
+        return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s);
+      });
+    }
+
+    return rawList;
+  }
+
   generateTimeSlots(start: string, duration: number): string[] {
     const [hours, minutes] = start.split(':').map(Number);
     const startDate = new Date(0, 0, 0, hours, minutes);
@@ -382,6 +511,41 @@ export class PaymentService {
     }));
     await this.scheduleTemplateService.bulkUpdate(payload as any);
   }
-   
-  
+
+  /**
+   * Auditar un pago manual: CONFIRMAR o RECHAZAR el comprobante subido por el usuario.
+   * Actualiza el estado del pago y dispara notificaciones si aplica.
+   */
+  async auditManualPayment(
+    paymentId: string,
+    action: 'CONFIRMAR' | 'RECHAZAR',
+    auditor: User,
+    motivoRechazo?: string,
+  ) {
+    const payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+    });
+    if (!payment) throw new BadRequestException('Pago no encontrado');
+
+    if (action === 'CONFIRMAR') {
+      payment.status = PaymentStatus.PAID;
+      payment.fechaConfirmacion = new Date();
+      payment.confirmadoPor = auditor;
+      payment.motivoRechazo = null;
+    } else {
+      payment.status = PaymentStatus.REJECTED;
+      payment.fechaConfirmacion = new Date();
+      payment.confirmadoPor = auditor;
+      payment.motivoRechazo = motivoRechazo || null;
+    }
+
+    const saved = await this.paymentRepo.save(payment);
+
+    return {
+      status: saved.status,
+      message: action === 'CONFIRMAR' ? 'Pago confirmado exitosamente' : 'Pago rechazado',
+      payment: saved,
+    };
+  }
 }

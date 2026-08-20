@@ -14,6 +14,12 @@ import { User } from '../user/user.entity';
 import { PaymentStatus } from './payment-status.enum';
 import { PaymentMethod } from './payment-method.enum';
 
+export enum PaymentType {
+  ADELANTO = 'ADELANTO',
+  SALDO = 'SALDO',
+  PAGO_COMPLETO = 'PAGO_COMPLETO',
+}
+
 @Entity()
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
@@ -35,7 +41,7 @@ export class Payment {
   @Column()
   currency: string;
 
-  // Método de pago (enum: MERCADOPAGO, MANUAL, etc.)
+  // Método de pago (enum: MERCADOPAGO, YAPE, PLIN, etc.)
   @Column({ type: 'enum', enum: PaymentMethod })
   method: PaymentMethod;
 
@@ -45,6 +51,10 @@ export class Payment {
   // Estado del pago (PENDING, PAID, CANCELLED, REJECTED)
   @Column({ type: 'enum', enum: PaymentStatus })
   status: PaymentStatus;
+
+  // Tipo de pago: ADELANTO / SALDO / PAGO_COMPLETO
+  @Column({ type: 'enum', enum: PaymentType, default: PaymentType.PAGO_COMPLETO })
+  type: PaymentType;
 
   // ID de transacción en Mercado Pago
   @Index()
@@ -67,9 +77,27 @@ export class Payment {
   @Column({ type: 'jsonb', nullable: true })
   gatewayResponse?: any;
 
+  // URL del comprobante de pago subido por el usuario (Yape/Plin)
+  @Column({ nullable: true })
+  comprobanteUrl?: string;
+
+  // Motivo de rechazo del comprobante (auditado por el club)
+  @Column({ nullable: true })
+  motivoRechazo?: string;
+
+  // Fecha en que el club confirmó o rechazó el comprobante
+  @Column({ type: 'timestamp', nullable: true })
+  fechaConfirmacion?: Date;
+
+  // Usuario del club que auditó este pago
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'confirmadoPorId' })
+  confirmadoPor?: User;
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
 }
+

@@ -54,6 +54,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
       const activePastEnd: ClubMembership = {
         id: 'mem-1',
         clubId: 'club-1',
+        planId: 'plan-1',
         club: { name: 'Club Central', email: 'club@test.com' } as any,
         plan: { name: 'Plan Pro' } as any,
         status: MembershipStatus.ACTIVE,
@@ -91,6 +92,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
       const graceExpired: ClubMembership = {
         id: 'mem-2',
         clubId: 'club-2',
+        planId: 'plan-2',
         club: { name: 'Club Norte', email: 'norte@test.com' } as any,
         plan: { name: 'Plan Básico' } as any,
         status: MembershipStatus.GRACE,
@@ -124,6 +126,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
       const expiringIn3Days: ClubMembership = {
         id: 'mem-3',
         clubId: 'club-3',
+        planId: 'plan-3',
         club: { name: 'Club Sur', email: 'sur@test.com' } as any,
         plan: { name: 'Plan Anual' } as any,
         status: MembershipStatus.ACTIVE,

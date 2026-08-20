@@ -94,5 +94,62 @@ import { GetUser } from '../auth/get-user.decorator';
     remove(@Param('id') id: string) {
       return this.service.remove(id);
     }
+
+    // ─── ENDPOINTS DEL CLUB (Métricas, Lista, Auditoría, Comprobante) ─────
+
+    /**
+     * GET /payments/club/metrics
+     * Devuelve KPIs de recaudación del club autenticado
+     */
+    @UseGuards(JwtAuthGuard)
+    @Get('club/metrics')
+    async getMetrics(
+      @GetUser() user: User,
+      @Query('clubId') clubId?: string,
+    ) {
+      return this.service.getClubPaymentMetrics(user, clubId);
+    }
+
+    /**
+     * GET /payments/club/list
+     * Devuelve lista de pagos filtrada para el club autenticado
+     */
+    @UseGuards(JwtAuthGuard)
+    @Get('club/list')
+    async getList(
+      @GetUser() user: User,
+      @Query('status') status?: string,
+      @Query('method') method?: string,
+      @Query('type') type?: string,
+      @Query('search') search?: string,
+    ) {
+      return this.service.getClubPaymentsList(user, { status, method, type, search });
+    }
+
+    /**
+     * PATCH /payments/:id/confirm
+     * Auditar comprobante — Confirmar o Rechazar un pago manual
+     */
+    @UseGuards(JwtAuthGuard)
+    @Put(':id/confirm')
+    async auditPayment(
+      @Param('id') id: string,
+      @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
+      @GetUser() user: User,
+    ) {
+      return this.service.auditManualPayment(id, dto.action, user, dto.motivoRechazo);
+    }
+
+    /**
+     * POST /payments/upload-comprobante
+     * Subida de imagen de comprobante de pago por el usuario
+     */
+    @UseGuards(JwtAuthGuard)
+    @Post('upload-comprobante')
+    async uploadComprobante() {
+      // El manejo de archivo se hace en el booking payment service
+      // Este endpoint es un alias para compatibilidad frontend
+      return { message: 'Use el endpoint de booking para subir comprobantes' };
+    }
   }
   
