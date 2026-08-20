@@ -437,6 +437,18 @@ export function ClubSchedulesContent() {
       };
 
       await createReservationManual(payload);
+
+      // Limpiar los slots que abarca la reserva de la lista local de pendientes por guardar (timeSlotsToUpdate)
+      const bookingSlots = getBookingSlots(selectedSlotForAction.time, Number(bookingDuration));
+      const dateStr = format(selectedSlotForAction.date, "yyyy-MM-dd");
+      setTimeSlotsToUpdate((prev) => {
+        const next = new Map(prev);
+        bookingSlots.forEach((slotTime) => {
+          next.delete(`${dateStr}-${slotTime}`);
+        });
+        return next;
+      });
+
       toast.success("Reserva manual registrada exitosamente");
       setIsBookingFormOpen(false);
       setSelectedSlotForAction(null);
