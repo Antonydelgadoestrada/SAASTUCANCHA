@@ -106,7 +106,10 @@ export function ReservationsContent() {
     // Filtro por cancha
     const courtMatch =
       courtFilter === "all" || reservation.court.name === courts.find((c) => c.id.toString() === courtFilter)?.name
-    reservation.date = new Date(reservation.date)
+    // Convert the UTC midnight to Local midnight
+    const utcDate = new Date(reservation.date)
+    reservation.date = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate())
+
     // Filtro por fecha
     const dateMatch =
       (!dateRange.from || reservation.date >= dateRange.from) && (!dateRange.to || reservation.date <= dateRange.to)

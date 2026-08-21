@@ -222,12 +222,17 @@ export function ClubDashboardContent() {
     today.setHours(0, 0, 0, 0)
     return allReservations
       .filter((r) => {
-        const d = new Date(r.date)
+        const utcDate = new Date(r.date)
+        const d = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate())
         d.setHours(0, 0, 0, 0)
         return d >= today && r.status !== "cancelled"
       })
       .sort((a, b) => {
-        const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime()
+        const aDate = new Date(a.date)
+        const bDate = new Date(b.date)
+        const aLocal = new Date(aDate.getUTCFullYear(), aDate.getUTCMonth(), aDate.getUTCDate())
+        const bLocal = new Date(bDate.getUTCFullYear(), bDate.getUTCMonth(), bDate.getUTCDate())
+        const dateCompare = aLocal.getTime() - bLocal.getTime()
         if (dateCompare !== 0) return dateCompare
         return (a.startTime || "").localeCompare(b.startTime || "")
       })
@@ -542,7 +547,11 @@ export function ClubDashboardContent() {
                           </TableCell>
                           <TableCell>
                             <div className="font-medium">
-                              {format(new Date(r.date), "EEE d MMM", { locale: es })}
+                              {(() => {
+                                const utcDate = new Date(r.date);
+                                const localDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate());
+                                return format(localDate, "EEE d MMM", { locale: es });
+                              })()}
                             </div>
                             <div className="text-xs text-muted-foreground font-mono">
                               {r.startTime} - {r.endTime}
@@ -583,7 +592,13 @@ export function ClubDashboardContent() {
                       </div>
                       <div className="text-xs text-muted-foreground">{r.court?.name}</div>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="font-mono">{format(new Date(r.date), "EEE d MMM", { locale: es })} · {r.startTime} - {r.endTime}</span>
+                        <span className="font-mono">
+                          {(() => {
+                            const utcDate = new Date(r.date);
+                            const localDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate());
+                            return format(localDate, "EEE d MMM", { locale: es });
+                          })()} · {r.startTime} - {r.endTime}
+                        </span>
                         <Badge className={paymentStatusColors[r.paymentStatus] || "bg-gray-100"}>
                           {paymentLabels[r.paymentStatus] || r.paymentStatus}
                         </Badge>
