@@ -96,6 +96,8 @@ export class CourtService {
           name: venue.name,
           // intenta primero en JSON location.address; si no, usa address plano
           address: venue?.location?.address ?? venue?.address,
+          phone: venue?.phone || venue?.club?.phone || '',
+          whatsapp: venue?.club?.whatsapp || venue?.phone || venue?.club?.phone || '',
         }
       : undefined,
   };
@@ -249,7 +251,8 @@ async findFeaturedPublic(
           minimumBookingTime,
           rating: 4.5,
           reviews: 128,
-          phone: venue?.phone || '',
+          phone: venue?.phone || venue?.club?.phone || '',
+          whatsapp: venue?.club?.whatsapp || venue?.phone || venue?.club?.phone || '',
           address: venue?.location?.address || '',
           coordinates: venue?.location?.coordinates || { lat: 0, lng: 0 },
           images: images.length > 0 ? images : [

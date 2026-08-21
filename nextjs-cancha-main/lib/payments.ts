@@ -18,12 +18,32 @@ export type PaymentStatusEnum =
 
 export interface ClubPaymentConfig {
   aceptaMercadopago: boolean
+  whatsapp?: string | null
   yapeNumero?: string | null
   yapeQrUrl?: string | null
   plinNumero?: string | null
   plinQrUrl?: string | null
   porcentajeAdelantoDefault: number
   adelantoMinimo?: number | null
+}
+
+export function formatWhatsAppNumber(phone?: string | null): string {
+  if (!phone) return ""
+  let clean = phone.replace(/[^\d]/g, "")
+  if (clean.length === 9 && clean.startsWith("9")) {
+    clean = `51${clean}`
+  }
+  return clean
+}
+
+export function getWhatsAppLink(phone?: string | null, message?: string): string {
+  const cleanNumber = formatWhatsAppNumber(phone)
+  if (!cleanNumber) return "#"
+  const base = `https://wa.me/${cleanNumber}`
+  if (message) {
+    return `${base}?text=${encodeURIComponent(message)}`
+  }
+  return base
 }
 
 export interface PaymentItem {

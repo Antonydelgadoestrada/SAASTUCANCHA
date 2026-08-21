@@ -15,11 +15,13 @@ import { Slider } from "@/components/ui/slider"
 import {
   CreditCardIcon, SmartphoneIcon, PercentIcon, CheckCircle2Icon,
   ExternalLinkIcon, SaveIcon, HelpCircleIcon, Loader2Icon,
-  UploadCloudIcon, Trash2Icon,
+  UploadCloudIcon, Trash2Icon, MessageCircleIcon, PencilIcon,
+  XIcon, PhoneIcon, QrCodeIcon, ShieldCheckIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
-  getClubPaymentConfig, updateClubPaymentConfig, uploadClubQr, ClubPaymentConfig,
+  getClubPaymentConfig, updateClubPaymentConfig, uploadClubQr,
+  ClubPaymentConfig, getWhatsAppLink, formatWhatsAppNumber,
 } from "@/lib/payments"
 import api from "@/lib/axios"
 
@@ -67,7 +69,7 @@ function QrUploader({
         ) : (
           <>
             <UploadCloudIcon className="w-4 h-4" style={{ color: accentColor }} />
-            <span>{qrUrl ? "Cambiar Imagen de QR" : "Subir Archivo de QR (PNG, JPG)"}</span>
+            <span>{qrUrl ? `Cambiar Imagen de QR (${label})` : `Subir Archivo de QR (${label})`}</span>
           </>
         )}
       </Button>
@@ -115,6 +117,7 @@ export function PaymentSettingsTab() {
   const clubId = session?.user?.clubId
 
   const [aceptaMercadopago, setAceptaMercadopago] = useState(false)
+  const [whatsapp, setWhatsapp] = useState("")
   const [yapeNumero, setYapeNumero] = useState("")
   const [yapeQrUrl, setYapeQrUrl] = useState("")
   const [plinNumero, setPlinNumero] = useState("")
@@ -124,6 +127,7 @@ export function PaymentSettingsTab() {
   const [isMPConnected, setIsMPConnected] = useState(false)
   const [isUploadingYape, setIsUploadingYape] = useState(false)
   const [isUploadingPlin, setIsUploadingPlin] = useState(false)
+  const [isEditingWallets, setIsEditingWallets] = useState(false)
 
   // Cargar configuración del club (usa /my si no hay clubId)
   const { data: config, isLoading } = useQuery({
@@ -170,12 +174,19 @@ export function PaymentSettingsTab() {
   useEffect(() => {
     if (config) {
       setAceptaMercadopago(config.aceptaMercadopago ?? false)
+      setWhatsapp(config.whatsapp || "")
       setYapeNumero(config.yapeNumero || "")
       setYapeQrUrl(config.yapeQrUrl || "")
       setPlinNumero(config.plinNumero || "")
       setPlinQrUrl((config as any).plinQrUrl || "")
       setPorcentajeAdelantoDefault(config.porcentajeAdelantoDefault ?? 50)
       setAdelantoMinimo(config.adelantoMinimo ? String(config.adelantoMinimo) : "")
+
+      // Si no hay ninguna billetera guardada aún, abrir en modo edición por defecto
+      const hasAnyWallet = Boolean(config.yapeNumero || config.yapeQrUrl || config.plinNumero || (config as any).plinQrUrl)
+      if (!hasAnyWallet) {
+        setIsEditingWallets(true)
+      }
     }
   }, [config])
 
@@ -184,12 +195,13 @@ export function PaymentSettingsTab() {
     mutationFn: (data: any) => updateClubPaymentConfig(clubId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-payment-config", clubId] })
-      toast.success("Configuración guardada", {
-        description: "Los cambios aplican para nuevas reservas.",
+      setIsEditingWallets(false)
+      toast.success("Configuración guardada exitosamente", {
+        description: "Los cambios aplican para tus canchas y nuevas reservas.",
       })
     },
     onError: (err: any) => {
-      toast.error("Error al guardar", {
+      toast.error("Error al guardar configuración", {
         description: err.response?.data?.message || err.message,
       })
     },
@@ -198,6 +210,7 @@ export function PaymentSettingsTab() {
   const handleSave = () => {
     mutation.mutate({
       aceptaMercadopago,
+      whatsapp: whatsapp.trim() || null,
       yapeNumero: yapeNumero.trim() || null,
       yapeQrUrl: yapeQrUrl.trim() || null,
       plinNumero: plinNumero.trim() || null,
@@ -205,6 +218,16 @@ export function PaymentSettingsTab() {
       porcentajeAdelantoDefault: Number(porcentajeAdelantoDefault),
       adelantoMinimo: adelantoMinimo ? Number(adelantoMinimo) : null,
     })
+  }
+
+  const handleCancelWalletEdit = () => {
+    if (config) {
+      setYapeNumero(config.yapeNumero || "")
+      setYapeQrUrl(config.yapeQrUrl || "")
+      setPlinNumero(config.plinNumero || "")
+      setPlinQrUrl((config as any).plinQrUrl || "")
+    }
+    setIsEditingWallets(false)
   }
 
   // Manejar subida de archivo QR
@@ -257,6 +280,9 @@ export function PaymentSettingsTab() {
       : `${base}/payments/authorize`
   }
 
+  const hasConfiguredWallets = Boolean(yapeNumero || yapeQrUrl || plinNumero || plinQrUrl)
+  const testWhatsAppUrl = whatsapp ? getWhatsAppLink(whatsapp, "Hola! Este es un mensaje de prueba para TuCancha.") : ""
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
@@ -268,7 +294,106 @@ export function PaymentSettingsTab() {
   return (
     <div className="space-y-6">
 
-      {/* ── 1. MERCADO PAGO ──────────────────────────────────────────────── */}
+      {/* ── 1. WHATSAPP Y ATENCIÓN DIRECTA AL CLIENTE ────────────────────── */}
+      <Card className="border-slate-200 dark:border-slate-800 shadow-sm border-l-4 border-l-emerald-500">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/50 rounded-xl text-emerald-600">
+                <MessageCircleIcon className="w-6 h-6" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold">WhatsApp del Club y Comunicación Directa</CardTitle>
+                <CardDescription>
+                  Los clientes podrán contactarte directamente con 1 clic desde la búsqueda, detalles y proceso de reserva
+                </CardDescription>
+              </div>
+            </div>
+            <Badge
+              variant={whatsapp ? "default" : "outline"}
+              className={whatsapp
+                ? "bg-emerald-600 text-white font-medium px-3 py-1 gap-1"
+                : "border-slate-300 text-slate-500 font-medium px-3 py-1"}
+            >
+              {whatsapp ? (
+                <>
+                  <CheckCircle2Icon className="w-3.5 h-3.5" />
+                  WhatsApp Activo
+                </>
+              ) : "No Configurado"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50 dark:bg-slate-900">
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp-input" className="text-xs font-semibold flex items-center gap-1.5">
+                <PhoneIcon className="w-3.5 h-3.5 text-emerald-600" />
+                Número de Celular para WhatsApp
+              </Label>
+              <div className="relative">
+                <Input
+                  id="whatsapp-input"
+                  placeholder="Ej. 987654321 o +51 987654321"
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  maxLength={20}
+                  className="bg-white dark:bg-slate-950 font-medium"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Ingresa el número con o sin prefijo de país (+51). Los usuarios abrirán el chat automáticamente al darle clic.
+              </p>
+            </div>
+
+            <div className="flex flex-col justify-between p-3.5 bg-white dark:bg-slate-950 rounded-lg border border-emerald-100 dark:border-emerald-950 space-y-2">
+              <div>
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <ShieldCheckIcon className="w-4 h-4 text-emerald-600" />
+                  Prueba de Enlace Directo
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {whatsapp
+                    ? `Número registrado: ${formatWhatsAppNumber(whatsapp)}`
+                    : "Ingresa tu número para generar el enlace de prueba."}
+                </p>
+              </div>
+
+              {whatsapp ? (
+                <a
+                  href={testWhatsAppUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex"
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs font-semibold text-emerald-700 dark:text-emerald-400 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 gap-2 h-9"
+                  >
+                    <MessageCircleIcon className="w-3.5 h-3.5 text-emerald-600" />
+                    Probar Enlace de WhatsApp
+                    <ExternalLinkIcon className="w-3 h-3 ml-auto opacity-70" />
+                  </Button>
+                </a>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  className="w-full text-xs opacity-50 h-9"
+                >
+                  Probar Enlace de WhatsApp
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── 2. MERCADO PAGO ──────────────────────────────────────────────── */}
       <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -328,89 +453,242 @@ export function PaymentSettingsTab() {
         </CardContent>
       </Card>
 
-      {/* ── 2. BILLETERAS (YAPE & PLIN) ──────────────────────────────────── */}
+      {/* ── 3. BILLETERAS (YAPE & PLIN) CON MODO EDICIÓN ───────────────────── */}
       <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
         <CardHeader className="pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-purple-50 dark:bg-purple-950/50 rounded-xl text-purple-600">
-              <SmartphoneIcon className="w-6 h-6" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-purple-50 dark:bg-purple-950/50 rounded-xl text-purple-600">
+                <SmartphoneIcon className="w-6 h-6" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold">Billeteras Digitales y Pagos Manuales (Yape &amp; Plin)</CardTitle>
+                <CardDescription>Configura los números y códigos QR donde los clientes transferirán el adelanto o saldo</CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-lg font-bold">Billeteras Digitales y Pagos Manuales (Yape &amp; Plin)</CardTitle>
-              <CardDescription>Configura los números y QR donde los clientes transferirán el adelanto o saldo</CardDescription>
+
+            {/* Botón de Editar / Estado */}
+            <div className="flex items-center gap-2">
+              {!isEditingWallets && hasConfiguredWallets ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditingWallets(true)}
+                  className="text-purple-700 dark:text-purple-300 border-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-xs font-semibold gap-1.5 h-9"
+                >
+                  <PencilIcon className="w-3.5 h-3.5" />
+                  Editar Billeteras
+                </Button>
+              ) : isEditingWallets && hasConfiguredWallets ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancelWalletEdit}
+                  className="text-slate-500 hover:text-slate-700 text-xs gap-1 h-9"
+                >
+                  <XIcon className="w-3.5 h-3.5" />
+                  Cancelar
+                </Button>
+              ) : null}
+
+              <Badge
+                variant={hasConfiguredWallets ? "default" : "outline"}
+                className={hasConfiguredWallets
+                  ? "bg-purple-600 text-white font-medium px-3 py-1"
+                  : "border-amber-400 text-amber-600 font-medium px-3 py-1"}
+              >
+                {hasConfiguredWallets ? (isEditingWallets ? "Modo Edición" : "Configuración Guardada") : "Pendiente"}
+              </Badge>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-0">
 
-          {/* YAPE */}
-          <div className="space-y-4 p-4 rounded-xl border bg-slate-50 dark:bg-slate-900">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#732282]" />
-              <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Configuración Yape</span>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="yape-numero" className="text-xs font-semibold">Número de Celular para Yape</Label>
-              <Input
-                id="yape-numero"
-                placeholder="Ej. 987654321"
-                value={yapeNumero}
-                onChange={(e) => setYapeNumero(e.target.value)}
-                maxLength={15}
-              />
-              <p className="text-[11px] text-slate-500">Puedes cambiar este número cuando tu club lo requiera.</p>
-            </div>
-            <QrUploader
-              walletType="yape"
-              qrUrl={yapeQrUrl}
-              isUploading={isUploadingYape}
-              fileInputRef={yapeRef}
-              onFileChange={(e) => handleQrUpload(e, "yape")}
-              onClear={() => setYapeQrUrl("")}
-              accentColor="#732282"
-            />
-          </div>
+        {/* ── Vista 3A: Resumen Guardado (Modo Lectura / Guardado) ── */}
+        {!isEditingWallets && hasConfiguredWallets ? (
+          <CardContent className="space-y-6 pt-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Resumen Yape */}
+              <div className="p-4 rounded-xl border border-purple-100 dark:border-purple-900/50 bg-purple-50/30 dark:bg-purple-950/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 rounded-full bg-[#732282]" />
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Yape</span>
+                  </div>
+                  <Badge variant="outline" className="bg-white dark:bg-slate-900 text-xs font-medium text-[#732282] border-purple-200">
+                    {yapeNumero ? "Número Activo" : "Sin Número"}
+                  </Badge>
+                </div>
 
-          {/* PLIN */}
-          <div className="space-y-4 p-4 rounded-xl border bg-slate-50 dark:bg-slate-900">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#00D4B2]" />
-              <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Configuración Plin</span>
+                <div className="bg-white dark:bg-slate-950 p-3.5 rounded-xl border space-y-2">
+                  <p className="text-xs text-slate-500 font-medium">Número para transferencias:</p>
+                  <p className="text-base font-bold text-slate-800 dark:text-slate-100 font-mono">
+                    {yapeNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                  </p>
+                </div>
+
+                {yapeQrUrl ? (
+                  <div className="flex items-center gap-3 bg-white dark:bg-slate-950 p-3 rounded-xl border">
+                    <img
+                      src={yapeQrUrl}
+                      alt="QR Yape"
+                      className="w-16 h-16 object-contain border rounded-lg bg-white p-1"
+                    />
+                    <div className="text-xs space-y-0.5">
+                      <p className="font-semibold text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2Icon className="w-3.5 h-3.5" /> QR de Yape Listo
+                      </p>
+                      <p className="text-slate-500 text-[11px]">Visible en checkout para tus clientes.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border text-center text-xs text-slate-400">
+                    <QrCodeIcon className="w-5 h-5 mx-auto mb-1 opacity-40" />
+                    Sin imagen QR cargada
+                  </div>
+                )}
+              </div>
+
+              {/* Resumen Plin */}
+              <div className="p-4 rounded-xl border border-teal-100 dark:border-teal-900/50 bg-teal-50/30 dark:bg-teal-950/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 rounded-full bg-[#00D4B2]" />
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Plin</span>
+                  </div>
+                  <Badge variant="outline" className="bg-white dark:bg-slate-900 text-xs font-medium text-teal-700 border-teal-200">
+                    {plinNumero ? "Número Activo" : "Sin Número"}
+                  </Badge>
+                </div>
+
+                <div className="bg-white dark:bg-slate-950 p-3.5 rounded-xl border space-y-2">
+                  <p className="text-xs text-slate-500 font-medium">Número para transferencias:</p>
+                  <p className="text-base font-bold text-slate-800 dark:text-slate-100 font-mono">
+                    {plinNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                  </p>
+                </div>
+
+                {plinQrUrl ? (
+                  <div className="flex items-center gap-3 bg-white dark:bg-slate-950 p-3 rounded-xl border">
+                    <img
+                      src={plinQrUrl}
+                      alt="QR Plin"
+                      className="w-16 h-16 object-contain border rounded-lg bg-white p-1"
+                    />
+                    <div className="text-xs space-y-0.5">
+                      <p className="font-semibold text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2Icon className="w-3.5 h-3.5" /> QR de Plin Listo
+                      </p>
+                      <p className="text-slate-500 text-[11px]">Visible en checkout para tus clientes.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white dark:bg-slate-950 rounded-xl border text-center text-xs text-slate-400">
+                    <QrCodeIcon className="w-5 h-5 mx-auto mb-1 opacity-40" />
+                    Sin imagen QR cargada
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="plin-numero" className="text-xs font-semibold">Número de Celular para Plin</Label>
-              <Input
-                id="plin-numero"
-                placeholder="Ej. 987654321"
-                value={plinNumero}
-                onChange={(e) => setPlinNumero(e.target.value)}
-                maxLength={15}
+
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditingWallets(true)}
+                className="text-xs font-semibold text-purple-700 dark:text-purple-300 border-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 gap-1.5"
+              >
+                <PencilIcon className="w-3.5 h-3.5" />
+                Editar Billeteras y Códigos QR
+              </Button>
+            </div>
+          </CardContent>
+        ) : (
+          /* ── Vista 3B: Formulario Interactivo de Edición ── */
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-0">
+
+            {/* YAPE FORM */}
+            <div className="space-y-4 p-4 rounded-xl border bg-slate-50 dark:bg-slate-900">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-[#732282]" />
+                  <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Configuración Yape</span>
+                </div>
+                <Badge className="bg-[#732282] text-white text-[10px]">Editar Yape</Badge>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="yape-numero" className="text-xs font-semibold">Número de Celular para Yape</Label>
+                <Input
+                  id="yape-numero"
+                  placeholder="Ej. 987654321"
+                  value={yapeNumero}
+                  onChange={(e) => setYapeNumero(e.target.value)}
+                  maxLength={15}
+                  className="bg-white dark:bg-slate-950 font-mono"
+                />
+                <p className="text-[11px] text-slate-500">Puedes cambiar este número cuando tu club lo requiera.</p>
+              </div>
+
+              <QrUploader
+                walletType="yape"
+                qrUrl={yapeQrUrl}
+                isUploading={isUploadingYape}
+                fileInputRef={yapeRef}
+                onFileChange={(e) => handleQrUpload(e, "yape")}
+                onClear={() => setYapeQrUrl("")}
+                accentColor="#732282"
               />
-              <p className="text-[11px] text-slate-500">Puedes cambiar este número cuando tu club lo requiera.</p>
             </div>
-            <QrUploader
-              walletType="plin"
-              qrUrl={plinQrUrl}
-              isUploading={isUploadingPlin}
-              fileInputRef={plinRef}
-              onFileChange={(e) => handleQrUpload(e, "plin")}
-              onClear={() => setPlinQrUrl("")}
-              accentColor="#00D4B2"
-            />
-            <div className="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-2">
-              <p className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <HelpCircleIcon className="w-4 h-4 text-emerald-600" />
-                ¿Cómo funciona para el usuario?
-              </p>
-              <p>
-                Al reservar con <strong>Yape</strong> o <strong>Plin</strong>, el usuario verá tu número/QR, enviará el monto y subirá la captura de pantalla dentro de la app para que la valides en tu bandeja de pagos.
-              </p>
+
+            {/* PLIN FORM */}
+            <div className="space-y-4 p-4 rounded-xl border bg-slate-50 dark:bg-slate-900">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-[#00D4B2]" />
+                  <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Configuración Plin</span>
+                </div>
+                <Badge className="bg-[#00D4B2] text-slate-900 text-[10px] font-bold">Editar Plin</Badge>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="plin-numero" className="text-xs font-semibold">Número de Celular para Plin</Label>
+                <Input
+                  id="plin-numero"
+                  placeholder="Ej. 987654321"
+                  value={plinNumero}
+                  onChange={(e) => setPlinNumero(e.target.value)}
+                  maxLength={15}
+                  className="bg-white dark:bg-slate-950 font-mono"
+                />
+                <p className="text-[11px] text-slate-500">Puedes cambiar este número cuando tu club lo requiera.</p>
+              </div>
+
+              <QrUploader
+                walletType="plin"
+                qrUrl={plinQrUrl}
+                isUploading={isUploadingPlin}
+                fileInputRef={plinRef}
+                onFileChange={(e) => handleQrUpload(e, "plin")}
+                onClear={() => setPlinQrUrl("")}
+                accentColor="#00D4B2"
+              />
+
+              <div className="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-2">
+                <p className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <HelpCircleIcon className="w-4 h-4 text-emerald-600" />
+                  ¿Cómo funciona para el usuario?
+                </p>
+                <p>
+                  Al reservar con <strong>Yape</strong> o <strong>Plin</strong>, el usuario verá tu número/QR, enviará el monto y subirá la captura de pantalla dentro de la app para que la valides en tu bandeja de pagos.
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
 
-      {/* ── 3. POLÍTICA DE ADELANTOS ─────────────────────────────────────── */}
+      {/* ── 4. POLÍTICA DE ADELANTOS ─────────────────────────────────────── */}
       <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-3">
@@ -477,7 +755,17 @@ export function PaymentSettingsTab() {
             </p>
           </div>
         </CardContent>
-        <CardFooter className="flex justify-end pt-2 border-t">
+        <CardFooter className="flex justify-end gap-3 pt-4 border-t">
+          {isEditingWallets && hasConfiguredWallets && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancelWalletEdit}
+              disabled={mutation.isPending}
+            >
+              Cancelar Edición
+            </Button>
+          )}
           <Button
             onClick={handleSave}
             disabled={mutation.isPending}
@@ -486,7 +774,7 @@ export function PaymentSettingsTab() {
             {mutation.isPending
               ? <Loader2Icon className="w-4 h-4 mr-2 animate-spin" />
               : <SaveIcon className="w-4 h-4 mr-2" />}
-            Guardar Configuración
+            Guardar Toda la Configuración
           </Button>
         </CardFooter>
       </Card>

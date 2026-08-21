@@ -94,6 +94,9 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
     aceptaMercadopago: boolean;
 
     @Column({ nullable: true })
+    whatsapp?: string;
+
+    @Column({ nullable: true })
     yapeNumero?: string;
 
     @Column({ nullable: true })

@@ -7,6 +7,10 @@ export class UpdateClubPaymentConfigDto {
 
   @IsOptional()
   @IsString()
+  whatsapp?: string;
+
+  @IsOptional()
+  @IsString()
   yapeNumero?: string;
 
   @IsOptional()

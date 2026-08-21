@@ -118,6 +118,7 @@ export class ClubService {
     if (!club) throw new NotFoundException('Club no encontrado');
     return {
       aceptaMercadopago: club.aceptaMercadopago ?? false,
+      whatsapp: club.whatsapp || null,
       yapeNumero: club.yapeNumero,
       yapeQrUrl: club.yapeQrUrl,
       plinNumero: club.plinNumero,
@@ -137,6 +138,7 @@ export class ClubService {
       throw new BadRequestException('No tienes permisos para modificar la configuración de pagos de este club');
     }
 
+    if (dto.whatsapp !== undefined) club.whatsapp = dto.whatsapp ? dto.whatsapp.trim() : null;
     if (dto.aceptaMercadopago !== undefined) club.aceptaMercadopago = dto.aceptaMercadopago;
     if (dto.yapeNumero !== undefined) club.yapeNumero = dto.yapeNumero;
     if (dto.yapeQrUrl !== undefined) club.yapeQrUrl = dto.yapeQrUrl;
@@ -148,6 +150,7 @@ export class ClubService {
     const saved = await this.repo.save(club);
     return {
       aceptaMercadopago: saved.aceptaMercadopago,
+      whatsapp: saved.whatsapp || null,
       yapeNumero: saved.yapeNumero,
       yapeQrUrl: saved.yapeQrUrl,
       plinNumero: saved.plinNumero,

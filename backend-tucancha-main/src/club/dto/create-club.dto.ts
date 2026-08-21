@@ -38,14 +38,18 @@ import {
     @IsOptional()
     @IsString()
     facebook?: string;
-  
+
     @IsOptional()
     @IsString()
     instagram?: string;
-  
+
     @IsOptional()
     @IsString()
     twitter?: string;
+
+    @IsOptional()
+    @IsString()
+    whatsapp?: string;
   }
   
   export class CreateClubDto {
@@ -59,6 +63,10 @@ import {
     @IsNotEmpty()
     @IsString()
     phone: string;
+
+    @IsOptional()
+    @IsString()
+    whatsapp?: string;
   
     @IsNotEmpty()
     @IsString()
@@ -109,6 +117,7 @@ export class ClubPublicDto {
   @Expose() name: string;
   @Expose() email: string;
   @Expose() phone: string;
+  @Expose() whatsapp?: string;
   @Expose() address: string;
   @Expose() district: string;
   @Expose() description: string;
