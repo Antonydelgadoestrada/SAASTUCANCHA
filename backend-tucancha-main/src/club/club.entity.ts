@@ -89,6 +89,28 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
     @Column({ nullable: true })
     mpTokenExpiresAt: Date;
 
+    // Configuración de recaudación y pagos
+    @Column({ default: false })
+    aceptaMercadopago: boolean;
+
+    @Column({ nullable: true })
+    yapeNumero?: string;
+
+    @Column({ nullable: true })
+    yapeQrUrl?: string;
+
+    @Column({ nullable: true })
+    plinNumero?: string;
+
+    @Column({ nullable: true })
+    plinQrUrl?: string;
+
+    @Column({ type: 'int', default: 50 })
+    porcentajeAdelantoDefault: number;
+
+    @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+    adelantoMinimo?: number;
+
     // Dentro de la clase Club:
     @OneToMany(() => Booking, (booking) => booking.club)
     bookings: Booking[];

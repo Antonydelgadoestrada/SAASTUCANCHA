@@ -139,6 +139,33 @@ export function PaymentSettingsTab() {
     }).catch(() => {})
   }, [clubId])
 
+  // Notificaciones de retorno OAuth de Mercado Pago
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const mpStatus = params.get("mp_status")
+    const mpError = params.get("mp_error")
+
+    if (mpStatus === "connected") {
+      setIsMPConnected(true)
+      toast.success("¡Mercado Pago conectado exitosamente!", {
+        description: "Tu cuenta ha sido vinculada para recibir los pagos de las reservas.",
+      })
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (mpError) {
+      if (mpError === "expired_or_used") {
+        toast.error("El código de autorización expiró o ya fue utilizado", {
+          description: "Por favor vuelve a presionar 'Conectar Mercado Pago' para autorizar de nuevo.",
+        })
+      } else {
+        toast.error("No se pudo completar la conexión con Mercado Pago", {
+          description: "Revisa la configuración o intenta de nuevo.",
+        })
+      }
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [])
+
   // Sincronizar formulario con datos del servidor
   useEffect(() => {
     if (config) {
@@ -212,7 +239,18 @@ export function PaymentSettingsTab() {
     }
   }
 
-  const handleConnectMP = () => {
+  const handleConnectMP = async () => {
+    try {
+      const endpoint = clubId ? `/payments/authorize?clubId=${clubId}` : `/payments/authorize`
+      const res = await api.get(endpoint)
+      const targetUrl = typeof res.data === "string" ? res.data : res.data?.url
+      if (targetUrl) {
+        window.location.href = targetUrl
+        return
+      }
+    } catch {
+      // Fallback a navegación directa
+    }
     const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
     window.location.href = clubId
       ? `${base}/payments/authorize?clubId=${clubId}`

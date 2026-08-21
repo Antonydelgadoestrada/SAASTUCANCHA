@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon, CheckCircleIcon, ClockIcon, CreditCardIcon, MapPinIcon, XCircleIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -22,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getAllReservationByUser } from "@/lib/reservation"
 import { confirmPayment } from "@/lib/mercadopago"
+import { parseSafeDate, formatSafeDate } from "@/lib/utils"
 
 // Datos de ejemplo
 // const bookings = [
@@ -118,16 +118,22 @@ export function UserBookingsContent() {
   
     fetchBookings();
   }, []);
-  const upcomingBookings = bookings.filter((booking) => booking.status === "confirmed" && booking.date > new Date())
+  const upcomingBookings = bookings.filter((booking) => {
+    if (booking.status !== "confirmed") return false
+    const d = parseSafeDate(booking.date, booking.startTime)
+    return d ? d >= new Date() : false
+  })
 
   const pendingBookings = bookings.filter((booking) => booking.status === "pending")
 
-  const pastBookings = bookings.filter(
-    (booking) =>
-      booking.status === "completed" ||
-      booking.status === "cancelled" ||
-      (booking.status === "confirmed" && booking.date < new Date()),
-  )
+  const pastBookings = bookings.filter((booking) => {
+    if (booking.status === "completed" || booking.status === "cancelled") return true
+    if (booking.status === "confirmed") {
+      const d = parseSafeDate(booking.date, booking.startTime)
+      return d ? d < new Date() : false
+    }
+    return false
+  })
 
   const handleViewDetails = (booking: any) => {
     setSelectedBooking(booking)
@@ -251,50 +257,57 @@ export function UserBookingsContent() {
         <TabsContent value="upcoming" className="mt-6">
           {upcomingBookings.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {upcomingBookings.map((booking) => (
-                <Card key={booking.id} className="overflow-hidden">
-                  <div className="aspect-video w-full overflow-hidden">
-                    <img
-                      src={booking.court.images[0] || "/placeholder.svg"}
-                      alt={booking.court.venue.name}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{booking.court.name}</CardTitle>
-                        <CardDescription>{booking.court.venue.name}</CardDescription>
-                      </div>
-                      {getStatusBadge(booking.status)}
+              {upcomingBookings.map((booking) => {
+                const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
+                const courtName = booking.court?.name || "Cancha Deportiva"
+                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const totalPrice = booking.pricing?.totalPrice ?? (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
+
+                return (
+                  <Card key={booking.id} className="overflow-hidden">
+                    <div className="aspect-video w-full overflow-hidden">
+                      <img
+                        src={courtImage}
+                        alt={venueName}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>
-                          {format(booking.date, "EEEE d 'de' MMMM", { locale: es })}
-                          {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
-                        </span>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle>{courtName}</CardTitle>
+                          <CardDescription>{venueName}</CardDescription>
+                        </div>
+                        {getStatusBadge(booking.status)}
                       </div>
-                      <div className="flex items-center">
-                        <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>
-                          Duración: {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
-                        </span>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center">
+                          <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span>
+                            {formatSafeDate(booking.date, "EEEE d 'de' MMMM", { locale: es })}
+                            {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center">
+                          <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span>
+                            Duración: {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
+                          </span>
+                        </div>
+                        <div className="font-medium">Precio: S/{totalPrice}</div>
                       </div>
-                      <div className="font-medium">Precio: S/{booking.pricing.totalPrice}</div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button variant="outline" onClick={() => handleViewDetails(booking)}>
-                      Ver detalles
-                    </Button>
-                    <Button variant="destructive">Cancelar</Button>
-                  </CardFooter>
-                </Card>
-              ))}
+                    </CardContent>
+                    <CardFooter className="flex justify-between">
+                      <Button variant="outline" onClick={() => handleViewDetails(booking)}>
+                        Ver detalles
+                      </Button>
+                      <Button variant="destructive">Cancelar</Button>
+                    </CardFooter>
+                  </Card>
+                )
+              })}
             </div>
           ) : (
             <Card>
@@ -315,51 +328,58 @@ export function UserBookingsContent() {
         <TabsContent value="pending" className="mt-6">
           {pendingBookings.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {pendingBookings.map((booking) => (
-                <Card key={booking.id} className="overflow-hidden">
-                  <div className="aspect-video w-full overflow-hidden">
-                    <img
-                       src={booking.court.images[0] || "/placeholder.svg"}
-                       alt={booking.court.venue.name}
-                       className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{booking.court.name}</CardTitle>
-                        <CardDescription>{booking.court.venue.name}</CardDescription>
-                      </div>
-                      {getStatusBadge(booking.status)}
+              {pendingBookings.map((booking) => {
+                const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
+                const courtName = booking.court?.name || "Cancha Deportiva"
+                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const totalPrice = booking.pricing?.totalPrice ?? (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
+
+                return (
+                  <Card key={booking.id} className="overflow-hidden">
+                    <div className="aspect-video w-full overflow-hidden">
+                      <img
+                        src={courtImage}
+                        alt={venueName}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>
-                          {format(booking.date, "EEEE d 'de' MMMM", { locale: es })}
-                          {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
-                        </span>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle>{courtName}</CardTitle>
+                          <CardDescription>{venueName}</CardDescription>
+                        </div>
+                        {getStatusBadge(booking.status)}
                       </div>
-    
-                      <div className="flex items-center">
-                        <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>
-                          Duración: {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
-                        </span>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center">
+                          <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span>
+                            {formatSafeDate(booking.date, "EEEE d 'de' MMMM", { locale: es })}
+                            {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
+                          </span>
+                        </div>
+      
+                        <div className="flex items-center">
+                          <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span>
+                            Duración: {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
+                          </span>
+                        </div>
+                        <div className="font-medium">Precio: S/{totalPrice}</div>
                       </div>
-                      <div className="font-medium">Precio: S/{booking.pricing.totalPrice}</div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button variant="outline" onClick={() => handleViewDetails(booking)}>
-                      Ver detalles
-                    </Button>
-                    <Button onClick={() => handlePayment(booking)}>Pagar ahora</Button>
-                  </CardFooter>
-                </Card>
-              ))}
+                    </CardContent>
+                    <CardFooter className="flex justify-between">
+                      <Button variant="outline" onClick={() => handleViewDetails(booking)}>
+                        Ver detalles
+                      </Button>
+                      <Button onClick={() => handlePayment(booking)}>Pagar ahora</Button>
+                    </CardFooter>
+                  </Card>
+                )
+              })}
             </div>
           ) : (
             <Card>
@@ -375,49 +395,56 @@ export function UserBookingsContent() {
         <TabsContent value="past" className="mt-6">
           {pastBookings.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {pastBookings.map((booking) => (
-                <Card key={booking.id} className="overflow-hidden">
-                  <div className="aspect-video w-full overflow-hidden">
-                    <img
-                      src={booking.court.images[0] || "/placeholder.svg"}
-                      alt={booking.court.venue.name}
-                      className="h-full w-full object-cover opacity-70"
-                    />
-                  </div>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{booking.court.name}</CardTitle>
-                        <CardDescription>{booking.court.venue.name}</CardDescription>
-                      </div>
-                      {getStatusBadge(booking.status)}
+              {pastBookings.map((booking) => {
+                const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
+                const courtName = booking.court?.name || "Cancha Deportiva"
+                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const totalPrice = booking.pricing?.totalPrice ?? (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
+
+                return (
+                  <Card key={booking.id} className="overflow-hidden">
+                    <div className="aspect-video w-full overflow-hidden">
+                      <img
+                        src={courtImage}
+                        alt={venueName}
+                        className="h-full w-full object-cover opacity-70"
+                      />
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>
-                          {format(booking.date, "EEEE d 'de' MMMM", { locale: es })}
-                          {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
-                        </span>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle>{courtName}</CardTitle>
+                          <CardDescription>{venueName}</CardDescription>
+                        </div>
+                        {getStatusBadge(booking.status)}
                       </div>
-                      <div className="flex items-center">
-                        <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <span>
-                          Duración: {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
-                        </span>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center">
+                          <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span>
+                            {formatSafeDate(booking.date, "EEEE d 'de' MMMM", { locale: es })}
+                            {booking.startTime ? `, ${getBookingTimeRange(booking.startTime, booking.duration)}` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center">
+                          <ClockIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                          <span>
+                            Duración: {booking.duration} {booking.duration === 1 ? "hora" : "horas"}
+                          </span>
+                        </div>
+                        <div className="font-medium">Precio: S/{totalPrice}</div>
                       </div>
-                      <div className="font-medium">Precio: S/{booking.pricing.totalPrice}</div>
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    <Button variant="outline" className="w-full" onClick={() => handleViewDetails(booking)}>
-                      Ver detalles
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+                    </CardContent>
+                    <CardFooter>
+                      <Button variant="outline" className="w-full" onClick={() => handleViewDetails(booking)}>
+                        Ver detalles
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                )
+              })}
             </div>
           ) : (
             <Card>
@@ -437,21 +464,23 @@ export function UserBookingsContent() {
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle>Detalles de la Reserva</DialogTitle>
-              <DialogDescription>Información completa de tu reserva en {selectedBooking.court.venue.name}.</DialogDescription>
+              <DialogDescription>
+                Información completa de tu reserva en {selectedBooking.court?.venue?.name || "el Complejo Deportivo"}.
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
                   <AvatarFallback className="text-lg">
-                    {selectedBooking.court.venue.name
+                    {(selectedBooking.court?.venue?.name || "Complejo Deportivo")
                       .split(" ")
                       .map((n: string) => n[0])
                       .join("")}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h3 className="text-xl font-medium">{selectedBooking.court.name}</h3>
-                  <p className="text-muted-foreground">{selectedBooking.court.venue.name}</p>
+                  <h3 className="text-xl font-medium">{selectedBooking.court?.name || "Cancha Deportiva"}</h3>
+                  <p className="text-muted-foreground">{selectedBooking.court?.venue?.name || "Complejo Deportivo"}</p>
                 </div>
               </div>
 
@@ -464,7 +493,7 @@ export function UserBookingsContent() {
                 <div>
                   <h4 className="text-sm font-medium">Fecha y hora</h4>
                   <p className="text-sm text-muted-foreground">
-                    {format(selectedBooking.date, "EEEE d 'de' MMMM, yyyy", { locale: es })} de{" "}
+                    {formatSafeDate(selectedBooking.date, "EEEE d 'de' MMMM, yyyy", { locale: es })} de{" "}
                     {getBookingTimeRange(selectedBooking.startTime, selectedBooking.duration)}
                   </p>
                 </div>
@@ -478,13 +507,15 @@ export function UserBookingsContent() {
 
                 <div>
                   <h4 className="text-sm font-medium">Precio</h4>
-                  <p className="text-sm text-muted-foreground">S/ {selectedBooking.pricing.totalPrice}</p>
+                  <p className="text-sm text-muted-foreground">
+                    S/ {selectedBooking.pricing?.totalPrice ?? (selectedBooking.court ? (selectedBooking.duration * 2 * (parseFloat(selectedBooking.court.priceDay) || 0)) : 0)}
+                  </p>
                 </div>
 
                 <div>
                   <h4 className="text-sm font-medium">Código de reserva</h4>
                   <p className="text-sm font-mono text-muted-foreground">
-                    {`SC-${selectedBooking.id.toString().padStart(6, "0")}`}
+                    {`SC-${selectedBooking.id?.toString().padStart(6, "0") || "000000"}`}
                   </p>
                 </div>
 
@@ -497,36 +528,43 @@ export function UserBookingsContent() {
               </div>
             </div>
             <DialogFooter>
-              {selectedBooking.status === "confirmed" && selectedBooking.date > new Date() && (
-                <>
-                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cerrar
-                  </Button>
-                  <Button variant="destructive" onClick={handleCancelBooking} disabled={isLoading}>
-                    {isLoading ? <ClockIcon className="mr-2 h-4 w-4 animate-spin" /> : "Cancelar Reserva"}
-                  </Button>
-                </>
-              )}
-              {selectedBooking.status === "pending" && (
-                <>
-                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cerrar
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setIsDialogOpen(false)
-                      handlePayment(selectedBooking)
-                    }}
-                  >
-                    Pagar Ahora
-                  </Button>
-                </>
-              )}
-              {(selectedBooking.status === "completed" ||
-                selectedBooking.status === "cancelled" ||
-                (selectedBooking.status === "confirmed" && selectedBooking.date < new Date())) && (
-                <Button onClick={() => setIsDialogOpen(false)}>Cerrar</Button>
-              )}
+              {(() => {
+                const bookingDateTime = parseSafeDate(selectedBooking.date, selectedBooking.startTime)
+                const isFuture = bookingDateTime ? bookingDateTime >= new Date() : false
+                
+                if (selectedBooking.status === "confirmed" && isFuture) {
+                  return (
+                    <>
+                      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        Cerrar
+                      </Button>
+                      <Button variant="destructive" onClick={handleCancelBooking} disabled={isLoading}>
+                        {isLoading ? <ClockIcon className="mr-2 h-4 w-4 animate-spin" /> : "Cancelar Reserva"}
+                      </Button>
+                    </>
+                  )
+                }
+
+                if (selectedBooking.status === "pending") {
+                  return (
+                    <>
+                      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        Cerrar
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setIsDialogOpen(false)
+                          handlePayment(selectedBooking)
+                        }}
+                      >
+                        Pagar Ahora
+                      </Button>
+                    </>
+                  )
+                }
+
+                return <Button onClick={() => setIsDialogOpen(false)}>Cerrar</Button>
+              })()}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -539,23 +577,25 @@ export function UserBookingsContent() {
             <DialogHeader>
               <DialogTitle>Pagar Reserva</DialogTitle>
               <DialogDescription>
-                Completa el pago para confirmar tu reserva en {selectedBooking.court.name}.
+                Completa el pago para confirmar tu reserva en {selectedBooking.court?.name || "la cancha"}.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="rounded-lg bg-muted p-4">
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="font-medium">{selectedBooking.court.name}</h3>
-                  <span className="font-medium">S/ {selectedBooking.pricing.totalPrice}</span>
+                  <h3 className="font-medium">{selectedBooking.court?.name || "Cancha Deportiva"}</h3>
+                  <span className="font-medium">
+                    S/ {selectedBooking.pricing?.totalPrice ?? (selectedBooking.court ? (selectedBooking.duration * 2 * (parseFloat(selectedBooking.court.priceDay) || 0)) : 0)}
+                  </span>
                 </div>
                 <div className="space-y-1 text-sm text-muted-foreground">
                   <div className="flex items-center">
                     <MapPinIcon className="mr-2 h-4 w-4" />
-                    <span>{selectedBooking.court.venue.name}</span>
+                    <span>{selectedBooking.court?.venue?.name || "Complejo Deportivo"}</span>
                   </div>
                   <div className="flex items-center">
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    <span>{format(selectedBooking.date, "EEEE d 'de' MMMM", { locale: es })}</span>
+                    <span>{formatSafeDate(selectedBooking.date, "EEEE d 'de' MMMM", { locale: es })}</span>
                     <span>{selectedBooking.startTime}</span>
                   </div>
                   <div className="flex items-center">
@@ -568,10 +608,11 @@ export function UserBookingsContent() {
               </div>
 
               <div className="mt-4 space-y-2">
-            
                 <div className="flex items-center justify-between border-t pt-2">
                   <span className="font-medium">Total</span>
-                  <span className="font-medium">S/ {(selectedBooking.pricing.totalPrice)}</span>
+                  <span className="font-medium">
+                    S/ {selectedBooking.pricing?.totalPrice ?? (selectedBooking.court ? (selectedBooking.duration * 2 * (parseFloat(selectedBooking.court.priceDay) || 0)) : 0)}
+                  </span>
                 </div>
               </div>
             </div>

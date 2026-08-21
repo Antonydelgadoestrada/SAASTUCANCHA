@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { MembershipCronService } from './membership-cron.service';
 import { ClubMembership } from './entities/club_membership.entity';
+import { Club } from '../club/club.entity';
 import { MembershipStatus } from './enums/membership-status.enum';
 import { MailerService } from '../mailer/mailer.service';
 import { addDays, subDays } from 'date-fns';
@@ -9,11 +10,18 @@ import { addDays, subDays } from 'date-fns';
 describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
   let service: MembershipCronService;
   let membershipRepo: any;
+  let clubRepo: any;
   let mailerService: any;
 
   const mockMembershipRepo = {
     find: jest.fn(),
     save: jest.fn((m) => Promise.resolve(m)),
+  };
+
+  const mockClubRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn((c) => Promise.resolve(c)),
   };
 
   const mockMailerService = {
@@ -33,6 +41,10 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
           useValue: mockMembershipRepo,
         },
         {
+          provide: getRepositoryToken(Club),
+          useValue: mockClubRepo,
+        },
+        {
           provide: MailerService,
           useValue: mockMailerService,
         },
@@ -41,6 +53,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
 
     service = module.get<MembershipCronService>(MembershipCronService);
     membershipRepo = module.get(getRepositoryToken(ClubMembership));
+    clubRepo = module.get(getRepositoryToken(Club));
     mailerService = module.get(MailerService);
   });
 

@@ -36,6 +36,8 @@ export interface PaymentItem {
   motivoRechazo?: string | null
   createdAt: string
   fechaConfirmacion?: string | null
+  autoConfirmed?: boolean
+  pendingAudit?: boolean
   booking?: {
     id: string
     bookingReference?: string
@@ -44,6 +46,8 @@ export interface PaymentItem {
     endTime?: string
     court?: { id: string; name: string }
     customerInfo?: { name: string; email: string; phone?: string }
+    autoConfirmed?: boolean
+    pendingAudit?: boolean
   }
   user?: { id: string; name: string; email: string }
   confirmadoPor?: { id: string; name: string }

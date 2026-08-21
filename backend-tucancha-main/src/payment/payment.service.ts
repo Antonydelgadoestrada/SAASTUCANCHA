@@ -55,11 +55,16 @@ export class PaymentService {
     return this.paymentRepo.delete(id);
   }
  
-  async handleOauthCallback(code: string, clubId) {
-    // Obtenemos las credenciales del usuario usando el code que obtuvimos de oauth
-    try{
+  async handleOauthCallback(code: string, clubId: string) {
+    try {
       if (!process.env.MP_CLIENT_ID || !process.env.MP_CLIENT_SECRET || !code || !process.env.SERVICES_URL) {
-        throw new Error(`Faltan valores requeridos para OAuth. ${process.env.MP_CLIENT_ID}`);
+        console.error('⚠️ Faltan valores requeridos para OAuth de Mercado Pago:', {
+          clientId: Boolean(process.env.MP_CLIENT_ID),
+          clientSecret: Boolean(process.env.MP_CLIENT_SECRET),
+          code: Boolean(code),
+          servicesUrl: Boolean(process.env.SERVICES_URL),
+        });
+        return { redirect: `${process.env.WEB_SERVICES_URL}/club/payments?mp_error=missing_config` };
       }
       const credentials = await new OAuth(this.mercadopago).create({
         body: {
@@ -69,13 +74,14 @@ export class PaymentService {
           redirect_uri: `${process.env.SERVICES_URL}/payments/oauth/callback`,
         },
       });
-      const { access_token, refresh_token, user_id, expires_in} = credentials
-      const tokenExpiresAt = addSeconds(new Date(), expires_in)
-      await this.clubsService.updateClubWithMP(user_id, access_token, refresh_token, clubId, tokenExpiresAt)
-      // Devolvemos las credenciales
-      return {redirect: `${process.env.WEB_SERVICES_URL}/club/mercadopago`};
-    }catch(error){
-      throw new Error(`handleOauthCallback error ${error.response?.data || error.message || error}`)
+      const { access_token, refresh_token, user_id, expires_in } = credentials;
+      const tokenExpiresAt = addSeconds(new Date(), expires_in || 15552000);
+      await this.clubsService.updateClubWithMP(user_id, access_token, refresh_token, clubId, tokenExpiresAt);
+      console.log(`✅ [MercadoPago OAuth] Club ${clubId} vinculado exitosamente con MP User ${user_id}`);
+      return { redirect: `${process.env.WEB_SERVICES_URL}/club/payments?mp_status=connected` };
+    } catch (error: any) {
+      console.error('⚠️ [MercadoPago OAuth Callback Error]:', error?.response?.data || error?.message || error);
+      return { redirect: `${process.env.WEB_SERVICES_URL}/club/payments?mp_error=expired_or_used` };
     }
   }
 

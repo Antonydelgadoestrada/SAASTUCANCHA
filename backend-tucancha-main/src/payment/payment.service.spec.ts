@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { PaymentService } from './payment.service';
 import { Payment } from './payment.entity';
+import { Booking } from '../booking/booking.entity';
 import { PaymentStatus } from './payment-status.enum';
 import { BookingStatus } from '../booking/booking-status.enum';
 import { BookingService } from '../booking/booking.service';
@@ -34,6 +35,7 @@ jest.mock('mercadopago', () => {
 describe('PaymentService - Booking Webhook & Idempotency', () => {
   let service: PaymentService;
   let paymentRepo: any;
+  let bookingRepo: any;
   let bookingService: any;
   let mailerService: any;
   let scheduleTemplateService: any;
@@ -48,6 +50,12 @@ describe('PaymentService - Booking Webhook & Idempotency', () => {
     manager: {
       transaction: jest.fn(),
     },
+  };
+
+  const mockBookingRepo = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+    save: jest.fn((b) => Promise.resolve(b)),
   };
 
   const mockBookingService = {
@@ -80,6 +88,10 @@ describe('PaymentService - Booking Webhook & Idempotency', () => {
           useValue: mockPaymentRepo,
         },
         {
+          provide: getRepositoryToken(Booking),
+          useValue: mockBookingRepo,
+        },
+        {
           provide: BookingService,
           useValue: mockBookingService,
         },
@@ -100,6 +112,7 @@ describe('PaymentService - Booking Webhook & Idempotency', () => {
 
     service = module.get<PaymentService>(PaymentService);
     paymentRepo = module.get(getRepositoryToken(Payment));
+    bookingRepo = module.get(getRepositoryToken(Booking));
     bookingService = module.get(BookingService);
     mailerService = module.get(MailerService);
     scheduleTemplateService = module.get(ScheduleTemplateService);

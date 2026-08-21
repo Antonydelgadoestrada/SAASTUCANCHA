@@ -63,8 +63,17 @@ import { GetUser } from '../auth/get-user.decorator';
     }
 
     @Get('authorize')
-    async authorize( @Query('clubId') clubId: string,) {
-      return this.service.authorize(clubId)
+    async authorize(
+      @Query('clubId') clubId: string,
+      @Res() res: Response,
+      @Req() req: any,
+    ) {
+      const url = await this.service.authorize(clubId);
+      const isHtmlRequest = req.headers?.accept?.includes('text/html');
+      if (isHtmlRequest) {
+        return res.redirect(url);
+      }
+      return res.json({ url });
     }
     
     @Post('webhook')

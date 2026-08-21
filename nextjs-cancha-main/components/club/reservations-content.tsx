@@ -31,7 +31,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon, Download, Filter, MoreHorizontal, Plus, Search, X } from "lucide-react"
 import { ReservationForm, reservationSchema } from "@/components/club/reservation-form"
-import { cn } from "@/lib/utils"
+import { cn, formatSafeDate } from "@/lib/utils"
 import { Venues } from "./courts-content"
 import { getAllVenues } from "@/lib/venues"
 import { toast } from "sonner"
@@ -512,7 +512,7 @@ export function ReservationsContent() {
                     <div className="text-sm text-muted-foreground">{reservation.court.venue.name}</div>
                   </TableCell>
                   <TableCell>
-                    <div>{format(reservation.date, "dd/MM/yyyy")}</div>
+                    <div>{formatSafeDate(reservation.date, "dd/MM/yyyy")}</div>
                     <div className="text-sm text-muted-foreground">
                     {reservation.startTime} - {reservation.endTime}
                     </div>
@@ -586,7 +586,7 @@ export function ReservationsContent() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Fecha:</span>
-                    <span>{format(reservation.date, "dd/MM/yyyy")}</span>
+                    <span>{formatSafeDate(reservation.date, "dd/MM/yyyy")}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Hora:</span>

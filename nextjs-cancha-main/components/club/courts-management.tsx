@@ -132,11 +132,11 @@ export function CourtsManagement() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas las sedes</SelectItem>
-              {venues.map((venue) => (
+              {venues.map((venue) => venue.name ? (
                 <SelectItem key={venue.id} value={venue.name}>
                   {venue.name}
                 </SelectItem>
-              ))}
+              ) : null)}
             </SelectContent>
           </Select>
 

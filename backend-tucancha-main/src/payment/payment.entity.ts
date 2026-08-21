@@ -94,6 +94,12 @@ export class Payment {
   @JoinColumn({ name: 'confirmadoPorId' })
   confirmadoPor?: User;
 
+  @Column({ default: false })
+  autoConfirmed: boolean;
+
+  @Column({ default: false })
+  pendingAudit: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

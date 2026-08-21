@@ -183,11 +183,11 @@ export function ClubCourtsContent() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas las sedes</SelectItem>
-              {venues.map((venue) => (
-                <SelectItem key={venue.id} value={venue.name ?? '' }>
+              {venues.map((venue) => venue.name ? (
+                <SelectItem key={venue.id} value={venue.name}>
                   {venue.name}
                 </SelectItem>
-              ))}
+              ) : null)}
             </SelectContent>
           </Select>
 

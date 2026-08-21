@@ -37,7 +37,14 @@ function fmt(val: number) {
   return `S/ ${val.toFixed(2)}`
 }
 
-function statusBadge(status: string) {
+function statusBadge(status: string, autoConfirmed?: boolean, pendingAudit?: boolean) {
+  if (autoConfirmed || pendingAudit) {
+    return (
+      <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-300 font-medium text-xs">
+        🛡️ Auto-Confirmado (Por Auditar)
+      </Badge>
+    )
+  }
   const map: Record<string, { label: string; className: string }> = {
     PENDIENTE: { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
     PENDING:   { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
@@ -115,7 +122,14 @@ function PaymentDetailModal({
 
   if (!payment) return null
 
-  const isPending = payment.status === "PENDIENTE" || payment.status === "PENDING"
+  const isAuditPending =
+    payment.status === "PENDIENTE" ||
+    payment.status === "PENDING" ||
+    payment.pendingAudit ||
+    payment.booking?.pendingAudit ||
+    payment.autoConfirmed ||
+    payment.booking?.autoConfirmed
+  const isAutoConfirmed = payment.autoConfirmed || payment.booking?.autoConfirmed
   const booking = payment.booking
   const customer = booking?.customerInfo
 
@@ -125,11 +139,17 @@ function PaymentDetailModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ReceiptIcon className="w-5 h-5 text-emerald-600" />
-            Detalle de Pago
+            Detalle de Pago y Auditoría
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
+          {isAutoConfirmed && (
+            <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl text-xs text-sky-800 dark:text-sky-300">
+              <strong>🛡️ Cancha Asegurada Automáticamente:</strong> El usuario subió su comprobante y pasaron más de 2 horas sin auditar. El sistema aseguró su turno. Por favor revisa el comprobante a continuación para validar la transacción.
+            </div>
+          )}
+
           {/* Info de reserva */}
           <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border">
             <div>
@@ -208,7 +228,7 @@ function PaymentDetailModal({
           )}
 
           {/* Acciones de auditoría */}
-          {isPending && (
+          {isAuditPending && (
             <>
               {showRejectInput && (
                 <div className="space-y-2">
@@ -226,7 +246,7 @@ function PaymentDetailModal({
           )}
         </div>
 
-        {isPending && (
+        {isAuditPending && (
           <DialogFooter className="flex gap-2 pt-2">
             {!showRejectInput ? (
               <>
@@ -435,11 +455,17 @@ function MetricsAuditTab() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {payments.map((p) => {
                   const customer = p.booking?.customerInfo
-                  const isPending = p.status === "PENDIENTE" || p.status === "PENDING"
+                  const isAuditRequired =
+                    p.status === "PENDIENTE" ||
+                    p.status === "PENDING" ||
+                    p.pendingAudit ||
+                    p.booking?.pendingAudit ||
+                    p.autoConfirmed ||
+                    p.booking?.autoConfirmed
                   return (
                     <tr
                       key={p.id}
-                      className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${isPending ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}
+                      className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${isAuditRequired ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}
                     >
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-800 dark:text-slate-200">
@@ -455,7 +481,7 @@ function MetricsAuditTab() {
                       </td>
                       <td className="px-4 py-3">{methodBadge(p.method)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{p.type}</td>
-                      <td className="px-4 py-3">{statusBadge(p.status)}</td>
+                      <td className="px-4 py-3">{statusBadge(p.status, p.autoConfirmed || p.booking?.autoConfirmed, p.pendingAudit || p.booking?.pendingAudit)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">
                         {format(new Date(p.createdAt), "dd/MM HH:mm")}
                       </td>
@@ -463,11 +489,11 @@ function MetricsAuditTab() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className={`h-8 px-3 text-xs font-medium ${isPending ? "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700" : "text-slate-500"}`}
+                          className={`h-8 px-3 text-xs font-medium ${isAuditRequired ? "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700" : "text-slate-500"}`}
                           onClick={() => openDetail(p)}
                         >
                           <EyeIcon className="w-3.5 h-3.5 mr-1" />
-                          {isPending ? "Auditar" : "Ver"}
+                          {isAuditRequired ? "Auditar" : "Ver"}
                         </Button>
                       </td>
                     </tr>
