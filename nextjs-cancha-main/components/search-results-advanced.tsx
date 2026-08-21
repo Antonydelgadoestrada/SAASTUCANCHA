@@ -503,7 +503,7 @@ export function SearchResults({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <CardTitle className="line-clamp-1">{court.name}</CardTitle>
-              <CardDescription className="line-clamp-1">{court.venue}</CardDescription>
+              <CardDescription className="line-clamp-1">{court.club}</CardDescription>
             </div>
 
             {showPromo && (
@@ -688,7 +688,7 @@ export function SearchResults({
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedCourt?.name}</DialogTitle>
-            <DialogDescription>{selectedCourt?.venue}</DialogDescription>
+            <DialogDescription>{selectedCourt?.club}</DialogDescription>
           </DialogHeader>
 
           {selectedCourt && (
@@ -860,7 +860,7 @@ export function SearchResults({
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Reservar {selectedCourt?.name}</DialogTitle>
-            <DialogDescription>{selectedCourt?.venue}</DialogDescription>
+            <DialogDescription>{selectedCourt?.club}</DialogDescription>
           </DialogHeader>
 
           {selectedCourt && (

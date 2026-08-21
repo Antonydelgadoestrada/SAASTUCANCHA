@@ -85,7 +85,7 @@ export class CourtService {
       rating: null,
       reviews: null,
       time: court.minimumBookingTime,
-      venue: club
+      club: club
         ? {
             id: club.id,
             name: club.name,
@@ -217,7 +217,6 @@ export class CourtService {
         return {
           id,
           name,
-          venue: club?.name || '', // Map club name to venue field for frontend compatibility
           club: club?.name || '',
           sport: type,
           price: Number(price),
@@ -421,7 +420,10 @@ export class CourtService {
   }
 
   async update(id: string, data: CourtUpdateDto) {
-    if ((data as any).venue) delete (data as any).venue;
+    if ((data as any).courtId) delete (data as any).courtId;
+    
+    // We already removed venue mappings, just cleaning up other fields.
+    if ((data as any).club) delete (data as any).club;
 
     if (Object.prototype.hasOwnProperty.call(data as any, 'schedule_template_id')) {
       const currentCourt = await this.courtRepo.findOne({

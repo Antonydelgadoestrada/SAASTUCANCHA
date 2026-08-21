@@ -256,7 +256,7 @@ export function UserBookingsContent() {
                   <div className="aspect-video w-full overflow-hidden">
                     <img
                       src={booking.court.images[0] || "/placeholder.svg"}
-                      alt={booking.court.venue.name}
+                      alt={booking.court?.club?.name || booking.club?.name}
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -264,7 +264,7 @@ export function UserBookingsContent() {
                     <div className="flex items-start justify-between">
                       <div>
                         <CardTitle>{booking.court.name}</CardTitle>
-                        <CardDescription>{booking.court.venue.name}</CardDescription>
+                        <CardDescription>{booking.court?.club?.name || booking.club?.name}</CardDescription>
                       </div>
                       {getStatusBadge(booking.status)}
                     </div>
@@ -320,7 +320,7 @@ export function UserBookingsContent() {
                   <div className="aspect-video w-full overflow-hidden">
                     <img
                        src={booking.court.images[0] || "/placeholder.svg"}
-                       alt={booking.court.venue.name}
+                       alt={booking.court?.club?.name || booking.club?.name}
                        className="h-full w-full object-cover"
                     />
                   </div>
@@ -328,7 +328,7 @@ export function UserBookingsContent() {
                     <div className="flex items-start justify-between">
                       <div>
                         <CardTitle>{booking.court.name}</CardTitle>
-                        <CardDescription>{booking.court.venue.name}</CardDescription>
+                        <CardDescription>{booking.court?.club?.name || booking.club?.name}</CardDescription>
                       </div>
                       {getStatusBadge(booking.status)}
                     </div>
@@ -380,7 +380,7 @@ export function UserBookingsContent() {
                   <div className="aspect-video w-full overflow-hidden">
                     <img
                       src={booking.court.images[0] || "/placeholder.svg"}
-                      alt={booking.court.venue.name}
+                      alt={booking.court?.club?.name || booking.club?.name}
                       className="h-full w-full object-cover opacity-70"
                     />
                   </div>
@@ -388,7 +388,7 @@ export function UserBookingsContent() {
                     <div className="flex items-start justify-between">
                       <div>
                         <CardTitle>{booking.court.name}</CardTitle>
-                        <CardDescription>{booking.court.venue.name}</CardDescription>
+                        <CardDescription>{booking.court?.club?.name || booking.club?.name}</CardDescription>
                       </div>
                       {getStatusBadge(booking.status)}
                     </div>
@@ -437,13 +437,13 @@ export function UserBookingsContent() {
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle>Detalles de la Reserva</DialogTitle>
-              <DialogDescription>Información completa de tu reserva en {selectedBooking.court.venue.name}.</DialogDescription>
+              <DialogDescription>Información completa de tu reserva en {selectedBooking.court?.club?.name || selectedBooking.club?.name}.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
                   <AvatarFallback className="text-lg">
-                    {selectedBooking.court.venue.name
+                    {(selectedBooking.court?.club?.name || selectedBooking.club?.name)
                       .split(" ")
                       .map((n: string) => n[0])
                       .join("")}
@@ -451,7 +451,7 @@ export function UserBookingsContent() {
                 </Avatar>
                 <div>
                   <h3 className="text-xl font-medium">{selectedBooking.court.name}</h3>
-                  <p className="text-muted-foreground">{selectedBooking.court.venue.name}</p>
+                  <p className="text-muted-foreground">{selectedBooking.court?.club?.name || selectedBooking.club?.name}</p>
                 </div>
               </div>
 
@@ -551,7 +551,7 @@ export function UserBookingsContent() {
                 <div className="space-y-1 text-sm text-muted-foreground">
                   <div className="flex items-center">
                     <MapPinIcon className="mr-2 h-4 w-4" />
-                    <span>{selectedBooking.court.venue.name}</span>
+                    <span>{selectedBooking.court?.club?.name || selectedBooking.club?.name}</span>
                   </div>
                   <div className="flex items-center">
                     <CalendarIcon className="mr-2 h-4 w-4" />
