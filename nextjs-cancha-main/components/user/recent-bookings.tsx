@@ -22,7 +22,17 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
       if (isPastStatus) return true
       
       if (!booking.date || !booking.startTime) return false;
-      const bookingDateTime = new Date(`${booking.date}T${booking.startTime}:00`)
+      
+      // Intentar parsear la fecha de forma segura
+      let bookingDateTime = new Date();
+      if (booking.date.includes('T')) {
+          bookingDateTime = new Date(booking.date);
+      } else {
+          bookingDateTime = new Date(`${booking.date}T${booking.startTime}:00`);
+      }
+      
+      if (isNaN(bookingDateTime.getTime())) return false; // Si falla, lo descartamos
+      
       return bookingDateTime < new Date()
     })
     .slice(0, 5) // Mostrar máximo 5
@@ -88,8 +98,18 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
               </TableHeader>
               <TableBody>
                 {recentBookings.map((booking) => {
-                  const safeDate = booking.date ? new Date(booking.date + "T00:00:00") : new Date()
-                  const formattedDate = booking.date ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
+                  // Safely parse date
+                  let safeDate = new Date();
+                  let isValidDate = false;
+                  if (booking.date) {
+                      const d = new Date(booking.date.includes('T') ? booking.date : booking.date + "T00:00:00");
+                      if (!isNaN(d.getTime())) {
+                          safeDate = d;
+                          isValidDate = true;
+                      }
+                  }
+                  
+                  const formattedDate = isValidDate ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
                   const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
                   return (
                     <TableRow key={booking.id}>
@@ -144,8 +164,18 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
       {/* Vista para móvil */}
       <div className="grid gap-4 md:hidden">
         {recentBookings.map((booking) => {
-          const safeDate = booking.date ? new Date(booking.date + "T00:00:00") : new Date()
-          const formattedDate = booking.date ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
+          // Safely parse date
+          let safeDate = new Date();
+          let isValidDate = false;
+          if (booking.date) {
+              const d = new Date(booking.date.includes('T') ? booking.date : booking.date + "T00:00:00");
+              if (!isNaN(d.getTime())) {
+                  safeDate = d;
+                  isValidDate = true;
+              }
+          }
+          
+          const formattedDate = isValidDate ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
           const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
           return (
             <Card key={booking.id} className="shadow-sm">
