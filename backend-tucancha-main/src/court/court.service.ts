@@ -361,9 +361,11 @@ export class CourtService {
   
       const result = await qb.getMany();
       if (result.length === 0) return [];
+      
+      const courtsWithFallback = await this.applyScheduleTemplateFallback(result);
   
       const courtsWithVirtual = await Promise.all(
-        result.map(async (court) => {
+        courtsWithFallback.map(async (court) => {
           const virtualAvailabilities = await this.getVirtualAvailability(court, targetDate);
           (court as any).availabilities = virtualAvailabilities;
           return court;
