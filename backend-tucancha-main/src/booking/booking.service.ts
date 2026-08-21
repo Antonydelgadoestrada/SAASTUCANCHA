@@ -13,7 +13,7 @@ import { UserService } from '../user/user.service';
 import { In } from 'typeorm';
 import { addMinutes, format } from 'date-fns';
 import { Club } from '../club/club.entity';
-import { VenueService } from '../venue/venue.service';
+
 import { S3Service } from '../aws/s3.service';
 import { MailerService } from '../mailer/mailer.service';
 import { isNight } from '../helpers/helpers';
@@ -58,7 +58,7 @@ export class BookingService {
     private readonly courtService: CourtService,
     private readonly mercadoPagoService: MercadoPagoService,
     private readonly userService: UserService,
-    private readonly venueService: VenueService,
+
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
 
@@ -89,7 +89,7 @@ export class BookingService {
       where:{
         user: { id: user.id },
       },
-      relations:['court', 'court.venue', 'court.venue.club', 'club'],
+      relations:['court', 'court.club'],
       order: {
         date: 'DESC', // 👈 ordenar por fecha descendente
       },
@@ -101,7 +101,7 @@ export class BookingService {
         where:{
           club: { id: club.id },
         },
-        relations:['court', 'court.venue'],
+        relations:['court', 'court.club'],
         order: {
           date: 'DESC', // 👈 ordenar por fecha descendente
         },
@@ -118,7 +118,7 @@ export class BookingService {
  async createObjectBooking({userEmail,duration,startTime,endTime , courtId, date}: CreateManualBookingDto, user: User){
   const userReservation = await this.userService.findByEmail(userEmail);
   if(!userReservation) throw new NotFoundException(`email: ${userEmail} no encontrado`)
-  const court = await this.courtService.findOne(courtId , ['venue', 'venue.club']);
+  const court: any = await this.courtService.findOne(courtId , ['club']);
   endTime = getEndTime(startTime, duration);
   if (!court) throw new NotFoundException('Cancha no encontrada');
   const price = isNight()
@@ -128,7 +128,7 @@ export class BookingService {
   return {
     user,
     court,
-    club: court.venue.club,
+    club: court.club,
     date: new Date(date),
     startTime: startTime,
     endTime: endTime,
@@ -200,7 +200,7 @@ export class BookingService {
     const pricing = dto.pricing ? JSON.parse(dto.pricing) : null;
     if(!userReservation) throw new NotFoundException(`email: ${dto.userEmail} no encontrado`)
     let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, dto.duration);
-    const court = await this.courtService.findOne(dto.courtId , ['venue', 'venue.club']);
+    const court: any = await this.courtService.findOne(dto.courtId , ['club']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
     const booking = this.bookingRepo.create({
       user:userReservation,
@@ -239,7 +239,7 @@ export class BookingService {
     const booking = this.bookingRepo.create({
       user,
       court,
-      club: court.venue.club,
+      club: court.club,
       date: new Date(dto.date),
       startTime: dto.startTime,
       endTime: dto.endTime,
@@ -288,7 +288,7 @@ export class BookingService {
   }
 
   findOneComplete(id: string) {
-    return this.bookingRepo.findOne({ where: { id }, relations: ['user', 'court', 'court.venue', 'club']});
+    return this.bookingRepo.findOne({ where: { id }, relations: ['user', 'court', 'club']});
   }
 
   findOneByClub(id: string) {
@@ -372,10 +372,8 @@ export class BookingService {
  
   async getCountByCloud(clubId: string){
     const courts = await this.courtService.totalByClub(clubId);
-    const venues = await this.venueService.totalByClub(clubId);
     return {
-      courts,
-      venues
+      courts
     }
   }
 
@@ -412,13 +410,11 @@ export class BookingService {
       .createQueryBuilder('booking')
       .leftJoin('booking.user', 'user')
       .leftJoin('booking.court', 'court')
-      .leftJoin('court.venue', 'venue')
       .select([
         'booking.id AS id',
         'booking.date AS date',
         'user.name AS userName',
         'user.email AS userEmail',
-        'venue.name AS venue',
         'court.name AS court',
         'booking.duration AS duration',
         "(booking.pricing->>'totalPrice')::numeric AS price",
@@ -440,8 +436,7 @@ export class BookingService {
       id: row.id,
       date: row.date,
       userName: row.userName,
-      userEmail: row.userEmail,
-      venue: row.venue,
+      userEmail: row.useremail,
       court: row.court,
       duration: Number(row.duration),
       price: Number(row.price),

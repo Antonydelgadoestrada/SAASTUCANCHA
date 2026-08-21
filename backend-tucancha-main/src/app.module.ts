@@ -12,7 +12,6 @@ import { ReviewModule } from './review/review.module';
 import { PromotionModule } from './promotion/promotion.module';
 import { AuthModule } from './auth/auth.module';
 import { MailerModule } from './mailer/mailer.module';
-import { VenueModule } from './venue/venue.module';
 import { ScheduleCalendarModule } from './schedule/schedule.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { QrModule } from './qr/qr.module';
@@ -51,7 +50,7 @@ import { MembershipModule } from './membership/membership.module';
     ScheduleModule.forRoot(),
     UserModule, BookingModule, ClubModule, CourtModule, 
     PaymentModule, ReviewModule, PromotionModule, AuthModule, 
-    MailerModule, VenueModule, ScheduleCalendarModule, QrModule,
+    MailerModule, ScheduleCalendarModule, QrModule,
     MembershipModule
   ],
   controllers: [AppController],

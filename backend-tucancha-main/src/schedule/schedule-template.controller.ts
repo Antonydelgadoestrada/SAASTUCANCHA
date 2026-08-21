@@ -46,14 +46,6 @@ export class ScheduleTemplateController {
     return this.templateService.create(body)
   }
 
-  @Get('court-availability')
-  async getAvailability(
-    @Query('venueId') venueId: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string
-  ) {
-    return this.templateService.getAvailabilityByVenueAndDates(venueId, startDate, endDate)
-  }
 
   @UseGuards(JwtAuthGuard)
   @Put(':id')

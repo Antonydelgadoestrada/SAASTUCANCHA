@@ -345,10 +345,10 @@ export function UserBookingsContent() {
               {upcomingBookings.map((booking) => {
                 const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
                 const courtName = booking.court?.name || "Cancha Deportiva"
-                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const venueName = booking.court?.club?.name || booking.club?.name || "Complejo Deportivo"
                 const totalPrice = getBookingTotalPrice(booking)
 
-                const clubWhatsApp = booking.court?.venue?.club?.whatsapp || booking.club?.whatsapp || booking.court?.venue?.phone || booking.club?.phone
+                const clubWhatsApp = booking.court?.club?.whatsapp || booking.club?.whatsapp || booking.club?.phone
 
                 return (
                   <Card key={booking.id} className="overflow-hidden flex flex-col justify-between">
@@ -443,9 +443,9 @@ export function UserBookingsContent() {
               {pendingBookings.map((booking) => {
                 const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
                 const courtName = booking.court?.name || "Cancha Deportiva"
-                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const venueName = booking.court?.club?.name || booking.club?.name || "Complejo Deportivo"
                 const totalPrice = getBookingTotalPrice(booking)
-                const clubWhatsApp = booking.court?.venue?.club?.whatsapp || booking.club?.whatsapp || booking.court?.venue?.phone || booking.club?.phone
+                const clubWhatsApp = booking.court?.club?.whatsapp || booking.club?.whatsapp || booking.club?.phone
 
                 return (
                   <Card key={booking.id} className="overflow-hidden flex flex-col justify-between">
@@ -536,9 +536,9 @@ export function UserBookingsContent() {
               {pastBookings.map((booking) => {
                 const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
                 const courtName = booking.court?.name || "Cancha Deportiva"
-                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const venueName = booking.court?.club?.name || booking.club?.name || "Complejo Deportivo"
                 const totalPrice = getBookingTotalPrice(booking)
-                const clubWhatsApp = booking.court?.venue?.club?.whatsapp || booking.club?.whatsapp || booking.court?.venue?.phone || booking.club?.phone
+                const clubWhatsApp = booking.court?.club?.whatsapp || booking.club?.whatsapp || booking.club?.phone
 
                 return (
                   <Card key={booking.id} className="overflow-hidden flex flex-col justify-between">
@@ -627,14 +627,14 @@ export function UserBookingsContent() {
             <DialogHeader>
               <DialogTitle>Detalles de la Reserva</DialogTitle>
               <DialogDescription>
-                Información completa de tu reserva en {selectedBooking.court?.venue?.name || "el Complejo Deportivo"}.
+                Información completa de tu reserva en {selectedBooking.court?.club?.name || selectedBooking.club?.name || "el Complejo Deportivo"}.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
                   <AvatarFallback className="text-lg">
-                    {(selectedBooking.court?.venue?.name || "Complejo Deportivo")
+                    {(selectedBooking.court?.club?.name || selectedBooking.club?.name || "Complejo Deportivo")
                       .split(" ")
                       .map((n: string) => n[0])
                       .join("")}
@@ -642,7 +642,7 @@ export function UserBookingsContent() {
                 </Avatar>
                 <div>
                   <h3 className="text-xl font-medium">{selectedBooking.court?.name || "Cancha Deportiva"}</h3>
-                  <p className="text-muted-foreground">{selectedBooking.court?.venue?.name || "Complejo Deportivo"}</p>
+                  <p className="text-muted-foreground">{selectedBooking.court?.club?.name || selectedBooking.club?.name || "Complejo Deportivo"}</p>
                 </div>
               </div>
 
@@ -689,14 +689,14 @@ export function UserBookingsContent() {
                 </div>
 
                 {(() => {
-                  const modalWhatsApp = selectedBooking.court?.venue?.club?.whatsapp || selectedBooking.club?.whatsapp || selectedBooking.court?.venue?.phone || selectedBooking.club?.phone
+                  const modalWhatsApp = selectedBooking.court?.club?.whatsapp || selectedBooking.club?.whatsapp || selectedBooking.club?.phone
                   if (!modalWhatsApp) return null
                   return (
                     <div className="pt-2">
                       <a
                         href={getWhatsAppLink(
                           modalWhatsApp,
-                          `¡Hola! Tengo una consulta sobre mi reserva #${selectedBooking.id} para la cancha "${selectedBooking.court?.name || "Cancha"}" (${selectedBooking.court?.venue?.name || ""}) el ${formatSafeDate(selectedBooking.date, "dd/MM/yyyy", { locale: es })}.`
+                          `¡Hola! Tengo una consulta sobre mi reserva #${selectedBooking.id} para la cancha "${selectedBooking.court?.name || "Cancha"}" (${selectedBooking.court?.club?.name || selectedBooking.club?.name || ""}) el ${formatSafeDate(selectedBooking.date, "dd/MM/yyyy", { locale: es })}.`
                         )}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -781,7 +781,7 @@ export function UserBookingsContent() {
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <div className="flex items-center">
                     <MapPinIcon className="mr-2 h-3.5 w-3.5" />
-                    <span>{selectedBooking.court?.venue?.name || "Complejo Deportivo"}</span>
+                    <span>{selectedBooking.court?.club?.name || selectedBooking.club?.name || "Complejo Deportivo"}</span>
                   </div>
                   <div className="flex items-center">
                     <CalendarIcon className="mr-2 h-3.5 w-3.5" />
@@ -860,9 +860,8 @@ export function UserBookingsContent() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                     {/* Número */}
                     {(() => {
-                      const club = selectedBooking.court?.venue?.club || selectedBooking.club
-                      const venue = selectedBooking.court?.venue
-                      const phone = (payMethod === "yape" ? club?.yapeNumero : club?.plinNumero) || club?.whatsapp || venue?.phone || club?.phone || "987 654 321"
+                      const club = selectedBooking.court?.club || selectedBooking.club
+                      const phone = (payMethod === "yape" ? club?.yapeNumero : club?.plinNumero) || club?.whatsapp || club?.phone || "987 654 321"
                       return (
                         <div className="p-2.5 bg-card rounded-lg border space-y-1">
                           <span className="text-[11px] text-muted-foreground">Número de {payMethod === "yape" ? "Yape" : "Plin"}:</span>
@@ -885,7 +884,7 @@ export function UserBookingsContent() {
 
                     {/* QR */}
                     {(() => {
-                      const club = selectedBooking.court?.venue?.club || selectedBooking.club
+                      const club = selectedBooking.court?.club || selectedBooking.club
                       const qrUrl = payMethod === "yape" ? club?.yapeQrUrl : club?.plinQrUrl
                       return (
                         <div className="p-2.5 bg-card rounded-lg border flex items-center justify-between gap-2">
