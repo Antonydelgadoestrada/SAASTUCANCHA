@@ -145,6 +145,26 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
     fetchAvailability();
   }, [selectedCourt, selectedDate]);
 
+  // Autocompletar el precio basado en la cancha, duración y hora
+  useEffect(() => {
+    if (selectedCourt && duration) {
+      const courtObj = courts.find(c => c.id === selectedCourt || c.id === parseInt(selectedCourt));
+      if (courtObj) {
+        let basePrice = Number(courtObj.priceDay) || 0;
+        if (startTime) {
+          const [h] = startTime.split(":").map(Number);
+          if (h >= 18) {
+            basePrice = Number(courtObj.priceNight) || basePrice;
+          }
+        }
+        const total = basePrice * parseFloat(duration);
+        setPrice(total.toString());
+      }
+    } else {
+      setPrice("0");
+    }
+  }, [selectedCourt, duration, startTime, courts]);
+
   // Calcular hora de fin
   const calculateEndTime = () => {
     if (!startTime) return ""
