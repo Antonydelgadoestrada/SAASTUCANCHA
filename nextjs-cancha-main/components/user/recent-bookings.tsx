@@ -21,6 +21,7 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
       const isPastStatus = booking.status === "completed" || booking.status === "cancelled"
       if (isPastStatus) return true
       
+      if (!booking.date || !booking.startTime) return false;
       const bookingDateTime = new Date(`${booking.date}T${booking.startTime}:00`)
       return bookingDateTime < new Date()
     })
@@ -87,7 +88,8 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
               </TableHeader>
               <TableBody>
                 {recentBookings.map((booking) => {
-                  const formattedDate = format(new Date(booking.date + "T00:00:00"), "d MMM yyyy", { locale: es })
+                  const safeDate = booking.date ? new Date(booking.date + "T00:00:00") : new Date()
+                  const formattedDate = booking.date ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
                   const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
                   return (
                     <TableRow key={booking.id}>
@@ -142,7 +144,8 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
       {/* Vista para móvil */}
       <div className="grid gap-4 md:hidden">
         {recentBookings.map((booking) => {
-          const formattedDate = format(new Date(booking.date + "T00:00:00"), "d MMM yyyy", { locale: es })
+          const safeDate = booking.date ? new Date(booking.date + "T00:00:00") : new Date()
+          const formattedDate = booking.date ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
           const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
           return (
             <Card key={booking.id} className="shadow-sm">
