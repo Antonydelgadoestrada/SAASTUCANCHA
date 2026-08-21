@@ -25,7 +25,9 @@ export async function middleware(req: NextRequest) {
 
   // 2. Si el usuario logueado va al login → redirigir según su rol
   if (pathname === '/login' || pathname === '/register') {
-    return NextResponse.redirect(new URL(`${ROLE_ROUTES[token?.role]}/dashboard`, req.url))
+    const userRole = (token?.role as string) || 'USER';
+    const basePath = ROLE_ROUTES[userRole] || '/user';
+    return NextResponse.redirect(new URL(`${basePath}/dashboard`, req.url))
   }
 
   // 3. Protección por rol
