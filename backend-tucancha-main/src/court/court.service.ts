@@ -194,29 +194,7 @@ export class CourtService {
         const availableSlots = availabilities
           .filter((a: any) => a.status === 'available')
           .sort((a: any, b: any) => a.time.localeCompare(b.time))
-          .map((a: any) => a.time)
-          .filter((time: any, index: any, arr: any) => {
-            const getMinutes = (t: string) => {
-              const [h, m] = t.split(':').map(Number);
-              return h * 60 + m;
-            };
-  
-            const current = getMinutes(time);
-            const blocksRequired = parseFloat(minimumBookingTime || '1') * 2;
-  
-            for (let i = 1; i < blocksRequired; i++) {
-              const nextTime = arr[index + i];
-              if (!nextTime) return false;
-  
-              const expected = current + i * 30;
-              const [h, m] = nextTime.split(':').map(Number);
-              const actual = h * 60 + m;
-  
-              if (actual !== expected) return false;
-            }
-  
-            return true;
-          });
+          .map((a: any) => a.time);
         
         return {
           id,

@@ -116,10 +116,11 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string, 
 
   const validStartTimes: string[] = []
   const now = new Date()
-  const isToday = selectedDate && 
+  const isToday = !selectedDate || (
     selectedDate.getDate() === now.getDate() && 
     selectedDate.getMonth() === now.getMonth() && 
     selectedDate.getFullYear() === now.getFullYear()
+  )
 
   for (let i = 0; i <= availableTimes.length - requiredSlots; i++) {
     const consecutive = availableTimes.slice(i, i + requiredSlots)
@@ -232,14 +233,12 @@ export function SearchResults({
   }, [duration]);
 
   // Función para calcular distancia (simulada)
-  const calculateDistance = (court: any[0]) => {
-    if (!currentLocation) return Math.random() * 10; // Distancia aleatoria si no hay ubicación
+  const calculateDistance = (court: any) => {
+    if (!currentLocation) return Math.random() * 10;
     const dx = court.coordinates.lat - currentLocation.lat;
     const dy = court.coordinates.lng - currentLocation.lng;
-    return Math.sqrt(dx * dx + dy * dy) * 111; // Aproximación en km
+    return Math.sqrt(dx * dx + dy * dy) * 111;
   };
-
-  
 
   useEffect(() => {
     const fetchCourts = async () => {
@@ -249,7 +248,7 @@ export function SearchResults({
       } catch (error: any) {
         toast({
           title: "Error",
-          description: error.message || "No se pudieron cargar las canchas",
+          description: "No se pudieron cargar las canchas.",
           variant: "destructive",
         });
       }
@@ -257,7 +256,17 @@ export function SearchResults({
     fetchCourts();
   }, [urlSearchParams]);
 
-  const handleViewDetails = (court: any[0]) => {
+  // Sincronizar el court seleccionado cuando se actualizan los resultados (ej. al cambiar la fecha)
+  useEffect(() => {
+    if (selectedCourt) {
+      const updatedCourt = filteredCourts.find((c) => c.id === selectedCourt.id);
+      if (updatedCourt) {
+        setSelectedCourt(updatedCourt);
+      }
+    }
+  }, [filteredCourts]);
+
+  const handleViewDetails = (court: any) => {
     setSelectedCourt(court);
     setCurrentImageIndex(0);
     setShowDetails(true);
@@ -600,10 +609,11 @@ export function SearchResults({
                   if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
                   
                   const now = new Date();
-                  const isToday = selectedDate && 
+                  const isToday = !selectedDate || (
                     selectedDate.getDate() === now.getDate() && 
                     selectedDate.getMonth() === now.getMonth() && 
-                    selectedDate.getFullYear() === now.getFullYear();
+                    selectedDate.getFullYear() === now.getFullYear()
+                  );
                     
                   if (isToday) {
                     const [h, m] = time.split(":").map(Number);
@@ -649,10 +659,11 @@ export function SearchResults({
                     if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
                     
                     const now = new Date();
-                    const isToday = selectedDate && 
+                    const isToday = !selectedDate || (
                       selectedDate.getDate() === now.getDate() && 
                       selectedDate.getMonth() === now.getMonth() && 
-                      selectedDate.getFullYear() === now.getFullYear();
+                      selectedDate.getFullYear() === now.getFullYear()
+                    );
                       
                     if (isToday) {
                       const [h, m] = time.split(":").map(Number);
@@ -924,14 +935,18 @@ export function SearchResults({
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label>Fecha seleccionada</Label>
-                  <div className="mt-2 p-3 bg-muted rounded-lg">
-                    <span className="font-medium">
-                      {selectedDate
-                        ? format(selectedDate, "EEEE, dd 'de' MMMM 'de' yyyy", {
-                            locale: es,
-                          })
-                        : "Hoy"}
-                    </span>
+                  <div className="mt-2 p-1 bg-muted rounded-lg">
+                    <Input 
+                      type="date" 
+                      value={selectedDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")}
+                      min={format(new Date(), "yyyy-MM-dd")}
+                      onChange={(e) => {
+                        const newParams = new URLSearchParams(urlSearchParams.toString());
+                        newParams.set('date', e.target.value);
+                        router.push(`${window.location.pathname}?${newParams.toString()}`);
+                      }}
+                      className="bg-transparent border-0 font-medium"
+                    />
                   </div>
                   <div className="mt-2 p-3 bg-muted rounded-lg">
                     <Label htmlFor="duration">Duración</Label>
@@ -958,16 +973,22 @@ export function SearchResults({
                 <div>
                   <Label>Horarios disponibles</Label>
                   <div className="grid grid-cols-3 gap-2 mt-2">
-                    {filteredtimeOptions.map((time: any) => (
+                    {filteredtimeOptions.map((time: any) => {
+                      const [h, m] = time.split(":").map(Number);
+                      const d = new Date();
+                      d.setHours(h, m + Number(duration) * 60, 0, 0);
+                      const endTime = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+                      return (
                       <Button
                         key={time}
                         variant={selectedTime === time ? "default" : "outline"}
                         size="sm"
                         onClick={() => setSelectedTime(time)}
                       >
-                        {time}
+                        {time} - {endTime}
                       </Button>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               </div>

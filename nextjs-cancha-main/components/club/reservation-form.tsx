@@ -256,11 +256,17 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
                   <SelectValue placeholder="Seleccionar hora" />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredtimeOptions.map((time) => (
+                  {filteredtimeOptions.map((time) => {
+                    const [h, m] = time.split(":").map(Number);
+                    const d = new Date();
+                    d.setHours(h, m + Number(duration) * 60, 0, 0);
+                    const endTime = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+                    return (
                     <SelectItem key={time} value={time}>
-                      {time}
+                      {time} - {endTime}
                     </SelectItem>
-                  ))}
+                    )
+                  })}
                 </SelectContent>
               </Select>
             ) : (
