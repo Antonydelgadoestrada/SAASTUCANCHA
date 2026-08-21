@@ -107,7 +107,7 @@ const hasPromo = (price?: number, promo?: number) =>
 const discountPct = (price: number, promo: number) =>
   Math.round(((price - promo) / price) * 100);
 
-const getValidStartTimes = (availableTimes: string[], selectedDuration: string) => {
+const getValidStartTimes = (availableTimes: string[], selectedDuration: string, selectedDate?: Date) => {
   const requiredSlots = {
     "1": 2,
     "1.5": 3,
@@ -115,11 +115,22 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string) 
   }[selectedDuration] || 2
 
   const validStartTimes: string[] = []
+  const now = new Date()
+  const isToday = selectedDate && 
+    selectedDate.getDate() === now.getDate() && 
+    selectedDate.getMonth() === now.getMonth() && 
+    selectedDate.getFullYear() === now.getFullYear()
 
   for (let i = 0; i <= availableTimes.length - requiredSlots; i++) {
     const consecutive = availableTimes.slice(i, i + requiredSlots)
     const base = availableTimes[i]
     const [h, m] = base.split(":").map(Number)
+
+    if (isToday) {
+      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+        continue
+      }
+    }
 
     // ✅ Si es 1 hora, solo permitir horarios exactos (ej. 08:00, 09:00)
     if (selectedDuration === "1" && m !== 0) continue
@@ -172,7 +183,7 @@ export function SearchResults({
     notes: "",
   });
   const [duration, setDuration] = useState<string>('1');
-  const filteredtimeOptions = getValidStartTimes(selectedCourt?.availability ?? ['10:00'], duration)
+  const filteredtimeOptions = getValidStartTimes(selectedCourt?.availability ?? ['10:00'], duration, selectedDate)
   // console.log({filteredtimeOptions})
   const { toast } = useToast();
   const durationOptions = [
@@ -585,9 +596,24 @@ export function SearchResults({
 
             <div className="grid grid-cols-4 gap-1">
               {court.availability
-                .filter((time: string) =>
-                  court.sport?.toLowerCase().startsWith("futb") ? time.endsWith(":00") : true
-                )
+                .filter((time: string) => {
+                  if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
+                  
+                  const now = new Date();
+                  const isToday = selectedDate && 
+                    selectedDate.getDate() === now.getDate() && 
+                    selectedDate.getMonth() === now.getMonth() && 
+                    selectedDate.getFullYear() === now.getFullYear();
+                    
+                  if (isToday) {
+                    const [h, m] = time.split(":").map(Number);
+                    if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                })
                 .slice(0, 8)
                 .map((time: string) => (
                   <Badge
@@ -599,14 +625,44 @@ export function SearchResults({
                   </Badge>
                 ))}
 
-              {court.availability.filter((time: string) =>
-                court.sport?.toLowerCase().startsWith("futb") ? time.endsWith(":00") : true
-              ).length > 8 && (
+              {court.availability.filter((time: string) => {
+                  if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
+                  
+                  const now = new Date();
+                  const isToday = selectedDate && 
+                    selectedDate.getDate() === now.getDate() && 
+                    selectedDate.getMonth() === now.getMonth() && 
+                    selectedDate.getFullYear() === now.getFullYear();
+                    
+                  if (isToday) {
+                    const [h, m] = time.split(":").map(Number);
+                    if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                }).length > 8 && (
                 <Badge variant="outline" className="text-xs justify-center py-1">
                   +
-                  {court.availability.filter((time: string) =>
-                    court.sport?.toLowerCase().startsWith("futb") ? time.endsWith(":00") : true
-                  ).length - 8}
+                  {court.availability.filter((time: string) => {
+                    if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
+                    
+                    const now = new Date();
+                    const isToday = selectedDate && 
+                      selectedDate.getDate() === now.getDate() && 
+                      selectedDate.getMonth() === now.getMonth() && 
+                      selectedDate.getFullYear() === now.getFullYear();
+                      
+                    if (isToday) {
+                      const [h, m] = time.split(":").map(Number);
+                      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+                        return false;
+                      }
+                    }
+                    
+                    return true;
+                  }).length - 8}
                 </Badge>
               )}
             </div>

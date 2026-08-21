@@ -47,7 +47,7 @@ interface ReservationFormProps {
   onSubmit: (data:any) => void
 }
 
-const getValidStartTimes = (availableTimes: string[], selectedDuration: string) => {
+const getValidStartTimes = (availableTimes: string[], selectedDuration: string, selectedDate?: Date) => {
   const requiredSlots = {
     "1": 2,
     "1.5": 3,
@@ -55,14 +55,24 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string) 
   }[selectedDuration] || 2
 
   const validStartTimes: string[] = []
+  const now = new Date()
+  const isToday = selectedDate && 
+    selectedDate.getDate() === now.getDate() && 
+    selectedDate.getMonth() === now.getMonth() && 
+    selectedDate.getFullYear() === now.getFullYear()
 
   for (let i = 0; i <= availableTimes.length - requiredSlots; i++) {
     const consecutive = availableTimes.slice(i, i + requiredSlots)
-
-    const expected = []
     const base = availableTimes[i]
     const [h, m] = base.split(":").map(Number)
 
+    if (isToday) {
+      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+        continue
+      }
+    }
+
+    const expected = []
     for (let j = 0; j < requiredSlots; j++) {
       const d = new Date()
       d.setHours(h, m + j * 30, 0, 0) // 30 min interval
@@ -107,7 +117,7 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
 
   // Filtrar canchas según la sede seleccionada
   const filteredCourts = courts
-  const filteredtimeOptions = getValidStartTimes(timeOptions, duration)
+  const filteredtimeOptions = getValidStartTimes(timeOptions, duration, selectedDate)
   // Opciones de duración
   const durationOptions = [
     { value: "1", label: "1 hora" },
