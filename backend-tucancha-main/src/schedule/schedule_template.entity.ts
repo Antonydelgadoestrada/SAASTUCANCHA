@@ -13,8 +13,6 @@ export class ScheduleTemplate {
   @Column({ nullable: true })
   description: string
 
-  @Column({ nullable: true })
-  venueId: number // null si aplica a todas las sedes
 
   @Column("text", { array: true })
   days: string[] // ["monday", "tuesday", "friday"]

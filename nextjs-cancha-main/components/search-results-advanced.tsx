@@ -109,7 +109,7 @@ const hasPromo = (price?: number, promo?: number) =>
 const discountPct = (price: number, promo: number) =>
   Math.round(((price - promo) / price) * 100);
 
-const getValidStartTimes = (availableTimes: string[], selectedDuration: string) => {
+const getValidStartTimes = (availableTimes: string[], selectedDuration: string, selectedDate?: Date) => {
   const requiredSlots = {
     "1": 2,
     "1.5": 3,
@@ -117,11 +117,23 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string) 
   }[selectedDuration] || 2
 
   const validStartTimes: string[] = []
+  const now = new Date()
+  const isToday = !selectedDate || (
+    selectedDate.getDate() === now.getDate() && 
+    selectedDate.getMonth() === now.getMonth() && 
+    selectedDate.getFullYear() === now.getFullYear()
+  )
 
   for (let i = 0; i <= availableTimes.length - requiredSlots; i++) {
     const consecutive = availableTimes.slice(i, i + requiredSlots)
     const base = availableTimes[i]
     const [h, m] = base.split(":").map(Number)
+
+    if (isToday) {
+      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+        continue
+      }
+    }
 
     // ✅ Si es 1 hora, solo permitir horarios exactos (ej. 08:00, 09:00)
     if (selectedDuration === "1" && m !== 0) continue
@@ -174,7 +186,7 @@ export function SearchResults({
     notes: "",
   });
   const [duration, setDuration] = useState<string>('1');
-  const filteredtimeOptions = getValidStartTimes(selectedCourt?.availability ?? ['10:00'], duration)
+  const filteredtimeOptions = getValidStartTimes(selectedCourt?.availability ?? ['10:00'], duration, selectedDate)
   // console.log({filteredtimeOptions})
   const { toast } = useToast();
   const durationOptions = [
@@ -223,14 +235,12 @@ export function SearchResults({
   }, [duration]);
 
   // Función para calcular distancia (simulada)
-  const calculateDistance = (court: any[0]) => {
-    if (!currentLocation) return Math.random() * 10; // Distancia aleatoria si no hay ubicación
+  const calculateDistance = (court: any) => {
+    if (!currentLocation) return Math.random() * 10;
     const dx = court.coordinates.lat - currentLocation.lat;
     const dy = court.coordinates.lng - currentLocation.lng;
-    return Math.sqrt(dx * dx + dy * dy) * 111; // Aproximación en km
+    return Math.sqrt(dx * dx + dy * dy) * 111;
   };
-
-  
 
   useEffect(() => {
     const fetchCourts = async () => {
@@ -240,7 +250,7 @@ export function SearchResults({
       } catch (error: any) {
         toast({
           title: "Error",
-          description: error.message || "No se pudieron cargar las canchas",
+          description: "No se pudieron cargar las canchas.",
           variant: "destructive",
         });
       }
@@ -248,7 +258,17 @@ export function SearchResults({
     fetchCourts();
   }, [urlSearchParams]);
 
-  const handleViewDetails = (court: any[0]) => {
+  // Sincronizar el court seleccionado cuando se actualizan los resultados (ej. al cambiar la fecha)
+  useEffect(() => {
+    if (selectedCourt) {
+      const updatedCourt = filteredCourts.find((c) => c.id === selectedCourt.id);
+      if (updatedCourt) {
+        setSelectedCourt(updatedCourt);
+      }
+    }
+  }, [filteredCourts]);
+
+  const handleViewDetails = (court: any) => {
     setSelectedCourt(court);
     setCurrentImageIndex(0);
     setShowDetails(true);
@@ -505,7 +525,7 @@ export function SearchResults({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <CardTitle className="line-clamp-1">{court.name}</CardTitle>
-              <CardDescription className="line-clamp-1">{court.venue}</CardDescription>
+              <CardDescription className="line-clamp-1">{court.club}</CardDescription>
             </div>
 
             {showPromo && (
@@ -605,9 +625,25 @@ export function SearchResults({
 
             <div className="grid grid-cols-4 gap-1">
               {court.availability
-                .filter((time: string) =>
-                  court.sport?.toLowerCase().startsWith("futb") ? time.endsWith(":00") : true
-                )
+                .filter((time: string) => {
+                  if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
+                  
+                  const now = new Date();
+                  const isToday = !selectedDate || (
+                    selectedDate.getDate() === now.getDate() && 
+                    selectedDate.getMonth() === now.getMonth() && 
+                    selectedDate.getFullYear() === now.getFullYear()
+                  );
+                    
+                  if (isToday) {
+                    const [h, m] = time.split(":").map(Number);
+                    if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                })
                 .slice(0, 8)
                 .map((time: string) => (
                   <Badge
@@ -619,14 +655,45 @@ export function SearchResults({
                   </Badge>
                 ))}
 
-              {court.availability.filter((time: string) =>
-                court.sport?.toLowerCase().startsWith("futb") ? time.endsWith(":00") : true
-              ).length > 8 && (
+              {court.availability.filter((time: string) => {
+                  if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
+                  
+                  const now = new Date();
+                  const isToday = selectedDate && 
+                    selectedDate.getDate() === now.getDate() && 
+                    selectedDate.getMonth() === now.getMonth() && 
+                    selectedDate.getFullYear() === now.getFullYear();
+                    
+                  if (isToday) {
+                    const [h, m] = time.split(":").map(Number);
+                    if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                }).length > 8 && (
                 <Badge variant="outline" className="text-xs justify-center py-1">
                   +
-                  {court.availability.filter((time: string) =>
-                    court.sport?.toLowerCase().startsWith("futb") ? time.endsWith(":00") : true
-                  ).length - 8}
+                  {court.availability.filter((time: string) => {
+                    if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
+                    
+                    const now = new Date();
+                    const isToday = !selectedDate || (
+                      selectedDate.getDate() === now.getDate() && 
+                      selectedDate.getMonth() === now.getMonth() && 
+                      selectedDate.getFullYear() === now.getFullYear()
+                    );
+                      
+                    if (isToday) {
+                      const [h, m] = time.split(":").map(Number);
+                      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
+                        return false;
+                      }
+                    }
+                    
+                    return true;
+                  }).length - 8}
                 </Badge>
               )}
             </div>
@@ -708,7 +775,7 @@ export function SearchResults({
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedCourt?.name}</DialogTitle>
-            <DialogDescription>{selectedCourt?.venue}</DialogDescription>
+            <DialogDescription>{selectedCourt?.club}</DialogDescription>
           </DialogHeader>
 
           {selectedCourt && (
@@ -903,7 +970,7 @@ export function SearchResults({
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Reservar {selectedCourt?.name}</DialogTitle>
-            <DialogDescription>{selectedCourt?.venue}</DialogDescription>
+            <DialogDescription>{selectedCourt?.club}</DialogDescription>
           </DialogHeader>
 
           {selectedCourt && (
@@ -911,14 +978,18 @@ export function SearchResults({
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label>Fecha seleccionada</Label>
-                  <div className="mt-2 p-3 bg-muted rounded-lg">
-                    <span className="font-medium">
-                      {selectedDate
-                        ? format(selectedDate, "EEEE, dd 'de' MMMM 'de' yyyy", {
-                            locale: es,
-                          })
-                        : "Hoy"}
-                    </span>
+                  <div className="mt-2 p-1 bg-muted rounded-lg">
+                    <Input 
+                      type="date" 
+                      value={selectedDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")}
+                      min={format(new Date(), "yyyy-MM-dd")}
+                      onChange={(e) => {
+                        const newParams = new URLSearchParams(urlSearchParams.toString());
+                        newParams.set('date', e.target.value);
+                        router.push(`${window.location.pathname}?${newParams.toString()}`);
+                      }}
+                      className="bg-transparent border-0 font-medium"
+                    />
                   </div>
                   <div className="mt-2 p-3 bg-muted rounded-lg">
                     <Label htmlFor="duration">Duración</Label>
@@ -945,16 +1016,22 @@ export function SearchResults({
                 <div>
                   <Label>Horarios disponibles</Label>
                   <div className="grid grid-cols-3 gap-2 mt-2">
-                    {filteredtimeOptions.map((time: any) => (
+                    {filteredtimeOptions.map((time: any) => {
+                      const [h, m] = time.split(":").map(Number);
+                      const d = new Date();
+                      d.setHours(h, m + Number(duration) * 60, 0, 0);
+                      const endTime = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+                      return (
                       <Button
                         key={time}
                         variant={selectedTime === time ? "default" : "outline"}
                         size="sm"
                         onClick={() => setSelectedTime(time)}
                       >
-                        {time}
+                        {time} - {endTime}
                       </Button>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               </div>

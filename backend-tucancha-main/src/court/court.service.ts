@@ -8,6 +8,7 @@ import { isNight } from '../helpers/helpers';
 import { FeaturedCourtDto } from './court.dto';
 import { ScheduleTemplate } from '../schedule/schedule_template.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
+
 @Injectable()
 export class CourtService {
   constructor(
@@ -27,8 +28,6 @@ export class CourtService {
       .innerJoin('t.club', 'club', 'club.id = :clubId', { clubId })
       // "primera" => la más antigua
       .orderBy('t.createdAt', 'ASC')
-      // Importante: incluir createdAt en el SELECT para evitar
-      // "distinctAlias.<col> does not exist" en Postgres.
       .select(['t.id', 't.createdAt'])
       .getOne();
 
@@ -41,10 +40,8 @@ export class CourtService {
   ): Promise<Court[]> {
     if (!courts?.length) return courts;
 
-    // Si ya hay schedule_template_id en todos, no hacemos nada.
     if (courts.every((c: any) => (c as any).schedule_template_id)) return courts;
 
-    // Caso rápido: sabemos el club (findAllByClub)
     if (clubIdHint) {
       const firstId = await this.getFirstTemplateIdByClubId(clubIdHint);
       if (!firstId) return courts;
@@ -54,11 +51,10 @@ export class CourtService {
       });
     }
 
-    // Caso general: inferir club por cada court (requiere venue.club cargado).
     const cache = new Map<string, string | null>();
     for (const c of courts as any[]) {
       if (c.schedule_template_id) continue;
-      const clubId = c?.venue?.club?.id;
+      const clubId = c?.club?.id;
       if (!clubId) continue;
       if (!cache.has(clubId)) {
         cache.set(clubId, await this.getFirstTemplateIdByClubId(clubId));
@@ -70,124 +66,106 @@ export class CourtService {
   }
 
   private toFeaturedDto(court: Court): FeaturedCourtDto {
-  const images = Array.isArray((court as any).images)
-    ? (court as any).images
-    : (court as any).image
-      ? [(court as any).image]
-      : [];
+    const images = Array.isArray((court as any).images)
+      ? (court as any).images
+      : (court as any).image
+        ? [(court as any).image]
+        : [];
 
-  const venue: any = (court as any).venue ?? null;
+    const club: any = (court as any).club ?? null;
 
-  return {
-    id: court.id as any,
-    name: court.name,
-    images: images.length > 0 ? images : ["/placeholder.svg"],
-    priceDay: Number((court as any).priceDay ?? 0),
-    priceNight: Number((court as any).priceNight ?? 0),
-    promoDay: (court as any).promoDay ?? null,
-    promoNight: (court as any).promoNight ?? null,
-    // opcionales; si luego guardas rating/reviews, cámbialos aquí
-    rating: null,
-    reviews: null,
-    time: court.minimumBookingTime,
-    venue: venue
-      ? {
-          id: venue.id,
-          name: venue.name,
-          // intenta primero en JSON location.address; si no, usa address plano
-          address: venue?.location?.address ?? venue?.address,
-          phone: venue?.phone || venue?.club?.phone || '',
-          whatsapp: venue?.club?.whatsapp || venue?.phone || venue?.club?.phone || '',
-        }
-      : undefined,
-  };
-}
-
-  /**
- * Campos destacados para portada.
- * Retorna los primeros registrados (createdAt ASC).
- * @param limit   cantidad máx. (default 12, tope 50)
- * @param sort    "createdAt:asc" | "createdAt:desc" | "id:asc" | "id:desc"
- * @param onlyWithImage si true, filtra los que no tienen imagen
- */
-async findFeaturedPublic(
-  {
-    limit = 12,
-    sort = "createdAt:asc",
-    onlyWithImage = false,
-  }: { limit?: number; sort?: string; onlyWithImage?: boolean } = {},
-): Promise<FeaturedCourtDto[]> {
-  const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), 50);
-
-  const [fieldRaw, dirRaw] = (sort || "createdAt:asc").split(":");
-  const fieldMap: Record<string, string> = {
-    createdAt: "court.createdAt",
-    id: "court.id",
-  };
-  const field = fieldMap[fieldRaw] ?? fieldMap.createdAt;
-  const direction: "ASC" | "DESC" = (dirRaw || "asc").toUpperCase() === "DESC" ? "DESC" : "ASC";
-
-  const qb = this.courtRepo
-    .createQueryBuilder("court")
-    .leftJoinAndSelect("court.venue", "venue")
-    .leftJoinAndSelect("venue.club", "club")
-    .where("club.status = 'APPROVED'")
-    .andWhere(`
-      EXISTS (
-        SELECT 1
-        FROM club_memberships cm
-        WHERE cm."clubId" = club.id
-          AND cm.status IN ('ACTIVE', 'GRACE')
-      )
-    `)
-    .orderBy(field, direction)
-    .take(safeLimit);
-
-  const courts = await qb.getMany();
-
-  let featured = courts.map((c) => this.toFeaturedDto(c));
-
-  if (onlyWithImage) {
-    featured = featured.filter((c) => Array.isArray(c.images) && c.images.length > 0);
+    return {
+      id: court.id as any,
+      name: court.name,
+      images: images.length > 0 ? images : ["/placeholder.svg"],
+      priceDay: Number((court as any).priceDay ?? 0),
+      priceNight: Number((court as any).priceNight ?? 0),
+      promoDay: (court as any).promoDay ?? null,
+      promoNight: (court as any).promoNight ?? null,
+      rating: null,
+      reviews: null,
+      time: court.minimumBookingTime,
+      club: club
+        ? {
+            id: club.id,
+            name: club.name,
+            address: club.address,
+          }
+        : undefined,
+    };
   }
 
-  return featured;
-}
+  async findFeaturedPublic(
+    {
+      limit = 12,
+      sort = "createdAt:asc",
+      onlyWithImage = false,
+    }: { limit?: number; sort?: string; onlyWithImage?: boolean } = {},
+  ): Promise<FeaturedCourtDto[]> {
+    const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), 50);
+
+    const [fieldRaw, dirRaw] = (sort || "createdAt:asc").split(":");
+    const fieldMap: Record<string, string> = {
+      createdAt: "court.createdAt",
+      id: "court.id",
+    };
+    const field = fieldMap[fieldRaw] ?? fieldMap.createdAt;
+    const direction: "ASC" | "DESC" = (dirRaw || "asc").toUpperCase() === "DESC" ? "DESC" : "ASC";
+
+    const qb = this.courtRepo
+      .createQueryBuilder("court")
+      .leftJoinAndSelect("court.club", "club")
+      .where("court.isActive = true")
+      .andWhere("club.status = 'APPROVED'")
+      .andWhere(`
+        EXISTS (
+          SELECT 1
+          FROM club_memberships cm
+          WHERE cm."clubId" = club.id
+            AND cm.status IN ('ACTIVE', 'GRACE')
+        )
+      `)
+      .orderBy(field, direction)
+      .take(safeLimit);
+
+    const courts = await qb.getMany();
+
+    let featured = courts.map((c) => this.toFeaturedDto(c));
+
+    if (onlyWithImage) {
+      featured = featured.filter((c) => Array.isArray(c.images) && c.images.length > 0);
+    }
+
+    return featured;
+  }
 
   async findAll() {
-    const courts = await this.courtRepo.find({ relations: ['venue', 'venue.club'] });
+    const courts = await this.courtRepo.find({ 
+      where: { isActive: true },
+      relations: ['club'] 
+    });
     return this.applyScheduleTemplateFallback(courts);
   }
 
-  findOne(id: string, relations = ['venue']) {
+  findOne(id: string, relations = ['club']) {
     return this.courtRepo.findOne({ where: { id }, relations: [...relations] });
   }
+  
   totalByClub(clubId){
     return this.courtRepo.createQueryBuilder('court')
-    .innerJoin('court.venue', 'venue')
-    .where('venue.clubId = :clubId', { clubId })
+    .innerJoin('court.club', 'club')
+    .where('club.id = :clubId', { clubId })
     .getCount();
   }
 
-  async findAllByVenueByClub(clubId: string, venueId?: number) {
-    const where: any = {
-      venue: {
-        club: {
-          id: clubId,
-        },
-      },
-    }
-  
-    if (venueId) {
-      where.venue.id = venueId
-    }
-  
+  async findAllByClub(clubId: string) {
     const courts = await this.courtRepo.find({
-      where,
-      relations: ['venue', 'venue.club'],
+      where: { club: { id: clubId }, isActive: true },
+      relations: ['club'],
     })
     return this.applyScheduleTemplateFallback(courts, clubId);
   }
+  
   uploadFiles(images){
      return this.s3Service.uploadFiles(images, '/curt')
   }
@@ -203,7 +181,7 @@ async findFeaturedPublic(
           capacity,
           description,
           images,
-          venue,
+          club,
           availabilities,
           minimumBookingTime
         } = court;
@@ -214,58 +192,33 @@ async findFeaturedPublic(
         const promoPrice = isNight()?court.promoNight: court.promoDay  
   
         const availableSlots = availabilities
-          .filter(a => a.status === 'available')
-          .sort((a, b) => a.time.localeCompare(b.time))
-          .map(a => a.time)
-          .filter((time, index, arr) => {
-            const getMinutes = (t: string) => {
-              const [h, m] = t.split(':').map(Number);
-              return h * 60 + m;
-            };
-  
-            const current = getMinutes(time);
-            const blocksRequired = parseFloat(minimumBookingTime || '1') * 2;
-  
-            for (let i = 1; i < blocksRequired; i++) {
-              const nextTime = arr[index + i];
-              if (!nextTime) return false;
-  
-              const expected = current + i * 30;
-              const [h, m] = nextTime.split(':').map(Number);
-              const actual = h * 60 + m;
-  
-              if (actual !== expected) return false;
-            }
-  
-            return true;
-          });
+          .filter((a: any) => a.status === 'available')
+          .sort((a: any, b: any) => a.time.localeCompare(b.time))
+          .map((a: any) => a.time);
         
         return {
           id,
           name,
-          venue: venue?.name || '',
-          club: venue?.club?.name || '',
+          club: club?.name || '',
           sport: type,
           price: Number(price),
           promoPrice:Number(promoPrice),
           minimumBookingTime,
           rating: 4.5,
           reviews: 128,
-          phone: venue?.phone || venue?.club?.phone || '',
-          whatsapp: venue?.club?.whatsapp || venue?.phone || venue?.club?.phone || '',
-          address: venue?.location?.address || '',
-          coordinates: venue?.location?.coordinates || { lat: 0, lng: 0 },
+          phone: club?.phone || '',
+          address: club?.address || '',
+          coordinates: club?.coordinates || { lat: 0, lng: 0 },
           images: images.length > 0 ? images : [
             "/placeholder.svg?height=400&width=600&text=Cancha+Sin+Imagen"
           ],
           description,
-          amenities: venue?.services || [],
+          amenities: club?.services || [],
           availability: availableSlots,
           surface,
           capacity,
         };
       })
-      // ⬇️ Filtrar solo las canchas que tengan al menos una franja válida
       .filter(court => court.availability.length > 0);
   }
   
@@ -289,7 +242,7 @@ async findFeaturedPublic(
       return overrides;
     }
 
-    const daysMap = {
+    const daysMap: Record<string, number> = {
       sunday: 0,
       monday: 1,
       tuesday: 2,
@@ -331,10 +284,9 @@ async findFeaturedPublic(
       const targetDate = date || today;
   
       const qb = this.courtRepo.createQueryBuilder("court")
-        .leftJoinAndSelect("court.venue", "venue")
-        .leftJoinAndSelect("venue.club", "club");
+        .leftJoinAndSelect("court.club", "club")
+        .where("court.isActive = true");
   
-      // Filtro estricto: Club debe estar APROBADO y con membresía ACTIVA o en GRACIA
       qb.andWhere("club.status = 'APPROVED'");
       qb.andWhere(`
         EXISTS (
@@ -345,24 +297,20 @@ async findFeaturedPublic(
         )
       `);
 
-      // Filtro por deporte
       if (sport && sport !== "all") {
         qb.andWhere("court.type = :sport", { sport });
       }
   
-      // Filtro por club
       if (club && club !== "all") {
-        qb.andWhere("venue.clubId = :club", { club });
+        qb.andWhere("club.id = :club", { club });
       }
   
-      // Filtro por búsqueda textual
       if (textQuery) {
         qb.andWhere(`
-          (LOWER(court.name) LIKE :q OR LOWER(court.description) LIKE :q OR LOWER(venue.name) LIKE :q)
+          (LOWER(court.name) LIKE :q OR LOWER(court.description) LIKE :q OR LOWER(club.name) LIKE :q)
         `, { q: `%${textQuery.toLowerCase()}%` });
       }
   
-      // Filtro por geolocalización
       if (lat && lng) {
         const radiusKm = 50;
         const latitude = parseFloat(lat);
@@ -372,10 +320,10 @@ async findFeaturedPublic(
           (
             6371 * acos(
               cos(radians(:lat)) *
-              cos(radians((venue.location->'coordinates'->>'lat')::float)) *
-              cos(radians((venue.location->'coordinates'->>'lng')::float) - radians(:lng)) +
+              cos(radians((club.coordinates->>'lat')::float)) *
+              cos(radians((club.coordinates->>'lng')::float) - radians(:lng)) +
               sin(radians(:lat)) *
-              sin(radians((venue.location->'coordinates'->>'lat')::float))
+              sin(radians((club.coordinates->>'lat')::float))
             )
           ) <= :radius
         `, { lat: latitude, lng: longitude, radius: radiusKm });
@@ -384,10 +332,10 @@ async findFeaturedPublic(
           (
             6371 * acos(
               cos(radians(:lat)) *
-              cos(radians((venue.location->'coordinates'->>'lat')::float)) *
-              cos(radians((venue.location->'coordinates'->>'lng')::float) - radians(:lng)) +
+              cos(radians((club.coordinates->>'lat')::float)) *
+              cos(radians((club.coordinates->>'lng')::float) - radians(:lng)) +
               sin(radians(:lat)) *
-              sin(radians((venue.location->'coordinates'->>'lat')::float))
+              sin(radians((club.coordinates->>'lat')::float))
             )
           )
         `, "ASC");
@@ -395,9 +343,11 @@ async findFeaturedPublic(
   
       const result = await qb.getMany();
       if (result.length === 0) return [];
+      
+      const courtsWithFallback = await this.applyScheduleTemplateFallback(result);
   
       const courtsWithVirtual = await Promise.all(
-        result.map(async (court) => {
+        courtsWithFallback.map(async (court) => {
           const virtualAvailabilities = await this.getVirtualAvailability(court, targetDate);
           (court as any).availabilities = virtualAvailabilities;
           return court;
@@ -411,7 +361,7 @@ async findFeaturedPublic(
       }
 
       return transformed;
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Error al filtrar canchas: ${error.message}`);
     }
   }
@@ -434,7 +384,7 @@ async findFeaturedPublic(
   
       for (let j = 0; j < requiredSlots; j++) {
         const d = new Date()
-        d.setHours(h, m + j * 30, 0, 0) // 30 min interval
+        d.setHours(h, m + j * 30, 0, 0)
         expected.push(`${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`)
       }
   
@@ -447,16 +397,17 @@ async findFeaturedPublic(
   }
   
   create(data: any) {
-    data.venue = JSON.parse(data.venue)
+    if (data.venue) delete data.venue;
     const court = this.courtRepo.create(data);
     return this.courtRepo.save(court);
   }
 
   async update(id: string, data: CourtUpdateDto) {
-    if(data.venue) data.venue = JSON.parse(data.venue)
+    if ((data as any).courtId) delete (data as any).courtId;
+    
+    // We already removed venue mappings, just cleaning up other fields.
+    if ((data as any).club) delete (data as any).club;
 
-    // Si cambia la plantilla asignada a la cancha, borrar overrides asociados a la plantilla anterior
-    // (court_schedule_availability donde templateId == plantilla previa).
     if (Object.prototype.hasOwnProperty.call(data as any, 'schedule_template_id')) {
       const currentCourt = await this.courtRepo.findOne({
         where: { id },
@@ -474,18 +425,18 @@ async findFeaturedPublic(
     }
     
     await this.courtRepo.update(id, {...data,  promoDay:
-      data.hasOwnProperty('promoDay') && data.promoDay.trim() !== ''
+      data.hasOwnProperty('promoDay') && data.promoDay?.trim() !== ''
         ? data.promoDay
         : null,
     promoNight:
-      data.hasOwnProperty('promoNight') && data.promoNight.trim() !== ''
+      data.hasOwnProperty('promoNight') && data.promoNight?.trim() !== ''
         ? data.promoNight
         : null,});
     return this.findOne(id);
   }
 
   remove(id: string) {
-    return this.courtRepo.delete(id);
+    return this.courtRepo.update(id, { isActive: false });
   }
 
 }

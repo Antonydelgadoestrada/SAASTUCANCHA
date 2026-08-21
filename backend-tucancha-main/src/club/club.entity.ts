@@ -11,7 +11,7 @@ import { User } from '../user/user.entity';
 import { Booking } from '../booking/booking.entity';
 import { Promotion } from '../promotion/promotion.entity';
 import { Review } from '../review/review.entity';
-import { Venue } from '../venue/entities/venue.entity';
+import { Court } from '../court/court.entity';
 import { ScheduleTemplate } from '../schedule/schedule_template.entity';
   
   @Entity()
@@ -127,8 +127,8 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
     @OneToMany(() => Review, (review) => review.club)
     reviews: Review[];
 
-    @OneToMany(() => Venue, (venue) => venue.club)
-    venues: Venue[]
+    @OneToMany(() => Court, (court) => court.club)
+    courts: Court[]
   // opcional, por si quieres acceso inverso
     @OneToMany(() => ScheduleTemplate, (template) => template.club)
     scheduleTemplates: ScheduleTemplate[];

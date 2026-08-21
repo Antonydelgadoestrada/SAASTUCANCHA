@@ -19,20 +19,13 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CourtForm } from "@/components/club/court-form"
-import { createCourts, deleteCourts, editCourts, getAllCourtsByVenues } from "@/lib/courts"
-import { getAllVenues } from "@/lib/venues"
+import { createCourts, deleteCourts, editCourts, getAllCourtsByClub } from "@/lib/courts"
 import { applyTemplateToCourtSafe, getTemplateByClub } from "@/lib/schedule"
 
 interface Court {
   id: number
   name: string
-  venue: {
-    id: number
-    name: string
-    address: string
-    [key: string]: any // para evitar errores si vienen más propiedades
-  }
-  venueId: number
+
   type: string
   surface: string
   priceDay: number
@@ -49,35 +42,16 @@ interface Court {
   
 }
 
-export interface VenueDTO {
-  id: number;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  phone: string;
-  email: string;
-  description: string;
-  image: string;
-  capacity: string;
-  parkingSpots: string;
-  openingHours: string;
-  services: string[];
-  accessibilityFeatures: string;
-  nearbyTransport: string;
-  specialInstructions: string;
-}
-export type Venues = Partial<VenueDTO>;
+
 
 
 export function ClubCourtsContent() {
   const [courts, setCourts] = useState<Court[]>([])
-  const [venues, setVenues] = useState<Venues[]>([])
+
   const [templates, setTemplates] = useState<any[]>([]);
 
   const [view, setView] = useState<"grid" | "table">("grid")
-  const [selectedVenue, setSelectedVenue] = useState<string>("all")
+
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingCourt, setEditingCourt] = useState<Court | null>(null)
@@ -101,38 +75,24 @@ export function ClubCourtsContent() {
 
     const fetchCourts = async () => {
       try {
-        const data = await getAllCourtsByVenues()
-        const transformed = data.map((court: any) => ({
-          ...court,
-          venueId: court.venue?.id ?? 0,
-        }))
-        setCourts(transformed)
+        const data = await getAllCourtsByClub()
+        setCourts(data)
       } catch (error) {
         toast.error("Error al cargar las canchas")
       }
     }
     
-    const fetchVenues = async ()=>{
-      try {
-        const result = await getAllVenues()
-        setVenues(result)
-      } catch (error) {
-        toast.error("Error al cargar las canchas")
-      }
-    }
-    fetchVenues()
     fetchCourts()
     fetchTemplates();
 
   }, [])
   // Filtrar canchas según la sede seleccionada y búsqueda
   const filteredCourts = courts.filter((court) => {
-    const matchesVenue = selectedVenue === "all" || court.venue?.name === selectedVenue
     const matchesSearch =
       court.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       court.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       court.surface.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesVenue && matchesSearch
+    return matchesSearch
   })
 
   const handleAddCourt = async (courtData: any) => {
@@ -177,19 +137,6 @@ export function ClubCourtsContent() {
 
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex flex-1 items-center gap-4">
-          <Select value={selectedVenue} onValueChange={setSelectedVenue}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Todas las sedes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las sedes</SelectItem>
-              {venues.map((venue) => venue.name ? (
-                <SelectItem key={venue.id} value={venue.name}>
-                  {venue.name}
-                </SelectItem>
-              ) : null)}
-            </SelectContent>
-          </Select>
 
           <div className="relative flex-1">
             <Input
@@ -234,7 +181,7 @@ export function ClubCourtsContent() {
                 <DialogTitle>Agregar Nueva Cancha</DialogTitle>
                 <DialogDescription>Completa los detalles para agregar una nueva cancha a tu club.</DialogDescription>
               </DialogHeader>
-              <CourtForm onSubmit={handleAddCourt} venues={venues} onCancel={() => setIsAddDialogOpen(false)} templates={templates} />
+              <CourtForm onSubmit={handleAddCourt} onCancel={() => setIsAddDialogOpen(false)} templates={templates} />
             </DialogContent>
           </Dialog>
         </div>
@@ -256,10 +203,7 @@ export function ClubCourtsContent() {
                   <div className="flex items-start justify-between">
                     <div>
                       <CardTitle>{court.name}</CardTitle>
-                      <CardDescription className="flex items-center">
-                        <MapPinIcon className="mr-1 h-4 w-4" />
-                        {court.venue?.name}
-                      </CardDescription>
+
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -345,7 +289,7 @@ export function ClubCourtsContent() {
                   <thead>
                     <tr className="border-b">
                       <th className="px-4 py-3 text-left text-sm font-medium">Nombre</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">Sede</th>
+
                       <th className="px-4 py-3 text-left text-sm font-medium">Tipo</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Superficie</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Precio Día</th>
@@ -357,7 +301,7 @@ export function ClubCourtsContent() {
                     {filteredCourts.map((court) => (
                       <tr key={court.id} className="border-b">
                         <td className="px-4 py-3 text-sm">{court.name}</td>
-                        <td className="px-4 py-3 text-sm">{court.venue?.name}</td>
+
                         <td className="px-4 py-3 text-sm capitalize">{court.type}</td>
                         <td className="px-4 py-3 text-sm">{court.surface}</td>
                         <td className="px-4 py-3 text-sm">
@@ -419,7 +363,7 @@ export function ClubCourtsContent() {
             <DialogDescription>Modifica los detalles de la cancha.</DialogDescription>
           </DialogHeader>
           {editingCourt && (
-            <CourtForm court={editingCourt} onSubmit={handleEditCourt} venues={venues} onCancel={closeEditDialog} templates={templates} />
+            <CourtForm court={editingCourt} onSubmit={handleEditCourt} onCancel={closeEditDialog} templates={templates} />
           )}
         </DialogContent>
       </Dialog>

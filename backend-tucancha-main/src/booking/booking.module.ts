@@ -9,7 +9,7 @@ import { CourtModule } from '../court/court.module';
 import { MercadoPagoModule } from '../mecado-pago/mercado-pago.module';
 import { AuthModule } from '../auth/auth.module';
 import { UserModule } from '../user/user.module';
-import { VenueModule } from '../venue/venue.module';
+
 import { AwsModule } from '../aws/aws.module';
 import { MailerModule } from '../mailer/mailer.module';
 import { Payment } from '../payment/payment.entity';
@@ -24,7 +24,6 @@ import { Payment } from '../payment/payment.entity';
     AwsModule, 
     MailerModule,
     UserModule, 
-    VenueModule,
   ],
   providers: [BookingService, BookingCronService],
   controllers: [BookingController],

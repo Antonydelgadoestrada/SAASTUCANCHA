@@ -260,7 +260,7 @@ export function UserBookingsContent() {
               {upcomingBookings.map((booking) => {
                 const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
                 const courtName = booking.court?.name || "Cancha Deportiva"
-                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const venueName = booking.court?.club?.name || booking.club?.name || "Complejo Deportivo"
                 const totalPrice = booking.pricing?.totalPrice ?? (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
 
                 return (
@@ -331,7 +331,7 @@ export function UserBookingsContent() {
               {pendingBookings.map((booking) => {
                 const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
                 const courtName = booking.court?.name || "Cancha Deportiva"
-                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const venueName = booking.court?.club?.name || booking.club?.name || "Complejo Deportivo"
                 const totalPrice = booking.pricing?.totalPrice ?? (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
 
                 return (
@@ -398,7 +398,7 @@ export function UserBookingsContent() {
               {pastBookings.map((booking) => {
                 const courtImage = Array.isArray(booking.court?.images) && booking.court.images.length > 0 ? booking.court.images[0] : "/placeholder.svg"
                 const courtName = booking.court?.name || "Cancha Deportiva"
-                const venueName = booking.court?.venue?.name || "Complejo Deportivo"
+                const venueName = booking.court?.club?.name || booking.club?.name || "Complejo Deportivo"
                 const totalPrice = booking.pricing?.totalPrice ?? (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
 
                 return (
@@ -465,14 +465,14 @@ export function UserBookingsContent() {
             <DialogHeader>
               <DialogTitle>Detalles de la Reserva</DialogTitle>
               <DialogDescription>
-                Información completa de tu reserva en {selectedBooking.court?.venue?.name || "el Complejo Deportivo"}.
+                Información completa de tu reserva en {selectedBooking.court?.club?.name || selectedBooking.club?.name || "el Complejo Deportivo"}.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
                   <AvatarFallback className="text-lg">
-                    {(selectedBooking.court?.venue?.name || "Complejo Deportivo")
+                    {(selectedBooking.court?.club?.name || selectedBooking.club?.name || "Complejo Deportivo")
                       .split(" ")
                       .map((n: string) => n[0])
                       .join("")}
@@ -480,7 +480,7 @@ export function UserBookingsContent() {
                 </Avatar>
                 <div>
                   <h3 className="text-xl font-medium">{selectedBooking.court?.name || "Cancha Deportiva"}</h3>
-                  <p className="text-muted-foreground">{selectedBooking.court?.venue?.name || "Complejo Deportivo"}</p>
+                  <p className="text-muted-foreground">{selectedBooking.court?.club?.name || selectedBooking.club?.name || "Complejo Deportivo"}</p>
                 </div>
               </div>
 
@@ -591,7 +591,7 @@ export function UserBookingsContent() {
                 <div className="space-y-1 text-sm text-muted-foreground">
                   <div className="flex items-center">
                     <MapPinIcon className="mr-2 h-4 w-4" />
-                    <span>{selectedBooking.court?.venue?.name || "Complejo Deportivo"}</span>
+                    <span>{selectedBooking.court?.club?.name || selectedBooking.club?.name || "Complejo Deportivo"}</span>
                   </div>
                   <div className="flex items-center">
                     <CalendarIcon className="mr-2 h-4 w-4" />

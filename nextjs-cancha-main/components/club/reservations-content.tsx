@@ -32,10 +32,8 @@ import { es } from "date-fns/locale"
 import { CalendarIcon, Download, Filter, MoreHorizontal, Plus, Search, X } from "lucide-react"
 import { ReservationForm, reservationSchema } from "@/components/club/reservation-form"
 import { cn, formatSafeDate } from "@/lib/utils"
-import { Venues } from "./courts-content"
-import { getAllVenues } from "@/lib/venues"
 import { toast } from "sonner"
-import { getAllCourtsByVenues } from "@/lib/courts"
+import { getAllCourtsByClub } from "@/lib/courts"
 import { cancelBooking, createReservationManual, getAllReservation, paymemtManual } from "@/lib/reservation"
 import { Skeleton } from "../ui/skeleton"
 
@@ -50,15 +48,17 @@ const paymentStatusColors = {
   paid: "bg-emerald-100 text-emerald-800",
   pending: "bg-amber-100 text-amber-800",
   refunded: "bg-purple-100 text-purple-800",
+  rejected: "bg-red-100 text-red-800",
+  failed: "bg-red-100 text-red-800",
+  cancelled: "bg-gray-100 text-gray-800",
 }
 
 export function ReservationsContent() {
   const [searchTerm, setSearchTerm] = useState("")
   const [reservations, setReservations] = useState<any[]>([])
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [venueFilter, setVenueFilter] = useState("all")
   const [courts, setCourts] = useState<any[]>([])
-  const [venues, setVenues] = useState<Venues[]>([])
+  const [statusFilter, setStatusFilter] = useState("all")
+
   const [isLoading, setIsLoading] = useState(false)
   const [courtFilter, setCourtFilter] = useState("all")
   const [dateRange, setDateRange] = useState<{
@@ -74,17 +74,9 @@ export function ReservationsContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => {
     const fetchCourts = async () => {
-      const data = await getAllCourtsByVenues();
+      const data = await getAllCourtsByClub();
       setCourts([...data]);
     };
-    const fetchVenues = async ()=>{
-      try {
-        const result = await getAllVenues()
-        setVenues(result)
-      } catch (error) {
-        toast.error("Error al cargar las canchas")
-      }
-    }
     const fetchReservation = async ()=>{
       try {
         const reservations = (await getAllReservation());
@@ -93,7 +85,7 @@ export function ReservationsContent() {
         toast.error("Error al cargar las canchas")
       }
     }
-    fetchVenues()
+
     fetchCourts()
     fetchReservation()
   }, [])
@@ -110,14 +102,14 @@ export function ReservationsContent() {
     // Filtro por estado
     const statusMatch = statusFilter === "all" || reservation.status === statusFilter
 
-    // Filtro por sede
-    const venueMatch =
-      venueFilter === "all" || reservation.court.venue.name === venues.find((v) => v?.id?.toString() === venueFilter)?.name
 
     // Filtro por cancha
     const courtMatch =
       courtFilter === "all" || reservation.court.name === courts.find((c) => c.id.toString() === courtFilter)?.name
-    reservation.date = new Date(reservation.date)
+    // Convert the UTC midnight to Local midnight
+    const utcDate = new Date(reservation.date)
+    reservation.date = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate())
+
     // Filtro por fecha
     const dateMatch =
       (!dateRange.from || reservation.date >= dateRange.from) && (!dateRange.to || reservation.date <= dateRange.to)
@@ -132,7 +124,7 @@ export function ReservationsContent() {
       tabMatch = reservation.status === "cancelled"
     }
 
-    return searchMatch && statusMatch && venueMatch && courtMatch && dateMatch && tabMatch
+    return searchMatch && statusMatch && courtMatch && dateMatch && tabMatch
   })
 
   const handlePayment = async(reservation:any) =>{
@@ -191,6 +183,9 @@ export function ReservationsContent() {
       paid: "Pagado",
       pending: "Pendiente",
       refunded: "Reembolsado",
+      rejected: "Rechazado",
+      failed: "Fallido",
+      cancelled: "Cancelado",
     }
 
     return (
@@ -242,7 +237,7 @@ export function ReservationsContent() {
                 <DialogTitle>Crear Nueva Reserva</DialogTitle>
                 <DialogDescription>Completa el formulario para crear una reserva manualmente</DialogDescription>
               </DialogHeader>
-              <ReservationForm venues={venues} courts={courts} onSubmit={addBooking} isSubmitting={isSubmitting}/>
+              <ReservationForm courts={courts} onSubmit={addBooking} isSubmitting={isSubmitting}/>
             </DialogContent>
           </Dialog>
         </div>
@@ -275,16 +270,11 @@ export function ReservationsContent() {
               <Button variant="outline" className="flex items-center gap-2">
                 <Filter className="h-4 w-4" />
                 Filtros
-                {(statusFilter !== "all" ||
-                  venueFilter !== "all" ||
-                  courtFilter !== "all" ||
-                  dateRange.from ||
-                  dateRange.to) && (
-                  <Badge variant="secondary" className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center">
-                    <span className="text-xs">
+                {(statusFilter !== "all" || courtFilter !== "all" || dateRange.from || dateRange.to) && (
+                  <Badge variant="secondary" className="ml-2 rounded-full px-1.5 py-0.5 text-xs">
+                    <span>
                       {[
                         statusFilter !== "all" ? 1 : 0,
-                        venueFilter !== "all" ? 1 : 0,
                         courtFilter !== "all" ? 1 : 0,
                         dateRange.from || dateRange.to ? 1 : 0,
                       ].reduce((a, b) => a + b, 0)}
@@ -313,22 +303,6 @@ export function ReservationsContent() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="venue-filter">Sede</Label>
-                  <Select value={venueFilter} onValueChange={setVenueFilter}>
-                    <SelectTrigger id="venue-filter">
-                      <SelectValue placeholder="Todas las sedes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas las sedes</SelectItem>
-                      {venues.map((venue) => (
-                        <SelectItem key={venue.id} value={`${venue.id}`}>
-                          {venue.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="court-filter">Cancha</Label>
@@ -339,7 +313,6 @@ export function ReservationsContent() {
                     <SelectContent>
                       <SelectItem value="all">Todas las canchas</SelectItem>
                       {courts
-                        .filter((court) => venueFilter === "all" || court.venue.id == venueFilter)
                         .map((court) => (
                           <SelectItem key={court.id} value={`${court.id}`}>
                             {court.name}
@@ -406,7 +379,6 @@ export function ReservationsContent() {
                     variant="ghost"
                     onClick={() => {
                       setStatusFilter("all")
-                      setVenueFilter("all")
                       setCourtFilter("all")
                       setDateRange({ from: undefined, to: undefined })
                     }}
@@ -422,7 +394,7 @@ export function ReservationsContent() {
       </div>
 
       {/* Mostrar filtros activos */}
-      {(statusFilter !== "all" || venueFilter !== "all" || courtFilter !== "all" || dateRange.from || dateRange.to) && (
+      {(statusFilter !== "all" || courtFilter !== "all" || dateRange.from || dateRange.to) && (
         <div className="flex flex-wrap gap-2 mb-4">
           {statusFilter !== "all" && (
             <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1">
@@ -438,12 +410,6 @@ export function ReservationsContent() {
             </Badge>
           )}
 
-          {venueFilter !== "all" && (
-            <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1">
-              Sede: {venues.find((v) => `${v.id}` === venueFilter)?.name}
-              <X className="h-3 w-3 cursor-pointer" onClick={() => setVenueFilter("all")} />
-            </Badge>
-          )}
 
           {courtFilter !== "all" && (
             <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1">
@@ -472,7 +438,6 @@ export function ReservationsContent() {
             className="h-7"
             onClick={() => {
               setStatusFilter("all")
-              setVenueFilter("all")
               setCourtFilter("all")
               setDateRange({ from: undefined, to: undefined })
             }}
@@ -509,7 +474,6 @@ export function ReservationsContent() {
                   </TableCell>
                   <TableCell>
                     <div>{reservation.court.name}</div>
-                    <div className="text-sm text-muted-foreground">{reservation.court.venue.name}</div>
                   </TableCell>
                   <TableCell>
                     <div>{formatSafeDate(reservation.date, "dd/MM/yyyy")}</div>
@@ -518,7 +482,7 @@ export function ReservationsContent() {
                     </div>
                   </TableCell>
                   <TableCell>{reservation.duration} horas</TableCell>
-                  <TableCell>S/ {(reservation?.pricing?.totalPrice)}</TableCell>
+                  <TableCell>S/ {reservation?.pricing?.totalPrice || reservation?.price || 0}</TableCell>
                   <TableCell>
                     {isLoading ? <Skeleton className="h-6 w-24 rounded bg-gray-200" />: getStatusBadge(reservation.status)}
                      
@@ -571,7 +535,6 @@ export function ReservationsContent() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">{reservation.court.name}</CardTitle>
-                    <CardDescription>{reservation.court.venue.name}</CardDescription>
                   </div>
                   {isLoading ? <Skeleton className="h-6 w-24 rounded bg-gray-200" />: getStatusBadge(reservation.status)}
 
@@ -596,7 +559,7 @@ export function ReservationsContent() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Precio:</span>
-                    <span className="font-medium">S/ {reservation?.pricing?.totalPrice} </span>
+                    <span className="font-medium">S/ {reservation?.pricing?.totalPrice || reservation?.price || 0}</span>
                   </div>
                   {/* <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Pago:</span>
