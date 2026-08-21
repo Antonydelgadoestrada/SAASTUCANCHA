@@ -89,7 +89,7 @@ export class BookingService {
       where:{
         user: { id: user.id },
       },
-      relations:['court', 'court.venue'],
+      relations:['court', 'court.venue', 'court.venue.club', 'club'],
       order: {
         date: 'DESC', // 👈 ordenar por fecha descendente
       },

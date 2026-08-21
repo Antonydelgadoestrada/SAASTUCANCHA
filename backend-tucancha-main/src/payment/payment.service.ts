@@ -16,10 +16,11 @@ import { PaymentMethod } from './payment-method.enum';
 import { ScheduleTemplateService } from '../schedule/schedule-template.service';
 import { MailerService } from '../mailer/mailer.service';
 import { Booking } from '../booking/booking.entity';
+import { S3Service } from '../aws/s3.service';
 
 @Injectable()
 export class PaymentService {
-  private mercadopago: MercadoPagoConfig;;
+  private mercadopago: MercadoPagoConfig;
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
@@ -29,6 +30,7 @@ export class PaymentService {
     private readonly clubsService: ClubService,
     private readonly scheduleTemplateService: ScheduleTemplateService,
     private readonly mailerService: MailerService,
+    private readonly s3Service: S3Service,
   ) {
     this.mercadopago = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN})
   }
@@ -548,10 +550,160 @@ export class PaymentService {
 
     const saved = await this.paymentRepo.save(payment);
 
+    // Si se confirma el pago, actualizar también el booking a PAID y CONFIRMED
+    if (action === 'CONFIRMAR' && payment.booking) {
+      payment.booking.paymentStatus = PaymentStatus.PAID;
+      payment.booking.status = BookingStatus.CONFIRMED;
+      await this.bookingRepo.save(payment.booking);
+      try {
+        await this.generateSlotOccupied(
+          payment.booking.court.id,
+          payment.booking.date,
+          payment.booking.startTime,
+          payment.booking.duration,
+        );
+        await this.mailerService.sendBookingPaidNotifications(payment.booking);
+      } catch (err) {
+        console.warn('Error post confirmación:', err);
+      }
+    }
+
     return {
       status: saved.status,
       message: action === 'CONFIRMAR' ? 'Pago confirmado exitosamente' : 'Pago rechazado',
       payment: saved,
     };
+  }
+
+  /**
+   * Subir archivo de comprobante de pago (Yape/Plin/Transferencia) a S3
+   */
+  async uploadReceiptFile(file: any): Promise<{ url: string }> {
+    if (!file) throw new BadRequestException('Debe proporcionar un archivo de imagen para el comprobante');
+    if (!file.mimetype?.startsWith('image/')) {
+      throw new BadRequestException('El comprobante debe ser una imagen válida (PNG, JPG, WEBP)');
+    }
+    const safeName = (file.originalname || `comprobante-${Date.now()}.png`).replace(/\s+/g, '_');
+    const url = await this.s3Service.uploadFile(file.buffer, safeName, file.mimetype, 'comprobantes-pago');
+    return { url };
+  }
+
+  /**
+   * Registrar pago manual (Yape, Plin, Transferencia) con comprobante para una reserva
+   */
+  async createBookingManualPayment(
+    dto: {
+      bookingId: string;
+      method?: PaymentMethod;
+      type?: PaymentType;
+      amount?: number;
+      comprobanteUrl?: string;
+      currency?: string;
+      metodo?: string;
+      tipo?: string;
+      monto?: number;
+    },
+    user: User,
+  ) {
+    const booking = await this.bookingService.findOneComplete(dto.bookingId);
+    if (!booking) throw new NotFoundException('Reserva no encontrada');
+
+    // Parse safe method (supports method or metodo, uppercase or lowercase)
+    const rawMethod = (dto.method || dto.metodo || 'YAPE').toString().toUpperCase();
+    let safeMethod: PaymentMethod = PaymentMethod.YAPE;
+    if (rawMethod.includes('PLIN')) {
+      safeMethod = PaymentMethod.PLIN;
+    } else if (rawMethod.includes('TRANSFER')) {
+      safeMethod = PaymentMethod.TRANSFERENCIA;
+    } else if (rawMethod.includes('CASH') || rawMethod.includes('EFECTIVO')) {
+      safeMethod = PaymentMethod.EFECTIVO;
+    } else if (rawMethod.includes('MERCADO') || rawMethod.includes('MP')) {
+      safeMethod = PaymentMethod.MERCADOPAGO;
+    } else {
+      safeMethod = PaymentMethod.YAPE;
+    }
+
+    // Parse safe type (supports type or tipo)
+    const rawType = (dto.type || dto.tipo || 'PAGO_COMPLETO').toString().toUpperCase();
+    let safeType: PaymentType = PaymentType.PAGO_COMPLETO;
+    if (rawType.includes('ADELANTO')) {
+      safeType = PaymentType.ADELANTO;
+    } else if (rawType.includes('SALDO')) {
+      safeType = PaymentType.SALDO;
+    } else {
+      safeType = PaymentType.PAGO_COMPLETO;
+    }
+
+    // Calcular monto seguro numérico
+    let safeAmount = Number(dto.amount ?? dto.monto);
+    if (isNaN(safeAmount) || safeAmount <= 0) {
+      if (typeof booking.pricing === 'object' && booking.pricing !== null) {
+        safeAmount = Number(booking.pricing.totalPrice ?? booking.pricing.basePrice);
+      } else if (typeof booking.pricing === 'string') {
+        try {
+          const parsed = JSON.parse(booking.pricing);
+          safeAmount = Number(parsed?.totalPrice ?? parsed?.basePrice);
+        } catch {}
+      }
+      if (isNaN(safeAmount) || safeAmount <= 0) {
+        const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
+        const dur = Number(booking.duration || 1);
+        safeAmount = courtPrice * dur * 2;
+      }
+    }
+    if (isNaN(safeAmount) || safeAmount < 0) {
+      safeAmount = 0;
+    }
+
+    const payment = this.paymentRepo.create({
+      booking,
+      user,
+      amount: safeAmount,
+      currency: dto.currency || 'PEN',
+      method: safeMethod,
+      paymentMethod: safeMethod,
+      status: PaymentStatus.PENDING,
+      type: safeType,
+      comprobanteUrl: dto.comprobanteUrl,
+      pendingAudit: true,
+      autoConfirmed: false,
+    });
+
+    const savedPayment = await this.paymentRepo.save(payment);
+
+    // Actualizar estado de la reserva a pendiente de verificación
+    booking.payment = savedPayment;
+    booking.paymentMethod = 'manual';
+    booking.paymentStatus = PaymentStatus.PENDING;
+    await this.bookingRepo.save(booking);
+
+    // Retener slots en calendario
+    if (booking.court && booking.court.id && booking.date && booking.startTime) {
+      try {
+        await this.generateSlotOccupied(
+          booking.court.id,
+          booking.date,
+          booking.startTime,
+          Number(booking.duration) || 1,
+        );
+      } catch (e) {
+        console.warn('Error al retener slots:', e);
+      }
+    }
+
+    return {
+      message: 'Comprobante registrado exitosamente. El club validará tu pago.',
+      payment: savedPayment,
+    };
+  }
+
+  /**
+   * Obtener pagos asociados a una reserva
+   */
+  async getPaymentsByBooking(bookingId: string) {
+    return this.paymentRepo.find({
+      where: { booking: { id: bookingId } },
+      order: { createdAt: 'DESC' },
+    });
   }
 }

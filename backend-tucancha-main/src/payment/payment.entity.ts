@@ -34,7 +34,7 @@ export class Payment {
   user: User;
 
   // Monto total del pago
-  @Column()
+  @Column({ type: 'float', default: 0 })
   amount: number;
 
   // Moneda, ej. 'PEN'

@@ -173,13 +173,26 @@ export const createBookingPayment = async (
   bookingId: string,
   data: {
     metodo: PaymentMethodEnum
-    tipo: PaymentTypeEnum
+    tipo?: PaymentTypeEnum
     monto: number
     comprobanteUrl?: string
     currency?: string
+    method?: PaymentMethodEnum
+    type?: PaymentTypeEnum
+    amount?: number
   }
 ) => {
-  const res = await api.post(`/payments/booking/${bookingId}`, data)
+  const payload = {
+    method: data.method || data.metodo,
+    metodo: data.metodo || data.method,
+    type: data.type || data.tipo || "PAGO_COMPLETO",
+    tipo: data.tipo || data.type || "PAGO_COMPLETO",
+    amount: data.amount ?? data.monto,
+    monto: data.monto ?? data.amount,
+    comprobanteUrl: data.comprobanteUrl,
+    currency: data.currency || "PEN",
+  }
+  const res = await api.post(`/payments/booking/${bookingId}`, payload)
   return res.data
 }
 
