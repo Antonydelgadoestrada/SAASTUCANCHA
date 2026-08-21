@@ -115,7 +115,8 @@ export class CourtService {
     const qb = this.courtRepo
       .createQueryBuilder("court")
       .leftJoinAndSelect("court.club", "club")
-      .where("club.status = 'APPROVED'")
+      .where("court.isActive = true")
+      .andWhere("club.status = 'APPROVED'")
       .andWhere(`
         EXISTS (
           SELECT 1
@@ -139,7 +140,10 @@ export class CourtService {
   }
 
   async findAll() {
-    const courts = await this.courtRepo.find({ relations: ['club'] });
+    const courts = await this.courtRepo.find({ 
+      where: { isActive: true },
+      relations: ['club'] 
+    });
     return this.applyScheduleTemplateFallback(courts);
   }
 
@@ -156,7 +160,7 @@ export class CourtService {
 
   async findAllByClub(clubId: string) {
     const courts = await this.courtRepo.find({
-      where: { club: { id: clubId } },
+      where: { club: { id: clubId }, isActive: true },
       relations: ['club'],
     })
     return this.applyScheduleTemplateFallback(courts, clubId);
@@ -302,7 +306,8 @@ export class CourtService {
       const targetDate = date || today;
   
       const qb = this.courtRepo.createQueryBuilder("court")
-        .leftJoinAndSelect("court.club", "club");
+        .leftJoinAndSelect("court.club", "club")
+        .where("court.isActive = true");
   
       qb.andWhere("club.status = 'APPROVED'");
       qb.andWhere(`
@@ -453,7 +458,7 @@ export class CourtService {
   }
 
   remove(id: string) {
-    return this.courtRepo.delete(id);
+    return this.courtRepo.update(id, { isActive: false });
   }
 
 }
