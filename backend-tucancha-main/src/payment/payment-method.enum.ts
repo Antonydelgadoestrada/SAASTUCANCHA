@@ -3,8 +3,8 @@ export enum PaymentMethod {
   YAPE = 'YAPE',
   PLIN = 'PLIN',
   TRANSFER = 'TRANSFER',
+  TRANSFERENCIA = 'TRANSFERENCIA',
   CASH = 'CASH',
+  EFECTIVO = 'EFECTIVO',
   MERCADOPAGO = 'MERCADOPAGO',
 }
-
-  

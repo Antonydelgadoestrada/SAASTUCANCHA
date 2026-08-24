@@ -1,13 +1,13 @@
 "use client"
 
 import { CalendarIcon, ClockIcon, MapPinIcon } from "lucide-react"
-import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import Link from "next/link"
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { parseSafeDate, formatSafeDate } from "@/lib/utils"
 
 interface UserUpcomingBookingsProps {
   bookings: any[]
@@ -20,8 +20,8 @@ export function UserUpcomingBookings({ bookings }: UserUpcomingBookingsProps) {
       const isPendingOrConfirmed = booking.status === "confirmed" || booking.status === "pending"
       if (!isPendingOrConfirmed) return false
       
-      const bookingDateTime = new Date(`${booking.date}T${booking.startTime}:00`)
-      return bookingDateTime >= new Date()
+      const bookingDateTime = parseSafeDate(booking.date, booking.startTime)
+      return bookingDateTime ? bookingDateTime >= new Date() : false
     })
     .slice(0, 3) // Mostrar máximo 3 en el dashboard
 
@@ -47,7 +47,7 @@ export function UserUpcomingBookings({ bookings }: UserUpcomingBookingsProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {upcomingBookings.map((booking) => {
-        const formattedDate = format(new Date(booking.date + "T00:00:00"), "EEEE d 'de' MMMM", { locale: es })
+        const formattedDate = formatSafeDate(booking.date, "EEEE d 'de' MMMM", { locale: es })
         return (
           <Card key={booking.id} className="shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">

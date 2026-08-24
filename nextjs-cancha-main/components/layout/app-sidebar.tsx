@@ -73,10 +73,10 @@ export function AppSidebar({ user }: AppSidebarProps) {
       active: isActive("/club/dashboard"),
     },
     {
-      title: "Mercadopago",
-      icon: CalendarIcon,
-      href: "/club/mercadopago",
-      active: isActive("/club/mercadopago"),
+      title: "Pagos y Cobros",
+      icon: CreditCardIcon,
+      href: "/club/payments",
+      active: isActive("/club/payments"),
     },
     {
       title: "Horarios",

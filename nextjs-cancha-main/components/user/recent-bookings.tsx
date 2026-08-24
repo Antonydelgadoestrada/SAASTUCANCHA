@@ -1,6 +1,5 @@
 "use client"
 
-import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon, CheckCircleIcon, ClockIcon, XCircleIcon, HistoryIcon } from "lucide-react"
 import Link from "next/link"
@@ -9,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
+import { parseSafeDate, formatSafeDate } from "@/lib/utils"
 
 interface UserRecentBookingsProps {
   bookings: any[]
@@ -21,19 +21,8 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
       const isPastStatus = booking.status === "completed" || booking.status === "cancelled"
       if (isPastStatus) return true
       
-      if (!booking.date || !booking.startTime) return false;
-      
-      // Intentar parsear la fecha de forma segura
-      let bookingDateTime = new Date();
-      if (booking.date.includes('T')) {
-          bookingDateTime = new Date(booking.date);
-      } else {
-          bookingDateTime = new Date(`${booking.date}T${booking.startTime}:00`);
-      }
-      
-      if (isNaN(bookingDateTime.getTime())) return false; // Si falla, lo descartamos
-      
-      return bookingDateTime < new Date()
+      const bookingDateTime = parseSafeDate(booking.date, booking.startTime)
+      return bookingDateTime ? bookingDateTime < new Date() : false
     })
     .slice(0, 5) // Mostrar máximo 5
 
@@ -98,18 +87,7 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
               </TableHeader>
               <TableBody>
                 {recentBookings.map((booking) => {
-                  // Safely parse date
-                  let safeDate = new Date();
-                  let isValidDate = false;
-                  if (booking.date) {
-                      const d = new Date(booking.date.includes('T') ? booking.date : booking.date + "T00:00:00");
-                      if (!isNaN(d.getTime())) {
-                          safeDate = d;
-                          isValidDate = true;
-                      }
-                  }
-                  
-                  const formattedDate = isValidDate ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
+                  const formattedDate = formatSafeDate(booking.date, "d MMM yyyy", { locale: es })
                   const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
                   return (
                     <TableRow key={booking.id}>
@@ -164,18 +142,7 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
       {/* Vista para móvil */}
       <div className="grid gap-4 md:hidden">
         {recentBookings.map((booking) => {
-          // Safely parse date
-          let safeDate = new Date();
-          let isValidDate = false;
-          if (booking.date) {
-              const d = new Date(booking.date.includes('T') ? booking.date : booking.date + "T00:00:00");
-              if (!isNaN(d.getTime())) {
-                  safeDate = d;
-                  isValidDate = true;
-              }
-          }
-          
-          const formattedDate = isValidDate ? format(safeDate, "d MMM yyyy", { locale: es }) : "Fecha no disponible"
+          const formattedDate = formatSafeDate(booking.date, "d MMM yyyy", { locale: es })
           const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
           return (
             <Card key={booking.id} className="shadow-sm">

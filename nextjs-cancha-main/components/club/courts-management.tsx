@@ -116,7 +116,6 @@ export function CourtsManagement() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex flex-1 items-center gap-4">
 
-
           <div className="relative flex-1">
             <Input
               placeholder="Buscar canchas..."

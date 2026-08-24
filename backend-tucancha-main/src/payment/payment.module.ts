@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Payment } from './payment.entity';
+import { Booking } from '../booking/booking.entity';
 import { PaymentService } from './payment.service';
 import { PaymentController } from './payment.controller';
 import { ScheduleCalendarModule } from '../schedule/schedule.module';
@@ -9,7 +10,7 @@ import { ClubModule } from '../club/club.module';
 import { MailerModule } from '../mailer/mailer.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment]), ScheduleCalendarModule, BookingModule, ClubModule, BookingModule, MailerModule],
+  imports: [TypeOrmModule.forFeature([Payment, Booking]), ScheduleCalendarModule, BookingModule, ClubModule, MailerModule],
   providers: [PaymentService],
   controllers: [PaymentController],
   exports: [PaymentService],

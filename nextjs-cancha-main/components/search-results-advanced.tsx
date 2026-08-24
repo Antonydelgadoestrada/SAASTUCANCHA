@@ -13,6 +13,7 @@ import {
   UserIcon,
   LogInIcon,
   Loader2,
+  MessageCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ import { getAllCourtsByQuery } from "@/lib/courts";
 import { sportTypes } from "@/lib/sports";
 import { useRouter } from "next/navigation";
 import { createPreference, createReservation } from "@/lib/mercadopago";
+import { getWhatsAppLink } from "@/lib/payments";
 
 interface SearchResultsProps {
   searchQuery?: string;
@@ -541,10 +543,28 @@ export function SearchResults({
             <span className="line-clamp-1">{court.address}</span>
           </div>
 
-          {/* teléfono */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <PhoneIcon className="h-4 w-4" />
-            <span>{court.phone}</span>
+          {/* teléfono y whatsapp */}
+          <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground flex-wrap">
+            <div className="flex items-center gap-2">
+              <PhoneIcon className="h-4 w-4 text-muted-foreground" />
+              <span>{court.phone || "Sin teléfono"}</span>
+            </div>
+
+            {(court.whatsapp || court.phone) && (
+              <a
+                href={getWhatsAppLink(
+                  court.whatsapp || court.phone,
+                  `¡Hola! Estoy interesado en la cancha "${court.name}" (${court.venue || ""}) que vi en TuCancha.`
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 transition-colors"
+                title="Chatear por WhatsApp con el Club"
+              >
+                <MessageCircle className="h-3 w-3 fill-emerald-600 dark:fill-emerald-400 text-white" />
+                <span>WhatsApp</span>
+              </a>
+            )}
           </div>
 
           {/* rating + precio */}
@@ -856,8 +876,31 @@ export function SearchResults({
                       </div>
                       <div className="flex items-center gap-2">
                         <PhoneIcon className="h-4 w-4 text-muted-foreground" />
-                        <span>{selectedCourt.phone}</span>
+                        <span>{selectedCourt.phone || "No especificado"}</span>
                       </div>
+
+                      {(selectedCourt.whatsapp || selectedCourt.phone) && (
+                        <div className="pt-2">
+                          <a
+                            href={getWhatsAppLink(
+                              selectedCourt.whatsapp || selectedCourt.phone,
+                              `¡Hola! Quisiera consultar sobre la cancha "${selectedCourt.name}" (${selectedCourt.venue || ""}) que vi en TuCancha.`
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex w-full"
+                          >
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] dark:text-[#25D366] border-[#25D366]/30 font-semibold text-xs gap-2 h-9"
+                            >
+                              <MessageCircle className="h-4 w-4 fill-[#25D366] text-white" />
+                              Contactar al WhatsApp del Club
+                            </Button>
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1122,6 +1165,26 @@ export function SearchResults({
                 </AlertDescription>
               </Alert>
 
+              {(selectedCourt.whatsapp || selectedCourt.phone) && (
+                <div className="flex items-center justify-between p-2.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg text-xs">
+                  <span className="text-slate-600 dark:text-slate-300">¿Dudas con tu reserva?</span>
+                  <a
+                    href={getWhatsAppLink(
+                      selectedCourt.whatsapp || selectedCourt.phone,
+                      `¡Hola! Tengo una consulta sobre mi reserva para la cancha "${selectedCourt.name}" el ${
+                        selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: es }) : "día de hoy"
+                      } a las ${selectedTime || ""}.`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-white" />
+                    Chatear por WhatsApp
+                  </a>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" onClick={() => setShowBooking(false)}>
                   Cancelar
@@ -1194,6 +1257,24 @@ export function SearchResults({
                   <span className="font-bold text-amber-700 dark:text-amber-400">Aviso importante:</span> Estar 15 min antes en el local para esperar la cancha a la hora reservada. El club no se hace responsable por falta de integrantes de equipo ni demoras por tardanzas internas.
                 </AlertDescription>
               </Alert>
+
+              {(selectedCourt.whatsapp || selectedCourt.phone) && (
+                <div className="flex items-center justify-between p-2.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg text-xs">
+                  <span className="text-slate-600 dark:text-slate-300">¿Dudas con el pago?</span>
+                  <a
+                    href={getWhatsAppLink(
+                      selectedCourt.whatsapp || selectedCourt.phone,
+                      `¡Hola! Tengo una consulta sobre el pago de mi reserva para la cancha "${selectedCourt.name}".`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-white" />
+                    WhatsApp del Club
+                  </a>
+                </div>
+              )}
 
               <div className="mt-4 flex gap-4">
                 <Button variant="outline" onClick={handleSeparate} disabled={isLoading}>
