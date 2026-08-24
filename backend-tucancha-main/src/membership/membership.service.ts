@@ -53,16 +53,44 @@ export class MembershipService {
   }
 
   async findAllPlans(): Promise<MembershipPlan[]> {
-    return this.planRepo.find({
+    const plans = await this.planRepo.find({
       order: { price: 'ASC' },
     });
+    if (plans.length === 0) {
+      return this.findActivePlans();
+    }
+    return plans;
   }
 
   async findActivePlans(): Promise<MembershipPlan[]> {
-    return this.planRepo.find({
+    let plans = await this.planRepo.find({
       where: { isActive: true },
       order: { price: 'ASC' },
     });
+
+    if (plans.length === 0) {
+      const defaultPlan = this.planRepo.create({
+        name: 'Plan Mensual Club',
+        description: 'Membresía completa para complejos deportivos y clubes',
+        price: 120.00,
+        currency: 'PEN',
+        interval: BillingInterval.MONTHLY,
+        features: [
+          'Publicación y visibilidad de canchas al público',
+          'Gestión de reservas en tiempo real y calendario interactivo',
+          'Recepción de pagos automáticos (Mercado Pago)',
+          'Recepción de pagos manuales (Yape y Plin con QR)',
+          'Contacto directo por WhatsApp con deportistas',
+          'Auditoría y control de comprobantes de pago',
+          'Soporte técnico prioritario TuCancha',
+        ],
+        isActive: true,
+      });
+      await this.planRepo.save(defaultPlan);
+      plans = [defaultPlan];
+    }
+
+    return plans;
   }
 
   async findPlanById(id: string): Promise<MembershipPlan> {
