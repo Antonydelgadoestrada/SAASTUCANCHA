@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { MembershipCronService } from './membership-cron.service';
 import { ClubMembership } from './entities/club_membership.entity';
+import { Club } from '../club/club.entity';
 import { MembershipStatus } from './enums/membership-status.enum';
 import { MailerService } from '../mailer/mailer.service';
 import { addDays, subDays } from 'date-fns';
@@ -9,11 +10,18 @@ import { addDays, subDays } from 'date-fns';
 describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
   let service: MembershipCronService;
   let membershipRepo: any;
+  let clubRepo: any;
   let mailerService: any;
 
   const mockMembershipRepo = {
     find: jest.fn(),
     save: jest.fn((m) => Promise.resolve(m)),
+  };
+
+  const mockClubRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn((c) => Promise.resolve(c)),
   };
 
   const mockMailerService = {
@@ -33,6 +41,10 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
           useValue: mockMembershipRepo,
         },
         {
+          provide: getRepositoryToken(Club),
+          useValue: mockClubRepo,
+        },
+        {
           provide: MailerService,
           useValue: mockMailerService,
         },
@@ -41,6 +53,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
 
     service = module.get<MembershipCronService>(MembershipCronService);
     membershipRepo = module.get(getRepositoryToken(ClubMembership));
+    clubRepo = module.get(getRepositoryToken(Club));
     mailerService = module.get(MailerService);
   });
 
@@ -54,6 +67,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
       const activePastEnd: ClubMembership = {
         id: 'mem-1',
         clubId: 'club-1',
+        planId: 'plan-1',
         club: { name: 'Club Central', email: 'club@test.com' } as any,
         plan: { name: 'Plan Pro' } as any,
         status: MembershipStatus.ACTIVE,
@@ -91,6 +105,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
       const graceExpired: ClubMembership = {
         id: 'mem-2',
         clubId: 'club-2',
+        planId: 'plan-2',
         club: { name: 'Club Norte', email: 'norte@test.com' } as any,
         plan: { name: 'Plan Básico' } as any,
         status: MembershipStatus.GRACE,
@@ -124,6 +139,7 @@ describe('MembershipCronService - Sprint C Lifecycle & Automated Crons', () => {
       const expiringIn3Days: ClubMembership = {
         id: 'mem-3',
         clubId: 'club-3',
+        planId: 'plan-3',
         club: { name: 'Club Sur', email: 'sur@test.com' } as any,
         plan: { name: 'Plan Anual' } as any,
         status: MembershipStatus.ACTIVE,

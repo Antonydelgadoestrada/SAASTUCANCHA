@@ -109,5 +109,14 @@
     @Column({ type: 'timestamp', nullable: true })
     paymentDueDate?: Date;
 
+    @Column({ default: false })
+    autoConfirmed: boolean;
+
+    @Column({ default: false })
+    pendingAudit: boolean;
+
+    @Column({ default: false })
+    autoCancelled: boolean;
   }
+
   

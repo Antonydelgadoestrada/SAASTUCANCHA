@@ -423,7 +423,7 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
             <FormItem>
               <FormLabel>Plantilla de Horario</FormLabel>
               <Select
-                value={field.value || ""}
+                value={field.value ? String(field.value) : undefined}
                 onValueChange={handleTemplateChange}
               >
                 <FormControl>
@@ -434,12 +434,12 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
                 <SelectContent>
                   {templates && templates.length > 0 ? (
                     templates.map((template: any) => (
-                      <SelectItem key={template.id} value={template.id}>
+                      <SelectItem key={template.id} value={String(template.id)}>
                         {template.name || `Plantilla ${template.id}`}
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="none" disabled>
                       No hay plantillas disponibles
                     </SelectItem>
                   )}

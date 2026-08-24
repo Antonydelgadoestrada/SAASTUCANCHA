@@ -11,6 +11,7 @@ import { UserUpcomingBookings } from "@/components/user/upcoming-bookings"
 import { getAllReservationByUser } from "@/lib/reservation"
 import { getLimit10 } from "@/lib/courts"
 import { useUserStore } from "@/stores/userStore"
+import { parseSafeDate } from "@/lib/utils"
 
 export function UserDashboardContent() {
   const user = useUserStore((state) => state.user)
@@ -43,8 +44,8 @@ export function UserDashboardContent() {
   const activeBookingsCount = bookings.filter((booking) => {
     const isPendingOrConfirmed = booking.status === "confirmed" || booking.status === "pending"
     if (!isPendingOrConfirmed) return false
-    const bookingDateTime = new Date(`${booking.date}T${booking.startTime}:00`)
-    return bookingDateTime >= new Date()
+    const bookingDateTime = parseSafeDate(booking.date, booking.startTime)
+    return bookingDateTime ? bookingDateTime >= new Date() : false
   }).length
 
   const favoriteCourtsCount = new Set(

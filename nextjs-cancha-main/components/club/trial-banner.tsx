@@ -60,7 +60,7 @@ export function TrialBanner() {
     if (isLoading || !session || session.user.role !== "CLUB") return
 
     if (clubStatus === "SUSPENDED") {
-      if (pathname !== "/club/membership" && !pathname.startsWith("/club/mercadopago")) {
+      if (pathname !== "/club/membership" && !pathname.startsWith("/club/payments")) {
         toast.error("Tu periodo de prueba ha vencido. Por favor, selecciona un plan para continuar.")
         router.push("/club/membership")
       }

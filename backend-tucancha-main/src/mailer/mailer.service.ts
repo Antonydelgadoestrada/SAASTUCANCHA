@@ -287,6 +287,95 @@ export class MailerService {
     });
   }
 
+  /**
+   * Notificación cuando una reserva expira por falta de comprobante de pago tras 2 horas
+   */
+  async sendBookingExpiredUnpaidEmail(to: string, booking: Booking) {
+    const { date, startTime, endTime, court, club, bookingReference, customerInfo } = booking;
+
+    const formattedDate = new Date(date).toLocaleDateString('es-PE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const html = this.getEmailTemplate({
+      title: 'Tu reserva ha expirado por falta de pago',
+      greeting: `Hola ${customerInfo?.name || 'Cliente'},`,
+      message: 'El tiempo límite de 2 horas para registrar tu comprobante de pago ha vencido. Tu turno ha sido liberado automáticamente.',
+      bookingDetailsHtml: `
+        <ul style="padding-left: 20px;">
+          <li><strong>Referencia:</strong> ${bookingReference}</li>
+          <li><strong>Fecha:</strong> ${formattedDate}</li>
+          <li><strong>Horario:</strong> ${startTime} - ${endTime}</li>
+          <li><strong>Club:</strong> ${club?.name || 'Club'}</li>
+          <li><strong>Cancha:</strong> ${court?.name || 'Cancha'}</li>
+        </ul>
+        <p style="color: #777; font-size: 13px;">Si deseas jugar en este horario, puedes ingresar nuevamente a la plataforma y realizar una nueva reserva.</p>
+      `,
+    });
+
+    try {
+      if (process.env.RESEND_API_KEY) {
+        await this.resend.emails.send({
+          from: this.fromEmail,
+          to,
+          subject: 'Reserva Expirada - Tiempo límite de pago vencido',
+          html,
+        });
+      }
+    } catch (err) {
+      console.warn(`⚠️ [MailerService] Error enviando email de expiración a ${to}:`, err?.message || err);
+    }
+  }
+
+  /**
+   * Notificación cuando una reserva con comprobante se auto-confirma para proteger la cancha
+   */
+  async sendBookingAutoConfirmedPendingAuditEmail(to: string, booking: Booking) {
+    const { date, startTime, endTime, court, club, bookingReference, customerInfo } = booking;
+
+    const formattedDate = new Date(date).toLocaleDateString('es-PE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const html = this.getEmailTemplate({
+      title: '¡Tu reserva ha sido confirmada con éxito!',
+      greeting: `Hola ${customerInfo?.name || 'Cliente'},`,
+      message: 'Hemos recibido tu comprobante de pago. Tu cancha está 100% asegurada para tu partido. El club revisará el comprobante en su bandeja de auditoría.',
+      bookingDetailsHtml: `
+        <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; padding: 15px; border-radius: 8px; margin: 15px 0;">
+          <p style="color: #166534; font-weight: bold; margin: 0 0 10px 0;">✓ Cancha Reservada y Asegurada</p>
+          <ul style="padding-left: 20px; color: #166534; margin: 0;">
+            <li><strong>Referencia:</strong> ${bookingReference}</li>
+            <li><strong>Fecha:</strong> ${formattedDate}</li>
+            <li><strong>Horario:</strong> ${startTime} - ${endTime}</li>
+            <li><strong>Club:</strong> ${club?.name || 'Club'}</li>
+            <li><strong>Cancha:</strong> ${court?.name || 'Cancha'}</li>
+          </ul>
+        </div>
+        <p style="font-size: 13px; color: #555;">¡Nos vemos en la cancha! Presenta tu código de reserva o tu DNI al llegar al club.</p>
+      `,
+    });
+
+    try {
+      if (process.env.RESEND_API_KEY) {
+        await this.resend.emails.send({
+          from: this.fromEmail,
+          to,
+          subject: '¡Reserva Confirmada! Tu cancha está asegurada',
+          html,
+        });
+      }
+    } catch (err) {
+      console.warn(`⚠️ [MailerService] Error enviando email de confirmación automática a ${to}:`, err?.message || err);
+    }
+  }
+
   async sendResetPasswordEmail(to: string, token: string) {
     const resetUrl = `${process.env.WEB_SERVICES_URL}/reset-password?token=${token}`;
 
