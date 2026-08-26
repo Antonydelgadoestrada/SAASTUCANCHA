@@ -8,9 +8,8 @@ import { PublicSearchForm } from "@/components/public-search-form"
 import { TestimonialsSection } from "@/components/testimonials-section"
 import { PricingSection } from "@/components/pricing-section"
 import { AuthHeaderButtons } from "@/components/AuthHeaderButtons"
-import FeaturedCourtsSection from "@/components/featured-courts-section"
 import { FeaturesCarousel } from "@/components/features-carousel"
-
+import { LandingNav } from "@/components/landing-nav"
 export const dynamic = "force-dynamic"
 
 export default async function HomePage() {
@@ -33,30 +32,7 @@ export default async function HomePage() {
               {process.env.NEXT_PUBLIC_APP_NAME}
             </span>
           </div>
-          <nav className="hidden md:flex">
-            <ul className="flex items-center gap-8">
-              <li>
-                <Link href="#features" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                  Características
-                </Link>
-              </li>
-              <li>
-                <Link href="#search" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                  Buscar Canchas
-                </Link>
-              </li>
-              <li>
-                <Link href="#pricing" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                  Precios
-                </Link>
-              </li>
-              <li>
-                <Link href="#testimonials" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                  Preguntas Frecuentes
-                </Link>
-              </li>
-            </ul>
-          </nav>
+          <LandingNav />
           <div className="flex items-center gap-4">
             <AuthHeaderButtons />
           </div>
@@ -150,10 +126,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Featured Courts Section */}
-        <section className="py-20 border-t border-border/40 bg-muted/30">
-          <FeaturedCourtsSection />
-        </section>
+
 
         {/* Features Section */}
         <section id="features" className="py-24 border-t border-border/40">
@@ -195,7 +168,7 @@ export default async function HomePage() {
         </section>
 
         {/* Testimonials Section */}
-        <section id="testimonials" className="bg-muted/30 py-20 border-t border-border/40">
+        <section className="bg-muted/30 py-20 border-t border-border/40">
           <TestimonialsSection />
         </section>
 

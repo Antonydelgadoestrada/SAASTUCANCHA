@@ -32,7 +32,7 @@ export function TestimonialsSection() {
   return (
     <div className="container space-y-20">
       {/* Sección: Confianza y Seguridad */}
-      <div className="grid gap-12 lg:grid-cols-12 lg:items-center">
+      <div id="testimonials" className="grid gap-12 lg:grid-cols-12 lg:items-center">
         <div className="lg:col-span-5 space-y-6">
           <div className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
             <Shield className="h-4.5 w-4.5" />
@@ -108,7 +108,7 @@ export function TestimonialsSection() {
       </div>
 
       {/* Sección: FAQ Accordion */}
-      <div className="border-t border-border/40 pt-20">
+      <div id="faq" className="border-t border-border/40 pt-20">
         <div className="mx-auto mb-12 max-w-3xl text-center space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
             <HelpCircle className="h-4 w-4" />

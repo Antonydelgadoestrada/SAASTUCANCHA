@@ -18,8 +18,8 @@ export const AuthHeaderButtons = () => {
             Iniciar Sesión
           </Button>
         </Link>
-        <Link href="/register">
-          <Button>Registrarse</Button>
+        <Link href="/register?type=club">
+          <Button className="bg-emerald-600 hover:bg-emerald-700">Registrar Club</Button>
         </Link>
       </>
     )
