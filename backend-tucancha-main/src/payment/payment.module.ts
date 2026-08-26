@@ -8,9 +8,17 @@ import { ScheduleCalendarModule } from '../schedule/schedule.module';
 import { BookingModule } from '../booking/booking.module';
 import { ClubModule } from '../club/club.module';
 import { MailerModule } from '../mailer/mailer.module';
+import { AwsModule } from '../aws/aws.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment, Booking]), ScheduleCalendarModule, BookingModule, ClubModule, MailerModule],
+  imports: [
+    TypeOrmModule.forFeature([Payment, Booking]),
+    ScheduleCalendarModule,
+    BookingModule,
+    ClubModule,
+    MailerModule,
+    AwsModule,
+  ],
   providers: [PaymentService],
   controllers: [PaymentController],
   exports: [PaymentService],

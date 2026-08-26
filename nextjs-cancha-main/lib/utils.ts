@@ -69,3 +69,40 @@ export function formatSafeDate(
   }
 }
 
+/**
+ * Safely extracts the total price (in Soles) for any booking object,
+ * handling jsonb objects, serialized JSON strings, direct price fields, or calculating from court price.
+ */
+export function getBookingTotalPrice(booking: any): number {
+  if (!booking) return 0
+
+  // 1. Si pricing es un objeto con totalPrice numérico
+  if (typeof booking.pricing === "object" && booking.pricing !== null) {
+    const p = Number(booking.pricing.totalPrice ?? booking.pricing.basePrice)
+    if (!isNaN(p) && p > 0) return p
+  }
+
+  // 2. Si pricing es un string JSON
+  if (typeof booking.pricing === "string") {
+    try {
+      const parsed = JSON.parse(booking.pricing)
+      const p = Number(parsed?.totalPrice ?? parsed?.basePrice)
+      if (!isNaN(p) && p > 0) return p
+    } catch {}
+  }
+
+  // 3. Si booking tiene price directo
+  if (booking.price !== undefined && booking.price !== null) {
+    const p = Number(booking.price)
+    if (!isNaN(p) && p > 0) return p
+  }
+
+  // 4. Calcular desde court.priceDay / priceNight y duration
+  const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || booking.court?.price || 0)
+  const dur = Number(booking.duration || 1)
+  const calculated = courtPrice * dur * 2
+  if (!isNaN(calculated) && calculated > 0) return calculated
+
+  return 0
+}
+

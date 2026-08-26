@@ -3,6 +3,7 @@ import {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
     Param,
     Body,
@@ -11,6 +12,8 @@ import {
     Res,
     Req,
     UseGuards,
+    UseInterceptors,
+    UploadedFile,
   } from '@nestjs/common';
   import { PaymentService } from './payment.service';
   import { Payment } from './payment.entity';
@@ -19,6 +22,8 @@ import { Cron } from '@nestjs/schedule';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../user/user.entity';
 import { GetUser } from '../auth/get-user.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage, File as MulterFile } from 'multer';
   
   @Controller('payments')
   export class PaymentController {
@@ -136,7 +141,7 @@ import { GetUser } from '../auth/get-user.decorator';
     }
 
     /**
-     * PATCH /payments/:id/confirm
+     * PATCH & PUT /payments/:id/confirm
      * Auditar comprobante — Confirmar o Rechazar un pago manual
      */
     @UseGuards(JwtAuthGuard)
@@ -149,16 +154,56 @@ import { GetUser } from '../auth/get-user.decorator';
       return this.service.auditManualPayment(id, dto.action, user, dto.motivoRechazo);
     }
 
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/confirm')
+    async auditPaymentPatch(
+      @Param('id') id: string,
+      @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
+      @GetUser() user: User,
+    ) {
+      return this.service.auditManualPayment(id, dto.action, user, dto.motivoRechazo);
+    }
+
     /**
      * POST /payments/upload-comprobante
-     * Subida de imagen de comprobante de pago por el usuario
+     * Subida de imagen de comprobante de pago por el usuario a S3
      */
     @UseGuards(JwtAuthGuard)
     @Post('upload-comprobante')
-    async uploadComprobante() {
-      // El manejo de archivo se hace en el booking payment service
-      // Este endpoint es un alias para compatibilidad frontend
-      return { message: 'Use el endpoint de booking para subir comprobantes' };
+    @UseInterceptors(
+      FileInterceptor('file', {
+        storage: memoryStorage(),
+        limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+      }),
+    )
+    async uploadComprobante(@UploadedFile() file: MulterFile) {
+      return this.service.uploadReceiptFile(file);
+    }
+
+    /**
+     * POST /payments/booking/:id
+     * Registrar pago manual (Yape / Plin) con comprobante para una reserva
+     */
+    @UseGuards(JwtAuthGuard)
+    @Post('booking/:id')
+    async createBookingPayment(
+      @Param('id') bookingId: string,
+      @Body() dto: any,
+      @GetUser() user: User,
+    ) {
+      return this.service.createBookingManualPayment({ ...dto, bookingId }, user);
+    }
+
+    /**
+     * GET /payments/booking/:id
+     * Obtener historial de pagos de una reserva
+     */
+    @UseGuards(JwtAuthGuard)
+    @Get('booking/:id')
+    async getBookingPayments(
+      @Param('id') bookingId: string,
+    ) {
+      return this.service.getPaymentsByBooking(bookingId);
     }
   }
   

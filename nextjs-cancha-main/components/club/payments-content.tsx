@@ -132,6 +132,11 @@ function PaymentDetailModal({
   const isAutoConfirmed = payment.autoConfirmed || payment.booking?.autoConfirmed
   const booking = payment.booking
   const customer = booking?.customerInfo
+  const customerName = customer?.name || payment.user?.name || "El cliente"
+  const totalBookingPrice = Number(booking?.pricing?.totalPrice ?? (payment.amount || 0))
+  const paidAmount = Number(payment.amount || 0)
+  const isAdvancePayment = payment.type === "ADELANTO" || (totalBookingPrice > paidAmount && totalBookingPrice > 0)
+  const saldoPendiente = Math.max(0, Number((totalBookingPrice - paidAmount).toFixed(2)))
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -144,6 +149,27 @@ function PaymentDetailModal({
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
+          {/* Mensaje de estado de adelanto / saldo restante */}
+          {isAdvancePayment && saldoPendiente > 0 ? (
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-sm">
+                <span>⚠️</span> Adelanto Recibido — Saldo Pendiente
+              </p>
+              <p>
+                El usuario <strong>{customerName}</strong> envió recibo de pago por adelanto de <strong>{fmt(paidAmount)}</strong> y <strong>falta por cancelar {fmt(saldoPendiente)}</strong> al ingresar al club.
+              </p>
+            </div>
+          ) : (
+            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-sm">
+                <span>✓</span> Pago Completo (100%)
+              </p>
+              <p>
+                El usuario <strong>{customerName}</strong> envió recibo por el 100% de la reserva (<strong>{fmt(paidAmount)}</strong>). Reserva totalmente cancelada.
+              </p>
+            </div>
+          )}
+
           {isAutoConfirmed && (
             <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl text-xs text-sky-800 dark:text-sky-300">
               <strong>🛡️ Cancha Asegurada Automáticamente:</strong> El usuario subió su comprobante y pasaron más de 2 horas sin auditar. El sistema aseguró su turno. Por favor revisa el comprobante a continuación para validar la transacción.
@@ -179,8 +205,13 @@ function PaymentDetailModal({
           {/* Monto y método */}
           <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200">
             <div>
-              <p className="text-xs text-slate-500 mb-0.5">Monto</p>
+              <p className="text-xs text-slate-500 mb-0.5">Monto Abonado</p>
               <p className="text-2xl font-bold text-emerald-600">{fmt(payment.amount)}</p>
+              {isAdvancePayment && saldoPendiente > 0 && (
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mt-0.5">
+                  Falta pagar: {fmt(saldoPendiente)}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-xs text-slate-500 mb-0.5">Método</p>
@@ -476,11 +507,32 @@ function MetricsAuditTab() {
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                         {p.booking?.court?.name || "—"}
                       </td>
-                      <td className="px-4 py-3 font-bold text-emerald-600">
-                        {fmt(p.amount)}
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-emerald-600">{fmt(p.amount)}</p>
+                        {(() => {
+                          const totalBookingPrice = Number(p.booking?.pricing?.totalPrice ?? (p.amount || 0))
+                          const paidAmount = Number(p.amount || 0)
+                          const saldoPendiente = Math.max(0, Number((totalBookingPrice - paidAmount).toFixed(2)))
+                          if (p.type === "ADELANTO" || saldoPendiente > 0) {
+                            return (
+                              <span className="inline-block text-[10px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-1.5 py-0.5 rounded mt-0.5">
+                                Falta: {fmt(saldoPendiente)}
+                              </span>
+                            )
+                          }
+                          return (
+                            <span className="inline-block text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 px-1.5 py-0.5 rounded mt-0.5">
+                              100% Pagado
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-3">{methodBadge(p.method)}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{p.type}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                          {p.type === "ADELANTO" ? "Adelanto" : "Pago Total"}
+                        </span>
+                      </td>
                       <td className="px-4 py-3">{statusBadge(p.status, p.autoConfirmed || p.booking?.autoConfirmed, p.pendingAudit || p.booking?.pendingAudit)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">
                         {format(new Date(p.createdAt), "dd/MM HH:mm")}
