@@ -165,6 +165,30 @@ import { memoryStorage, File as MulterFile } from 'multer';
     }
 
     /**
+     * PATCH & POST /payments/:id/settle-saldo
+     * Liquidar / Confirmar cobro del saldo restante
+     */
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/settle-saldo')
+    async settleSaldoPatch(
+      @Param('id') id: string,
+      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string },
+      @GetUser() user: User,
+    ) {
+      return this.service.settleManualSaldo(id, dto, user);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post(':id/settle-saldo')
+    async settleSaldoPost(
+      @Param('id') id: string,
+      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string },
+      @GetUser() user: User,
+    ) {
+      return this.service.settleManualSaldo(id, dto, user);
+    }
+
+    /**
      * POST /payments/upload-comprobante
      * Subida de imagen de comprobante de pago por el usuario a S3
      */

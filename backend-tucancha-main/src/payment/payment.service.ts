@@ -393,6 +393,8 @@ export class PaymentService {
       const isPending = p.status === PaymentStatus.PENDING || (p.status as string) === 'PENDIENTE';
       const isRejected = p.status === PaymentStatus.REJECTED || (p.status as string) === 'RECHAZADO';
       const amount = Number(p.amount) || 0;
+      const isSaldoPaid = p.saldoStatus === 'PAGADO';
+      const saldoAmount = Number(p.saldoAmount || 0);
 
       // Calcular precio total de la reserva
       let totalPrice = 0;
@@ -413,8 +415,8 @@ export class PaymentService {
         totalPrice = amount;
       }
 
-      // Si la reserva no está rechazada/cancelada y falta saldar, sumar a saldo por cobrar
-      if (!isRejected && totalPrice > amount) {
+      // Si la reserva no está rechazada y el saldo NO está liquidado, sumar lo que falta a saldo por cobrar
+      if (!isRejected && !isSaldoPaid && (p.type === PaymentType.ADELANTO || totalPrice > amount)) {
         saldoPendienteTotal += Math.max(0, totalPrice - amount);
       }
 
@@ -426,6 +428,17 @@ export class PaymentService {
         else if ((p.method as string) === 'TRANSFERENCIA') recaudadoTransfer += amount;
         else if ((p.method as string) === 'EFECTIVO') recaudadoEfectivo += amount;
         else recaudadoMercadoPago += amount;
+
+        // Si se cobró saldo restante adicional, sumarlo a recaudación y al método correspondiente
+        if (isSaldoPaid && saldoAmount > 0) {
+          totalRecaudado += saldoAmount;
+          const sMethod = (p.saldoMethod || 'EFECTIVO').toUpperCase();
+          if (sMethod.includes('YAPE')) recaudadoYape += saldoAmount;
+          else if (sMethod.includes('PLIN')) recaudadoPlin += saldoAmount;
+          else if (sMethod.includes('TRANSFER')) recaudadoTransfer += saldoAmount;
+          else if (sMethod.includes('EFECTIVO')) recaudadoEfectivo += saldoAmount;
+          else recaudadoMercadoPago += saldoAmount;
+        }
       } else if (isPending) {
         comprobantesPendientesCount++;
       } else if (isRejected) {
@@ -472,6 +485,7 @@ export class PaymentService {
       .leftJoinAndSelect('booking.user', 'customer')
       .leftJoinAndSelect('payment.user', 'payer')
       .leftJoinAndSelect('payment.confirmadoPor', 'confirmadoPor')
+      .leftJoinAndSelect('payment.saldoConfirmadoPor', 'saldoConfirmadoPor')
       .orderBy('payment.createdAt', 'DESC');
 
     if (clubId) {
@@ -695,6 +709,13 @@ export class PaymentService {
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = null;
 
+      if (payment.type === PaymentType.PAGO_COMPLETO) {
+        payment.saldoStatus = 'PAGADO';
+        payment.saldoAmount = 0;
+      } else if (payment.type === PaymentType.ADELANTO && !payment.saldoStatus) {
+        payment.saldoStatus = 'PENDIENTE';
+      }
+
       // Confirmar reserva asociada
       if (payment.booking) {
         payment.booking.status = BookingStatus.CONFIRMED;
@@ -719,6 +740,7 @@ export class PaymentService {
       payment.fechaConfirmacion = new Date();
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = motivoRechazo || null;
+      payment.saldoStatus = 'NO_APLICA';
 
       if (payment.booking) {
         payment.booking.paymentStatus = PaymentStatus.REJECTED;
@@ -731,6 +753,89 @@ export class PaymentService {
     return {
       status: saved.status,
       message: action === 'CONFIRMAR' ? 'Pago confirmado exitosamente' : 'Pago rechazado',
+      payment: saved,
+    };
+  }
+
+  /**
+   * Confirmar la liquidación / cobro del saldo restante de una reserva con adelanto
+   */
+  async settleManualSaldo(
+    paymentId: string,
+    dto: {
+      monto?: number;
+      metodo?: string;
+      comprobanteUrl?: string;
+      notas?: string;
+    },
+    auditor: User,
+  ) {
+    const payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+    });
+    if (!payment) throw new BadRequestException('Pago no encontrado');
+
+    // Calcular precio total de la reserva
+    let totalPrice = 0;
+    if (typeof payment.booking?.pricing === 'object' && payment.booking?.pricing !== null) {
+      totalPrice = Number((payment.booking.pricing as any).totalPrice ?? (payment.booking.pricing as any).basePrice);
+    } else if (typeof payment.booking?.pricing === 'string') {
+      try {
+        const parsed = JSON.parse(payment.booking.pricing);
+        totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
+      } catch {}
+    }
+    if (isNaN(totalPrice) || totalPrice <= 0) {
+      const courtPrice = Number(payment.booking?.court?.priceDay || payment.booking?.court?.priceNight || 0);
+      const dur = Number(payment.booking?.duration || 1);
+      totalPrice = courtPrice * dur * 2;
+    }
+    if (isNaN(totalPrice) || totalPrice <= 0) {
+      totalPrice = Number(payment.amount || 0);
+    }
+
+    const initialAmount = Number(payment.amount || 0);
+    const calculatedRemaining = Math.max(0, Number((totalPrice - initialAmount).toFixed(2)));
+    const settleAmount = Number(dto.monto != null ? dto.monto : calculatedRemaining);
+
+    // Si el comprobante inicial estaba pendiente, se auto-valida al momento de liquidar
+    if (payment.status === PaymentStatus.PENDING || (payment.status as string) === 'PENDIENTE') {
+      payment.status = PaymentStatus.PAID;
+      payment.fechaConfirmacion = new Date();
+      payment.confirmadoPor = auditor;
+    }
+
+    // Normalizar método de saldo
+    const rawMethod = (dto.metodo || 'EFECTIVO').toString().toUpperCase();
+    let safeMethod = 'EFECTIVO';
+    if (rawMethod.includes('YAPE')) safeMethod = 'YAPE';
+    else if (rawMethod.includes('PLIN')) safeMethod = 'PLIN';
+    else if (rawMethod.includes('TRANSFER')) safeMethod = 'TRANSFERENCIA';
+    else if (rawMethod.includes('CARD') || rawMethod.includes('POS') || rawMethod.includes('TARJETA')) safeMethod = 'CARD';
+    else if (rawMethod.includes('MERCADO')) safeMethod = 'MERCADOPAGO';
+    else safeMethod = 'EFECTIVO';
+
+    payment.saldoStatus = 'PAGADO';
+    payment.saldoAmount = settleAmount;
+    payment.saldoMethod = safeMethod;
+    payment.saldoComprobanteUrl = dto.comprobanteUrl || null;
+    payment.saldoNotas = dto.notas || null;
+    payment.saldoFechaConfirmacion = new Date();
+    payment.saldoConfirmadoPor = auditor;
+
+    // Actualizar estado de la reserva
+    if (payment.booking) {
+      payment.booking.status = BookingStatus.CONFIRMED;
+      payment.booking.paymentStatus = PaymentStatus.PAID;
+      await this.bookingRepo.save(payment.booking);
+    }
+
+    const saved = await this.paymentRepo.save(payment);
+
+    return {
+      status: 'PAGADO',
+      message: 'Saldo restante liquidado y registrado exitosamente',
       payment: saved,
     };
   }

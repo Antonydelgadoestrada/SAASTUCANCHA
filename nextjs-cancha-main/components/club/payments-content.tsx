@@ -7,7 +7,8 @@ import { es } from "date-fns/locale"
 import {
   DollarSignIcon, CreditCardIcon, SmartphoneIcon, ClockIcon,
   CheckCircle2Icon, XCircleIcon, EyeIcon, RefreshCwIcon,
-  SearchIcon, ChevronDownIcon, ReceiptIcon,
+  SearchIcon, ReceiptIcon, BanknoteIcon, ArrowRightIcon,
+  UploadIcon, AlertCircleIcon, ShieldCheckIcon
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -27,34 +28,111 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
   getClubPaymentMetrics, getClubPaymentsList, confirmManualPayment,
-  PaymentItem, PaymentMetrics,
+  settlePaymentSaldo, uploadPaymentReceipt,
+  PaymentItem, PaymentMetrics, PaymentMethodEnum
 } from "@/lib/payments"
 import { PaymentSettingsTab } from "@/components/club/payment-settings-tab"
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers de cálculo y formato ─────────────────────────────────────────────
 
 function fmt(val: number) {
-  return `S/ ${val.toFixed(2)}`
+  return `S/ ${(val || 0).toFixed(2)}`
 }
 
-function statusBadge(status: string, autoConfirmed?: boolean, pendingAudit?: boolean) {
+export function computePaymentDetails(payment: PaymentItem) {
+  const booking = payment.booking
+  const totalBookingPrice = Number(booking?.pricing?.totalPrice ?? (payment.amount || 0))
+  const paidInitial = Number(payment.amount || 0)
+  const isAdvance = payment.type === "ADELANTO" || (totalBookingPrice > paidInitial && totalBookingPrice > 0)
+  const isSaldoPaid = payment.saldoStatus === "PAGADO"
+  const isComprobanteRejected = payment.status === "RECHAZADO" || payment.status === "REJECTED"
+  
+  // Saldo faltante exacto por pagar
+  const saldoFaltante = (isAdvance && !isSaldoPaid && !isComprobanteRejected)
+    ? Math.max(0, Number((totalBookingPrice - paidInitial).toFixed(2)))
+    : 0
+
+  const saldoSettledAmount = Number(
+    payment.saldoAmount ?? (isSaldoPaid ? Math.max(0, totalBookingPrice - paidInitial) : 0)
+  )
+
+  const totalRecibido = isSaldoPaid 
+    ? paidInitial + saldoSettledAmount
+    : paidInitial
+
+  const isComprobantePending =
+    payment.status === "PENDIENTE" ||
+    payment.status === "PENDING" ||
+    payment.pendingAudit ||
+    booking?.pendingAudit ||
+    payment.autoConfirmed ||
+    booking?.autoConfirmed
+
+  const isComprobanteApproved = payment.status === "CONFIRMADO" || payment.status === "PAID"
+
+  return {
+    totalBookingPrice,
+    paidInitial,
+    isAdvance,
+    isSaldoPaid,
+    saldoSettledAmount,
+    saldoFaltante,
+    totalRecibido,
+    isComprobantePending,
+    isComprobanteApproved,
+    isComprobanteRejected,
+  }
+}
+
+function comprobanteBadge(status: string, autoConfirmed?: boolean, pendingAudit?: boolean) {
   if (autoConfirmed || pendingAudit) {
     return (
       <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-300 font-medium text-xs">
-        🛡️ Auto-Confirmado (Por Auditar)
+        🛡️ Auto-Confirmado
       </Badge>
     )
   }
   const map: Record<string, { label: string; className: string }> = {
     PENDIENTE: { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
     PENDING:   { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
-    CONFIRMADO:{ label: "Confirmado", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
-    PAID:      { label: "Confirmado", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
-    RECHAZADO: { label: "Rechazado", className: "bg-red-100 text-red-700 border-red-300" },
-    REJECTED:  { label: "Rechazado", className: "bg-red-100 text-red-700 border-red-300" },
+    CONFIRMADO:{ label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    PAID:      { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    RECHAZADO: { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
+    REJECTED:  { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
   }
   const v = map[status] || { label: status, className: "bg-slate-100 text-slate-600 border-slate-300" }
   return <Badge variant="outline" className={`${v.className} font-medium text-xs`}>{v.label}</Badge>
+}
+
+function saldoBadge(
+  isAdvance: boolean,
+  isSaldoPaid: boolean,
+  saldoFaltante: number,
+  saldoMethod?: string | null,
+  isRejected?: boolean
+) {
+  if (isRejected) {
+    return <Badge variant="outline" className="bg-slate-100 text-slate-500 border-slate-300 text-xs">Cancelado</Badge>
+  }
+  if (!isAdvance) {
+    return (
+      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-medium text-xs">
+        ✓ 100% Pagado
+      </Badge>
+    )
+  }
+  if (isSaldoPaid) {
+    return (
+      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-medium text-xs">
+        ✓ Liquidado ({saldoMethod || "Efectivo"})
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 font-semibold text-xs">
+      ⚠️ Saldo Pendiente
+    </Badge>
+  )
 }
 
 function methodBadge(method: string) {
@@ -63,7 +141,10 @@ function methodBadge(method: string) {
     YAPE:          { label: "Yape", color: "text-purple-600" },
     PLIN:          { label: "Plin", color: "text-teal-600" },
     TRANSFERENCIA: { label: "Transferencia", color: "text-indigo-600" },
+    TRANSFER:      { label: "Transferencia", color: "text-indigo-600" },
     EFECTIVO:      { label: "Efectivo", color: "text-green-700" },
+    CASH:          { label: "Efectivo", color: "text-green-700" },
+    CARD:          { label: "Tarjeta / POS", color: "text-blue-700" },
   }
   const v = map[method] || { label: method, color: "text-slate-500" }
   return <span className={`text-xs font-semibold ${v.color}`}>{v.label}</span>
@@ -95,11 +176,232 @@ function MetricCard({
   )
 }
 
-// ─── Modal de detalle y auditoría de pago ────────────────────────────────────
+// ─── Modal para Cobrar / Liquidar Saldo Restante ──────────────────────────────
+
+function SettleSaldoModal({
+  payment,
+  open,
+  onClose,
+}: {
+  payment: PaymentItem | null
+  open: boolean
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [selectedMethod, setSelectedMethod] = useState<string>("EFECTIVO")
+  const [montoCustom, setMontoCustom] = useState<string>("")
+  const [notas, setNotas] = useState("")
+  const [uploadingReceipt, setUploadingReceipt] = useState(false)
+  const [comprobanteSaldoUrl, setComprobanteSaldoUrl] = useState<string | null>(null)
+
+  if (!payment) return null
+
+  const details = computePaymentDetails(payment)
+  const defaultRemaining = details.saldoFaltante > 0 ? details.saldoFaltante : 0
+  const effectiveMonto = montoCustom !== "" ? Number(montoCustom) : defaultRemaining
+
+  const mutation = useMutation({
+    mutationFn: (data: { monto: number; metodo: string; comprobanteUrl?: string; notas?: string }) =>
+      settlePaymentSaldo(payment.id, {
+        monto: data.monto,
+        metodo: data.metodo,
+        comprobanteUrl: data.comprobanteUrl,
+        notas: data.notas,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["club-payments-list"] })
+      queryClient.invalidateQueries({ queryKey: ["club-payment-metrics"] })
+      toast.success("¡Saldo restante liquidado exitosamente!", {
+        description: `Se registraron ${fmt(effectiveMonto)} vía ${selectedMethod}.`,
+      })
+      onClose()
+      setMontoCustom("")
+      setNotas("")
+      setComprobanteSaldoUrl(null)
+    },
+    onError: (err: any) => {
+      toast.error("Error al registrar liquidación", {
+        description: err.response?.data?.message || err.message,
+      })
+    },
+  })
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setUploadingReceipt(true)
+      const res = await uploadPaymentReceipt(file)
+      setComprobanteSaldoUrl(res.url)
+      toast.success("Comprobante del saldo adjuntado correctamente")
+    } catch (err: any) {
+      toast.error("Error al subir comprobante", { description: err.message })
+    } finally {
+      setUploadingReceipt(false)
+    }
+  }
+
+  const handleConfirmSettle = () => {
+    mutation.mutate({
+      monto: effectiveMonto,
+      metodo: selectedMethod,
+      comprobanteUrl: comprobanteSaldoUrl || undefined,
+      notas: notas || undefined,
+    })
+  }
+
+  const customerName = payment.booking?.customerInfo?.name || payment.user?.name || "Cliente"
+  const courtName = payment.booking?.court?.name || "Cancha"
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BanknoteIcon className="w-5 h-5 text-emerald-600" />
+            Cobrar / Confirmar Saldo Restante
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 text-sm pt-1">
+          {/* Card Resumen de Deuda */}
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <p className="text-xs font-semibold text-slate-500">Cliente & Reserva</p>
+                <p className="font-bold text-slate-900 dark:text-white">{customerName}</p>
+                <p className="text-xs text-slate-500">{courtName} {payment.booking?.bookingReference ? `• Ref: ${payment.booking.bookingReference}` : ""}</p>
+              </div>
+              <Badge className="bg-emerald-600 text-white font-bold">
+                Total: {fmt(details.totalBookingPrice)}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 mt-2 text-xs">
+              <div>
+                <span className="text-slate-500">Abono inicial recibido:</span>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{fmt(details.paidInitial)}</p>
+              </div>
+              <div>
+                <span className="text-amber-700 dark:text-amber-400 font-semibold">Monto faltante a cobrar:</span>
+                <p className="font-bold text-base text-amber-600 dark:text-amber-400">{fmt(defaultRemaining)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Monto a Cobrar */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Monto que cancela el cliente (S/)</Label>
+            <Input
+              type="number"
+              step="0.10"
+              placeholder={defaultRemaining.toString()}
+              defaultValue={defaultRemaining > 0 ? defaultRemaining : ""}
+              onChange={(e) => setMontoCustom(e.target.value)}
+              className="font-bold text-base"
+            />
+            <p className="text-[11px] text-slate-400">
+              Valor sugerido correspondiente al saldo pendiente exacto.
+            </p>
+          </div>
+
+          {/* Método de Cobro */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Método de cobro del restante</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "EFECTIVO", label: "💵 Efectivo (Cancha/Caja)" },
+                { id: "YAPE", label: "🟣 Yape" },
+                { id: "PLIN", label: "🟢 Plin" },
+                { id: "TRANSFERENCIA", label: "🏦 Transferencia" },
+                { id: "CARD", label: "💳 POS / Tarjeta" },
+              ].map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setSelectedMethod(m.id)}
+                  className={`p-2.5 rounded-lg border text-xs font-medium text-left transition-all ${
+                    selectedMethod === m.id
+                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-500"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Subir comprobante del saldo (opcional) */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold flex items-center justify-between">
+              <span>Comprobante de cancelación de saldo (opcional)</span>
+              {comprobanteSaldoUrl && (
+                <span className="text-emerald-600 text-[11px] font-bold">✓ Adjuntado</span>
+              )}
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={uploadingReceipt}
+                className="text-xs file:text-xs"
+              />
+              {uploadingReceipt && (
+                <span className="animate-spin text-xs text-slate-500">⏳</span>
+              )}
+            </div>
+          </div>
+
+          {/* Notas de liquidación */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Notas adicionales (opcional)</Label>
+            <Textarea
+              placeholder="Ej. Cobrado en recepción en efectivo al ingresar a la cancha..."
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              rows={2}
+              className="text-xs"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 pt-3">
+          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 flex-1"
+            onClick={handleConfirmSettle}
+            disabled={mutation.isPending || effectiveMonto <= 0}
+          >
+            {mutation.isPending ? (
+              <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4 inline-block" />
+            ) : (
+              <CheckCircle2Icon className="w-4 h-4" />
+            )}
+            Confirmar y Liquidar {fmt(effectiveMonto)}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Modal de Detalle Completo y Auditoría (360°) ────────────────────────────
 
 function PaymentDetailModal({
-  payment, open, onClose,
-}: { payment: PaymentItem | null; open: boolean; onClose: () => void }) {
+  payment,
+  open,
+  onClose,
+  onOpenSettleModal,
+}: {
+  payment: PaymentItem | null
+  open: boolean
+  onClose: () => void
+  onOpenSettleModal: (p: PaymentItem) => void
+}) {
   const queryClient = useQueryClient()
   const [motivoRechazo, setMotivoRechazo] = useState("")
   const [showRejectInput, setShowRejectInput] = useState(false)
@@ -110,7 +412,7 @@ function PaymentDetailModal({
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["club-payments-list"] })
       queryClient.invalidateQueries({ queryKey: ["club-payment-metrics"] })
-      toast.success(vars.action === "CONFIRMAR" ? "Pago confirmado ✓" : "Pago rechazado")
+      toast.success(vars.action === "CONFIRMAR" ? "Comprobante confirmado ✓" : "Comprobante rechazado")
       setShowRejectInput(false)
       setMotivoRechazo("")
       onClose()
@@ -122,41 +424,61 @@ function PaymentDetailModal({
 
   if (!payment) return null
 
-  const isAuditPending =
-    payment.status === "PENDIENTE" ||
-    payment.status === "PENDING" ||
-    payment.pendingAudit ||
-    payment.booking?.pendingAudit ||
-    payment.autoConfirmed ||
-    payment.booking?.autoConfirmed
+  const details = computePaymentDetails(payment)
+  const isAuditPending = details.isComprobantePending
   const isAutoConfirmed = payment.autoConfirmed || payment.booking?.autoConfirmed
   const booking = payment.booking
   const customer = booking?.customerInfo
   const customerName = customer?.name || payment.user?.name || "El cliente"
-  const totalBookingPrice = Number(booking?.pricing?.totalPrice ?? (payment.amount || 0))
-  const paidAmount = Number(payment.amount || 0)
-  const isAdvancePayment = payment.type === "ADELANTO" || (totalBookingPrice > paidAmount && totalBookingPrice > 0)
-  const saldoPendiente = Math.max(0, Number((totalBookingPrice - paidAmount).toFixed(2)))
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ReceiptIcon className="w-5 h-5 text-emerald-600" />
-            Detalle de Pago y Auditoría
+            Detalle de Pago & Liquidación de Saldo
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 text-sm">
-          {/* Mensaje de estado de adelanto / saldo restante */}
-          {isAdvancePayment && saldoPendiente > 0 ? (
-            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
+        <div className="space-y-5 text-sm pt-1">
+          {/* Banner de Estado General */}
+          {details.isAdvance && !details.isSaldoPaid && !details.isComprobanteRejected ? (
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="font-bold flex items-center gap-1.5 text-sm">
+                  <span>⚠️</span> Adelanto Recibido — Saldo Pendiente
+                </p>
+                <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-bold">
+                  Falta: {fmt(details.saldoFaltante)}
+                </Badge>
+              </div>
+              <p>
+                El usuario <strong>{customerName}</strong> abonó un adelanto inicial de <strong>{fmt(details.paidInitial)}</strong> (Total reserva: {fmt(details.totalBookingPrice)}).
+              </p>
+              {details.isComprobanteApproved && (
+                <div className="pt-2 flex justify-end">
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 gap-1"
+                    onClick={() => {
+                      onClose()
+                      onOpenSettleModal(payment)
+                    }}
+                  >
+                    <BanknoteIcon className="w-3.5 h-3.5" />
+                    Cobrar Restante Ahora
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : details.isAdvance && details.isSaldoPaid ? (
+            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
               <p className="font-bold flex items-center gap-1.5 text-sm">
-                <span>⚠️</span> Adelanto Recibido — Saldo Pendiente
+                <span>✓</span> Reserva Totalmente Liquidada (100% Pagada)
               </p>
               <p>
-                El usuario <strong>{customerName}</strong> envió recibo de pago por adelanto de <strong>{fmt(paidAmount)}</strong> y <strong>falta por cancelar {fmt(saldoPendiente)}</strong> al ingresar al club.
+                El usuario inició con un adelanto de <strong>{fmt(details.paidInitial)}</strong> y completó el saldo restante de <strong>{fmt(details.saldoSettledAmount)}</strong> mediante <strong>{payment.saldoMethod || "Efectivo"}</strong>.
               </p>
             </div>
           ) : (
@@ -165,27 +487,28 @@ function PaymentDetailModal({
                 <span>✓</span> Pago Completo (100%)
               </p>
               <p>
-                El usuario <strong>{customerName}</strong> envió recibo por el 100% de la reserva (<strong>{fmt(paidAmount)}</strong>). Reserva totalmente cancelada.
+                El usuario <strong>{customerName}</strong> realizó el pago completo de la reserva por <strong>{fmt(details.paidInitial)}</strong>.
               </p>
             </div>
           )}
 
           {isAutoConfirmed && (
             <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl text-xs text-sky-800 dark:text-sky-300">
-              <strong>🛡️ Cancha Asegurada Automáticamente:</strong> El usuario subió su comprobante y pasaron más de 2 horas sin auditar. El sistema aseguró su turno. Por favor revisa el comprobante a continuación para validar la transacción.
+              <strong>🛡️ Cancha Asegurada Automáticamente:</strong> El usuario subió su comprobante y pasaron más de 2 horas sin auditar. Por favor valida el comprobante inicial para cerrar la auditoría.
             </div>
           )}
 
-          {/* Info de reserva */}
+          {/* Info de Reserva y Cliente */}
           <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border">
             <div>
               <p className="text-xs text-slate-500 mb-0.5">Cliente</p>
-              <p className="font-semibold">{customer?.name || payment.user?.name || "—"}</p>
+              <p className="font-semibold text-slate-900 dark:text-white">{customer?.name || payment.user?.name || "—"}</p>
               <p className="text-xs text-slate-500">{customer?.email || payment.user?.email || ""}</p>
+              {customer?.phone && <p className="text-xs text-slate-500">Tel: {customer.phone}</p>}
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-0.5">Cancha</p>
-              <p className="font-semibold">{booking?.court?.name || "—"}</p>
+              <p className="text-xs text-slate-500 mb-0.5">Cancha & Horario</p>
+              <p className="font-semibold text-slate-900 dark:text-white">{booking?.court?.name || "—"}</p>
               {booking?.date && (
                 <p className="text-xs text-slate-500">
                   {format(new Date(booking.date), "dd/MM/yyyy")} {booking.startTime?.slice(0,5)} - {booking.endTime?.slice(0,5)}
@@ -194,91 +517,172 @@ function PaymentDetailModal({
             </div>
             <div>
               <p className="text-xs text-slate-500 mb-0.5">Código de reserva</p>
-              <p className="font-mono text-xs">{booking?.bookingReference || "—"}</p>
+              <p className="font-mono text-xs text-slate-700 dark:text-slate-300">{booking?.bookingReference || "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-0.5">Fecha de pago</p>
-              <p className="text-xs">{format(new Date(payment.createdAt), "dd/MM/yyyy HH:mm", { locale: es })}</p>
+              <p className="text-xs text-slate-500 mb-0.5">Fecha de registro</p>
+              <p className="text-xs text-slate-700 dark:text-slate-300">
+                {format(new Date(payment.createdAt), "dd/MM/yyyy HH:mm", { locale: es })}
+              </p>
             </div>
           </div>
 
-          {/* Monto y método */}
-          <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200">
-            <div>
-              <p className="text-xs text-slate-500 mb-0.5">Monto Abonado</p>
-              <p className="text-2xl font-bold text-emerald-600">{fmt(payment.amount)}</p>
-              {isAdvancePayment && saldoPendiente > 0 && (
-                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mt-0.5">
-                  Falta pagar: {fmt(saldoPendiente)}
-                </p>
-              )}
+          {/* SECCIÓN FASE 1: Comprobante Inicial */}
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Fase 1: Comprobante y Abono Inicial
+              </h4>
+              {comprobanteBadge(payment.status, payment.autoConfirmed, payment.pendingAudit)}
             </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-500 mb-0.5">Método</p>
-              {methodBadge(payment.method)}
-              <p className="text-xs text-slate-500 mt-1">{payment.type}</p>
-            </div>
-          </div>
 
-          {/* Comprobante */}
-          {payment.comprobanteUrl && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-600">Comprobante adjunto</p>
-              <div className="border rounded-xl overflow-hidden">
-                <img
-                  src={payment.comprobanteUrl}
-                  alt="Comprobante de pago"
-                  className="w-full max-h-64 object-contain bg-white p-2"
-                />
+            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+              <div>
+                <p className="text-xs text-slate-500">Monto Abonado</p>
+                <p className="text-xl font-bold text-emerald-600">{fmt(payment.amount)}</p>
               </div>
-              <a
-                href={payment.comprobanteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-              >
-                <EyeIcon className="w-3 h-3" /> Ver en pantalla completa
-              </a>
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Método Usado</p>
+                {methodBadge(payment.method)}
+                <p className="text-[11px] text-slate-400 mt-0.5">{payment.type}</p>
+              </div>
             </div>
-          )}
 
-          {/* Estado actual */}
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-slate-500">Estado:</p>
-            {statusBadge(payment.status)}
+            {payment.comprobanteUrl && (
+              <div className="space-y-1.5 pt-1">
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Comprobante inicial adjunto</p>
+                <div className="border rounded-xl overflow-hidden bg-white">
+                  <img
+                    src={payment.comprobanteUrl}
+                    alt="Comprobante inicial"
+                    className="w-full max-h-56 object-contain p-2"
+                  />
+                </div>
+                <a
+                  href={payment.comprobanteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                >
+                  <EyeIcon className="w-3.5 h-3.5" /> Ver imagen en pantalla completa
+                </a>
+              </div>
+            )}
+
             {payment.confirmadoPor && (
-              <p className="text-xs text-slate-400 ml-auto">Auditado por {payment.confirmadoPor.name}</p>
+              <p className="text-xs text-slate-400">Auditado por {payment.confirmadoPor.name}</p>
+            )}
+
+            {payment.motivoRechazo && (
+              <div className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 rounded-lg text-xs text-red-700">
+                <strong>Motivo de rechazo:</strong> {payment.motivoRechazo}
+              </div>
             )}
           </div>
 
-          {/* Motivo de rechazo */}
-          {payment.motivoRechazo && (
-            <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 rounded-lg text-xs text-red-700">
-              <strong>Motivo de rechazo:</strong> {payment.motivoRechazo}
+          {/* SECCIÓN FASE 2: Liquidación de Saldo Restante */}
+          {details.isAdvance && !details.isComprobanteRejected && (
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${details.isSaldoPaid ? "bg-emerald-500" : "bg-amber-500"}`}></span>
+                  Fase 2: Liquidación de Saldo Restante
+                </h4>
+                {saldoBadge(details.isAdvance, details.isSaldoPaid, details.saldoFaltante, payment.saldoMethod)}
+              </div>
+
+              {details.isSaldoPaid ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/10 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
+                    <div>
+                      <p className="text-xs text-slate-500">Monto Saldo Liquidado</p>
+                      <p className="text-lg font-bold text-emerald-600">{fmt(details.saldoSettledAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Método de Liquidación</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{payment.saldoMethod || "Efectivo"}</p>
+                    </div>
+                    {payment.saldoFechaConfirmacion && (
+                      <div>
+                        <p className="text-xs text-slate-500">Fecha de Liquidación</p>
+                        <p className="text-xs text-slate-700 dark:text-slate-300">
+                          {format(new Date(payment.saldoFechaConfirmacion), "dd/MM/yyyy HH:mm", { locale: es })}
+                        </p>
+                      </div>
+                    )}
+                    {payment.saldoConfirmadoPor && (
+                      <div>
+                        <p className="text-xs text-slate-500">Cobrado / Liquidado por</p>
+                        <p className="text-xs font-medium text-slate-700 dark:text-slate-300">{payment.saldoConfirmadoPor.name}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {payment.saldoNotas && (
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-400">
+                      <strong>Notas:</strong> {payment.saldoNotas}
+                    </div>
+                  )}
+
+                  {payment.saldoComprobanteUrl && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Comprobante de saldo</p>
+                      <div className="border rounded-xl overflow-hidden bg-white max-h-40">
+                        <img
+                          src={payment.saldoComprobanteUrl}
+                          alt="Comprobante saldo"
+                          className="w-full max-h-40 object-contain p-2"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50/60 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">Saldo pendiente por cobrar:</p>
+                      <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{fmt(details.saldoFaltante)}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                      onClick={() => {
+                        onClose()
+                        onOpenSettleModal(payment)
+                      }}
+                    >
+                      <BanknoteIcon className="w-4 h-4" />
+                      Cobrar Saldo
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Puedes registrar la cancelación del restante en efectivo, Yape, Plin, transferencia o POS.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Acciones de auditoría */}
-          {isAuditPending && (
-            <>
-              {showRejectInput && (
-                <div className="space-y-2">
-                  <Label className="text-xs">Motivo del rechazo (opcional)</Label>
-                  <Textarea
-                    placeholder="Ej. El monto no coincide, QR incorrecto..."
-                    value={motivoRechazo}
-                    onChange={(e) => setMotivoRechazo(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-              )}
-            </>
+          {/* Formulario de Rechazo */}
+          {isAuditPending && showRejectInput && (
+            <div className="space-y-2 pt-2 border-t">
+              <Label className="text-xs font-semibold">Motivo del rechazo de comprobante</Label>
+              <Textarea
+                placeholder="Ej. El monto del comprobante no coincide, código de operación ilegible..."
+                value={motivoRechazo}
+                onChange={(e) => setMotivoRechazo(e.target.value)}
+                rows={2}
+                className="text-xs"
+              />
+            </div>
           )}
         </div>
 
+        {/* Acciones de Auditoría Inicial */}
         {isAuditPending && (
-          <DialogFooter className="flex gap-2 pt-2">
+          <DialogFooter className="flex gap-2 pt-3 border-t">
             {!showRejectInput ? (
               <>
                 <Button
@@ -295,10 +699,12 @@ function PaymentDetailModal({
                   onClick={() => mutation.mutate({ action: "CONFIRMAR" })}
                   disabled={mutation.isPending}
                 >
-                  {mutation.isPending
-                    ? <span className="animate-spin mr-1.5 border-2 border-white border-t-transparent rounded-full w-4 h-4 inline-block" />
-                    : <CheckCircle2Icon className="w-4 h-4 mr-1.5" />}
-                  Confirmar Pago
+                  {mutation.isPending ? (
+                    <span className="animate-spin mr-1.5 border-2 border-white border-t-transparent rounded-full w-4 h-4 inline-block" />
+                  ) : (
+                    <CheckCircle2Icon className="w-4 h-4 mr-1.5" />
+                  )}
+                  Aprobar Comprobante
                 </Button>
               </>
             ) : (
@@ -311,10 +717,12 @@ function PaymentDetailModal({
                   onClick={() => mutation.mutate({ action: "RECHAZAR", motivo: motivoRechazo })}
                   disabled={mutation.isPending}
                 >
-                  {mutation.isPending
-                    ? <span className="animate-spin mr-1.5 border-2 border-white border-t-transparent rounded-full w-4 h-4 inline-block" />
-                    : <XCircleIcon className="w-4 h-4 mr-1.5" />}
-                  Confirmar rechazo
+                  {mutation.isPending ? (
+                    <span className="animate-spin mr-1.5 border-2 border-white border-t-transparent rounded-full w-4 h-4 inline-block" />
+                  ) : (
+                    <XCircleIcon className="w-4 h-4 mr-1.5" />
+                  )}
+                  Confirmar Rechazo
                 </Button>
               </>
             )}
@@ -335,6 +743,8 @@ function MetricsAuditTab() {
   const [typeFilter, setTypeFilter] = useState("all")
   const [selectedPayment, setSelectedPayment] = useState<PaymentItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [settleOpen, setSettleOpen] = useState(false)
+  const [settleTargetPayment, setSettleTargetPayment] = useState<PaymentItem | null>(null)
 
   const { data: metrics, isLoading: loadingMetrics } = useQuery<PaymentMetrics>({
     queryKey: ["club-payment-metrics"],
@@ -348,15 +758,14 @@ function MetricsAuditTab() {
     staleTime: 15_000,
   })
 
-  const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["club-payment-metrics"] })
-    queryClient.invalidateQueries({ queryKey: ["club-payments-list"] })
-    toast.info("Datos actualizados")
-  }
-
   const openDetail = (p: PaymentItem) => {
     setSelectedPayment(p)
     setDetailOpen(true)
+  }
+
+  const openSettle = (p: PaymentItem) => {
+    setSettleTargetPayment(p)
+    setSettleOpen(true)
   }
 
   return (
@@ -383,7 +792,7 @@ function MetricsAuditTab() {
         <MetricCard
           title="Yape / Plin / Manual"
           value={fmt(metrics?.recaudadoManual ?? 0)}
-          sub={`Yape: ${fmt(metrics?.desgloseMetodos?.yape ?? 0)} | Plin: ${fmt(metrics?.desgloseMetodos?.plin ?? 0)}`}
+          sub={`Yape: ${fmt(metrics?.desgloseMetodos?.yape ?? 0)} | Plin: ${fmt(metrics?.desgloseMetodos?.plin ?? 0)} | Efec: ${fmt(metrics?.desgloseMetodos?.efectivo ?? 0)}`}
           icon={SmartphoneIcon}
           iconClass="bg-purple-100 dark:bg-purple-950/50 text-purple-600"
           loading={loadingMetrics}
@@ -404,7 +813,7 @@ function MetricsAuditTab() {
         <div className="relative flex-1">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Buscar cliente, cancha o código..."
+            placeholder="Buscar cliente, cancha o código de reserva..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -412,11 +821,11 @@ function MetricsAuditTab() {
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-44">
-            <SelectValue placeholder="Todos los estados" />
+            <SelectValue placeholder="Estado Comprobante" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
-            <SelectItem value="pending">Pendientes</SelectItem>
+            <SelectItem value="pending">Pendientes de Auditar</SelectItem>
             <SelectItem value="confirmed">Confirmados</SelectItem>
             <SelectItem value="rejected">Rechazados</SelectItem>
           </SelectContent>
@@ -436,7 +845,7 @@ function MetricsAuditTab() {
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Todos los tipos" />
+            <SelectValue placeholder="Tipo de Pago" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los tipos</SelectItem>
@@ -447,15 +856,20 @@ function MetricsAuditTab() {
         </Select>
       </div>
 
-      {/* Bandeja de Transacciones */}
+      {/* Bandeja de Transacciones y Comprobantes */}
       <div className="rounded-xl border overflow-hidden bg-white dark:bg-slate-950 shadow-sm">
-        <div className="p-4 border-b bg-slate-50 dark:bg-slate-900">
-          <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">
-            Bandeja de Transacciones y Comprobantes
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {payments.length} registro{payments.length !== 1 ? "s" : ""} encontrado{payments.length !== 1 ? "s" : ""}
-          </p>
+        <div className="p-4 border-b bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+              Bandeja de Transacciones y Comprobantes
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Audita comprobantes iniciales y confirma la liquidación de saldos faltantes.
+            </p>
+          </div>
+          <Badge variant="outline" className="text-xs font-semibold bg-white dark:bg-slate-800">
+            {payments.length} registro{payments.length !== 1 ? "s" : ""}
+          </Badge>
         </div>
 
         {loadingList ? (
@@ -471,89 +885,147 @@ function MetricsAuditTab() {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-500 uppercase tracking-wide">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-500 uppercase tracking-wide border-b">
                 <tr>
                   <th className="px-4 py-3 text-left">Cliente</th>
-                  <th className="px-4 py-3 text-left">Cancha</th>
-                  <th className="px-4 py-3 text-left">Monto</th>
-                  <th className="px-4 py-3 text-left">Método</th>
-                  <th className="px-4 py-3 text-left">Tipo</th>
-                  <th className="px-4 py-3 text-left">Estado</th>
+                  <th className="px-4 py-3 text-left">Cancha & Horario</th>
+                  <th className="px-4 py-3 text-left">Monto Abonado</th>
+                  <th className="px-4 py-3 text-left">Saldo Faltante</th>
+                  <th className="px-4 py-3 text-left">Comprobante Inicial</th>
+                  <th className="px-4 py-3 text-left">Estado Saldo</th>
                   <th className="px-4 py-3 text-left">Fecha</th>
-                  <th className="px-4 py-3 text-left">Acción</th>
+                  <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {payments.map((p) => {
                   const customer = p.booking?.customerInfo
-                  const isAuditRequired =
-                    p.status === "PENDIENTE" ||
-                    p.status === "PENDING" ||
-                    p.pendingAudit ||
-                    p.booking?.pendingAudit ||
-                    p.autoConfirmed ||
-                    p.booking?.autoConfirmed
+                  const details = computePaymentDetails(p)
+                  const isAuditRequired = details.isComprobantePending
+                  const hasPendingBalance = details.isAdvance && !details.isSaldoPaid && !details.isComprobanteRejected
+
                   return (
                     <tr
                       key={p.id}
-                      className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${isAuditRequired ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}
+                      className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${
+                        isAuditRequired ? "bg-amber-50/30 dark:bg-amber-950/10" : ""
+                      }`}
                     >
+                      {/* Cliente */}
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-800 dark:text-slate-200">
                           {customer?.name || p.user?.name || "—"}
                         </p>
                         <p className="text-xs text-slate-400">{customer?.email || p.user?.email || ""}</p>
                       </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                        {p.booking?.court?.name || "—"}
+
+                      {/* Cancha & Horario */}
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-xs text-slate-800 dark:text-slate-200">
+                          {p.booking?.court?.name || "—"}
+                        </p>
+                        {p.booking?.date && (
+                          <p className="text-[11px] text-slate-500">
+                            {format(new Date(p.booking.date), "dd/MM")} • {p.booking.startTime?.slice(0,5)} - {p.booking.endTime?.slice(0,5)}
+                          </p>
+                        )}
+                        {p.booking?.bookingReference && (
+                          <p className="font-mono text-[10px] text-slate-400">Ref: {p.booking.bookingReference}</p>
+                        )}
                       </td>
+
+                      {/* Monto Abonado */}
                       <td className="px-4 py-3">
                         <p className="font-bold text-emerald-600">{fmt(p.amount)}</p>
-                        {(() => {
-                          const totalBookingPrice = Number(p.booking?.pricing?.totalPrice ?? (p.amount || 0))
-                          const paidAmount = Number(p.amount || 0)
-                          const saldoPendiente = Math.max(0, Number((totalBookingPrice - paidAmount).toFixed(2)))
-                          if (p.type === "ADELANTO" || saldoPendiente > 0) {
-                            return (
-                              <span className="inline-block text-[10px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-1.5 py-0.5 rounded mt-0.5">
-                                Falta: {fmt(saldoPendiente)}
-                              </span>
-                            )
-                          }
-                          return (
-                            <span className="inline-block text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 px-1.5 py-0.5 rounded mt-0.5">
-                              100% Pagado
-                            </span>
-                          )
-                        })()}
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {methodBadge(p.method)}
+                          <span className="text-[10px] text-slate-400">• {details.isAdvance ? "Adelanto" : "Total"}</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3">{methodBadge(p.method)}</td>
+
+                      {/* Saldo Faltante (Columna destacada) */}
                       <td className="px-4 py-3">
-                        {(() => {
-                          const totalBookingPrice = Number(p.booking?.pricing?.totalPrice ?? (p.amount || 0))
-                          const paidAmount = Number(p.amount || 0)
-                          const isAdvance = p.type === "ADELANTO" || (totalBookingPrice > paidAmount && totalBookingPrice > 0)
-                          return (
-                            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                              {isAdvance ? "Adelanto" : "Pago Total"}
+                        {details.isComprobanteRejected ? (
+                          <span className="text-xs text-slate-400">—</span>
+                        ) : !details.isAdvance ? (
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-bold text-emerald-600">S/ 0.00</span>
+                            <p className="text-[10px] text-emerald-600 font-medium">100% Pagado</p>
+                          </div>
+                        ) : details.isSaldoPaid ? (
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-bold text-emerald-600">S/ 0.00</span>
+                            <p className="text-[10px] text-emerald-600 font-medium">
+                              ✓ Liquidado ({p.saldoMethod || "Efectivo"})
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                              {fmt(details.saldoFaltante)}
                             </span>
-                          )
-                        })()}
+                            <span className="inline-block text-[10px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-900 px-1.5 py-0.2 rounded">
+                              Falta cancelar
+                            </span>
+                          </div>
+                        )}
                       </td>
-                      <td className="px-4 py-3">{statusBadge(p.status, p.autoConfirmed || p.booking?.autoConfirmed, p.pendingAudit || p.booking?.pendingAudit)}</td>
+
+                      {/* Estado Comprobante Inicial */}
+                      <td className="px-4 py-3">
+                        {comprobanteBadge(p.status, p.autoConfirmed || p.booking?.autoConfirmed, p.pendingAudit || p.booking?.pendingAudit)}
+                      </td>
+
+                      {/* Estado Saldo */}
+                      <td className="px-4 py-3">
+                        {saldoBadge(details.isAdvance, details.isSaldoPaid, details.saldoFaltante, p.saldoMethod, details.isComprobanteRejected)}
+                      </td>
+
+                      {/* Fecha */}
                       <td className="px-4 py-3 text-xs text-slate-500">
                         {format(new Date(p.createdAt), "dd/MM HH:mm")}
                       </td>
-                      <td className="px-4 py-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={`h-8 px-3 text-xs font-medium ${isAuditRequired ? "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700" : "text-slate-500"}`}
-                          onClick={() => openDetail(p)}
-                        >
-                          <EyeIcon className="w-3.5 h-3.5 mr-1" />
-                          {isAuditRequired ? "Auditar" : "Ver"}
-                        </Button>
+
+                      {/* Acciones Inteligentes */}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Botón Auditar Comprobante (si está pendiente) */}
+                          {isAuditRequired && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-7 px-2.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                              onClick={() => openDetail(p)}
+                            >
+                              <ShieldCheckIcon className="w-3.5 h-3.5 mr-1" />
+                              Auditar
+                            </Button>
+                          )}
+
+                          {/* Botón Cobrar Restante (si es adelanto aprobado y falta saldo) */}
+                          {!isAuditRequired && hasPendingBalance && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2.5 text-xs font-semibold border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                              onClick={() => openSettle(p)}
+                            >
+                              <BanknoteIcon className="w-3.5 h-3.5 mr-1" />
+                              Cobrar Restante
+                            </Button>
+                          )}
+
+                          {/* Botón Ver Detalle */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                            onClick={() => openDetail(p)}
+                          >
+                            <EyeIcon className="w-3.5 h-3.5 mr-1" />
+                            Ver
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -564,10 +1036,19 @@ function MetricsAuditTab() {
         )}
       </div>
 
+      {/* Modal de Detalle Completo 360° */}
       <PaymentDetailModal
         payment={selectedPayment}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
+        onOpenSettleModal={(p) => openSettle(p)}
+      />
+
+      {/* Modal de Cobro / Liquidación de Saldo Restante */}
+      <SettleSaldoModal
+        payment={settleTargetPayment}
+        open={settleOpen}
+        onClose={() => setSettleOpen(false)}
       />
     </div>
   )
@@ -593,7 +1074,7 @@ export function PaymentsContent() {
             Control de Pagos y Recaudación
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Audita comprobantes de Yape/Plin, monitorea ingresos de Mercado Pago y gestiona saldos en tiempo real.
+            Audita comprobantes de Yape/Plin, monitorea ingresos de Mercado Pago y gestiona la liquidación de saldos en tiempo real.
           </p>
         </div>
         <Button variant="outline" onClick={handleRefresh} className="gap-2 shrink-0">

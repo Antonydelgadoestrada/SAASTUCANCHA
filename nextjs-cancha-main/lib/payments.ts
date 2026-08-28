@@ -58,12 +58,26 @@ export interface PaymentItem {
   fechaConfirmacion?: string | null
   autoConfirmed?: boolean
   pendingAudit?: boolean
+  // Liquidación del saldo restante
+  saldoStatus?: "PENDIENTE" | "PAGADO" | "NO_APLICA" | null
+  saldoAmount?: number | null
+  saldoMethod?: PaymentMethodEnum | string | null
+  saldoComprobanteUrl?: string | null
+  saldoFechaConfirmacion?: string | null
+  saldoNotas?: string | null
+  saldoConfirmadoPor?: { id: string; name: string } | null
   booking?: {
     id: string
     bookingReference?: string
     date?: string
     startTime?: string
     endTime?: string
+    pricing?: {
+      basePrice?: number
+      discounts?: number
+      taxes?: number
+      totalPrice?: number
+    }
     court?: { id: string; name: string }
     customerInfo?: { name: string; email: string; phone?: string }
     autoConfirmed?: boolean
@@ -114,7 +128,7 @@ export const getClubPaymentsList = async (
   return res.data
 }
 
-// ─── AUDITAR COMPROBANTE ──────────────────────────────────────────────────────
+// ─── AUDITAR COMPROBANTE INICIAL ──────────────────────────────────────────────
 
 export const confirmManualPayment = async (
   paymentId: string,
@@ -125,6 +139,21 @@ export const confirmManualPayment = async (
     action,
     motivoRechazo,
   })
+  return res.data
+}
+
+// ─── LIQUIDAR / COBRAR SALDO RESTANTE ────────────────────────────────────────
+
+export const settlePaymentSaldo = async (
+  paymentId: string,
+  data: {
+    monto?: number
+    metodo: PaymentMethodEnum | string
+    comprobanteUrl?: string
+    notas?: string
+  }
+): Promise<{ status: string; message: string; payment: PaymentItem }> => {
+  const res = await api.patch(`/payments/${paymentId}/settle-saldo`, data)
   return res.data
 }
 
@@ -172,14 +201,24 @@ export const uploadClubQr = async (
 export const createBookingPayment = async (
   bookingId: string,
   data: {
-    metodo: PaymentMethodEnum
-    tipo: PaymentTypeEnum
-    monto: number
+    metodo?: PaymentMethodEnum | string
+    method?: PaymentMethodEnum | string
+    tipo?: PaymentTypeEnum | string
+    type?: PaymentTypeEnum | string
+    monto?: number
+    amount?: number
     comprobanteUrl?: string
     currency?: string
   }
 ) => {
-  const res = await api.post(`/payments/booking/${bookingId}`, data)
+  const payload = {
+    metodo: data.metodo || data.method,
+    tipo: data.tipo || data.type,
+    monto: data.monto ?? data.amount,
+    comprobanteUrl: data.comprobanteUrl,
+    currency: data.currency,
+  }
+  const res = await api.post(`/payments/booking/${bookingId}`, payload)
   return res.data
 }
 
