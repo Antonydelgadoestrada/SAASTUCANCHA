@@ -374,11 +374,7 @@ export class PaymentService {
 
     const payments = await this.paymentRepo.find({
       where: { booking: { club: { id: clubId } } },
-      relations: ['booking', 'booking.club', 'user'],
-    });
-
-    const bookings = await this.bookingRepo.find({
-      where: { club: { id: clubId } },
+      relations: ['booking', 'booking.club', 'booking.court', 'user'],
     });
 
     let totalRecaudado = 0;
@@ -390,12 +386,37 @@ export class PaymentService {
     let comprobantesPendientesCount = 0;
     let totalConfirmadosCount = 0;
     let totalRechazadosCount = 0;
+    let saldoPendienteTotal = 0;
 
     for (const p of payments) {
       const isConfirmed = p.status === PaymentStatus.PAID || (p.status as string) === 'CONFIRMADO';
       const isPending = p.status === PaymentStatus.PENDING || (p.status as string) === 'PENDIENTE';
       const isRejected = p.status === PaymentStatus.REJECTED || (p.status as string) === 'RECHAZADO';
       const amount = Number(p.amount) || 0;
+
+      // Calcular precio total de la reserva
+      let totalPrice = 0;
+      if (typeof p.booking?.pricing === 'object' && p.booking?.pricing !== null) {
+        totalPrice = Number((p.booking.pricing as any).totalPrice ?? (p.booking.pricing as any).basePrice);
+      } else if (typeof p.booking?.pricing === 'string') {
+        try {
+          const parsed = JSON.parse(p.booking.pricing);
+          totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
+        } catch {}
+      }
+      if (isNaN(totalPrice) || totalPrice <= 0) {
+        const courtPrice = Number(p.booking?.court?.priceDay || p.booking?.court?.priceNight || 0);
+        const dur = Number(p.booking?.duration || 1);
+        totalPrice = courtPrice * dur * 2;
+      }
+      if (isNaN(totalPrice) || totalPrice <= 0) {
+        totalPrice = amount;
+      }
+
+      // Si la reserva no está rechazada/cancelada y falta saldar, sumar a saldo por cobrar
+      if (!isRejected && totalPrice > amount) {
+        saldoPendienteTotal += Math.max(0, totalPrice - amount);
+      }
 
       if (isConfirmed) {
         totalRecaudado += amount;
@@ -413,7 +434,6 @@ export class PaymentService {
     }
 
     const recaudadoManual = recaudadoYape + recaudadoPlin + recaudadoTransfer + recaudadoEfectivo;
-    const saldoPendienteTotal = bookings.reduce((sum, b) => sum + (Number((b as any).saldoPendiente) || 0), 0);
 
     return {
       clubId,
@@ -567,36 +587,38 @@ export class PaymentService {
       safeMethod = PaymentMethod.YAPE;
     }
 
+    // Calcular monto seguro numérico a pagar
+    let safeAmount = Number(dto.amount ?? dto.monto);
+
+    // Calcular precio total de la reserva
+    let totalPrice = 0;
+    if (typeof booking.pricing === 'object' && booking.pricing !== null) {
+      totalPrice = Number((booking.pricing as any).totalPrice ?? (booking.pricing as any).basePrice);
+    } else if (typeof booking.pricing === 'string') {
+      try {
+        const parsed = JSON.parse(booking.pricing);
+        totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
+      } catch {}
+    }
+    if (isNaN(totalPrice) || totalPrice <= 0) {
+      const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
+      const dur = Number(booking.duration || 1);
+      totalPrice = courtPrice * dur * 2;
+    }
+
+    if (isNaN(safeAmount) || safeAmount <= 0) {
+      safeAmount = totalPrice > 0 ? totalPrice : 0;
+    }
+
     // Parse safe type
-    const rawType = (dto.type || dto.tipo || 'PAGO_COMPLETO').toString().toUpperCase();
+    const rawType = (dto.type || dto.tipo || '').toString().toUpperCase();
     let safeType: PaymentType = PaymentType.PAGO_COMPLETO;
-    if (rawType.includes('ADELANTO')) {
+    if (rawType.includes('ADELANTO') || (totalPrice > 0 && safeAmount < totalPrice - 0.01)) {
       safeType = PaymentType.ADELANTO;
     } else if (rawType.includes('SALDO')) {
       safeType = PaymentType.SALDO;
     } else {
       safeType = PaymentType.PAGO_COMPLETO;
-    }
-
-    // Calcular monto seguro numérico
-    let safeAmount = Number(dto.amount ?? dto.monto);
-    if (isNaN(safeAmount) || safeAmount <= 0) {
-      if (typeof booking.pricing === 'object' && booking.pricing !== null) {
-        safeAmount = Number(booking.pricing.totalPrice ?? booking.pricing.basePrice);
-      } else if (typeof booking.pricing === 'string') {
-        try {
-          const parsed = JSON.parse(booking.pricing);
-          safeAmount = Number(parsed?.totalPrice ?? parsed?.basePrice);
-        } catch {}
-      }
-      if (isNaN(safeAmount) || safeAmount <= 0) {
-        const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
-        const dur = Number(booking.duration || 1);
-        safeAmount = courtPrice * dur * 2;
-      }
-    }
-    if (isNaN(safeAmount) || safeAmount < 0) {
-      safeAmount = 0;
     }
 
     const payment = this.paymentRepo.create({

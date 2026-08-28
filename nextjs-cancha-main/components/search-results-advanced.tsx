@@ -14,6 +14,14 @@ import {
   LogInIcon,
   Loader2,
   MessageCircle,
+  Smartphone,
+  Upload,
+  CheckCircle2,
+  Copy,
+  Check,
+  QrCode,
+  X,
+  CreditCardIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -53,7 +61,7 @@ import { getAllCourtsByQuery } from "@/lib/courts";
 import { sportTypes } from "@/lib/sports";
 import { useRouter } from "next/navigation";
 import { createPreference, createReservation } from "@/lib/mercadopago";
-import { getWhatsAppLink } from "@/lib/payments";
+import { getWhatsAppLink, uploadPaymentReceipt, createBookingPayment } from "@/lib/payments";
 
 interface SearchResultsProps {
   searchQuery?: string;
@@ -186,6 +194,11 @@ export function SearchResults({
     notes: "",
   });
   const [duration, setDuration] = useState<string>('1');
+  const [payMethod, setPayMethod] = useState<"yape" | "plin" | "mercadopago">("yape");
+  const [payOption, setPayOption] = useState<"advance" | "full">("advance");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [copiedPhone, setCopiedPhone] = useState(false);
   const filteredtimeOptions = getValidStartTimes(selectedCourt?.availability ?? ['10:00'], duration, selectedDate)
   // console.log({filteredtimeOptions})
   const { toast } = useToast();
@@ -300,82 +313,185 @@ export function SearchResults({
       });
       return;
     }
+    setPayMethod("yape");
+    setPayOption("advance");
+    setReceiptFile(null);
+    setReceiptPreview(null);
     setShowBooking(false);
     setShowPayment(true);
   };
-  const handleSeparate = async()=>{
-    setIsLoading(true)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Formato no válido",
+        description: "Por favor selecciona una imagen válida (PNG, JPG, WEBP)",
+        variant: "destructive",
+      });
+      return;
+    }
+    setReceiptFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setReceiptPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCopyPhone = (phoneText?: string) => {
+    if (!phoneText) return;
+    navigator.clipboard.writeText(phoneText);
+    setCopiedPhone(true);
+    toast({
+      title: "Número copiado",
+      description: `Número ${phoneText} copiado al portapapeles`,
+    });
+    setTimeout(() => setCopiedPhone(false), 2000);
+  };
+
+  const handleSeparate = async () => {
+    if (!selectedCourt) return;
+    setIsLoading(true);
     try {
       const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
-      const result = await createReservation({
+      await createReservation({
         courtId: selectedCourt.id,
-        date:fecha,
+        date: fecha,
         startTime: selectedTime,
         duration,
         userEmail: bookingData.email,
       });
-    
-    } catch (error) {
-      console.error('Error al crear la reserva:', error);
-      // toast.error('Error ')
-    }finally{
-      setIsLoading(false)
+
+      toast({
+        title: "¡Cancha separada con éxito!",
+        description: `Tu reserva para ${selectedCourt?.name} ha sido registrada. Puedes abonar el adelanto o pagar el total desde Mis Reservas.`,
+      });
+      setShowPayment(false);
+      setSelectedCourt(null);
+      setSelectedTime("");
+      setReceiptFile(null);
+      setReceiptPreview(null);
+      setBookingData((prev) => ({ ...prev, notes: "" }));
+      router.push("/user/bookings");
+    } catch (error: any) {
+      console.error("Error al crear la reserva:", error);
+      toast({
+        title: "Error al separar cancha",
+        description: error?.response?.data?.message || "No se pudo registrar la reserva. Intenta nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-    console.log({
-      title: "¡Reserva confirmada!",
-      description: `Tu reserva para ${selectedCourt?.name} el ${
-        selectedDate
-          ? format(selectedDate, "dd/MM/yyyy", { locale: es })
-          : "hoy"
-      } a las ${selectedTime} ha sido confirmada`,
-    })
-    toast({
-      title: "¡Reserva confirmada!",
-      description: `Tu reserva para ${selectedCourt?.name} el ${
-        selectedDate
-          ? format(selectedDate, "dd/MM/yyyy", { locale: es })
-          : "hoy"
-      } a las ${selectedTime} ha sido confirmada`,
-    });
-    setShowPayment(false);
+  };
 
-    setSelectedCourt(null);
-    setSelectedTime("");
-    setBookingData((prev) => ({ ...prev, notes: "" }));
-  }
-  const handleConfirmPayment = async() => {
-    setShowPayment(false);
+  const handleConfirmPayment = async () => {
+    if (!selectedCourt) return;
+
+    if (!user) {
+      handleLoginAndContinue();
+      return;
+    }
+
+    const totalPrice = selectedCourt.price * (+duration * 2);
+    const advancePercent = Number(
+      selectedCourt.clubData?.porcentajeAdelantoDefault ??
+      selectedCourt.porcentajeAdelantoDefault ??
+      50
+    );
+    const advanceAmount = Math.max(1, Number(((totalPrice * advancePercent) / 100).toFixed(2)));
+    const payAmount = payOption === "advance" ? advanceAmount : totalPrice;
+    const payType = payOption === "advance" ? "ADELANTO" : "PAGO_COMPLETO";
+
+    setIsLoading(true);
     try {
+      if (payMethod === "mercadopago") {
+        const { init_point } = await createPreference({
+          courtId: selectedCourt.id,
+          date: format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es }),
+          startTime: selectedTime,
+          duration,
+          userEmail: bookingData.email,
+        });
 
-    const {init_point} = await createPreference({
-      courtId: selectedCourt.id, 
-      date:format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es }),
-      startTime:selectedTime, 
-      duration, 
-      userEmail: bookingData.email,
-    })
-        // Redireccionar al checkout de Mercado Pago
         if (init_point) {
           window.location.href = init_point;
+          return;
         } else {
-          console.error('No se recibió init_point');
+          toast({
+            title: "Error en pasarela",
+            description: "No se pudo iniciar la sesión de Mercado Pago.",
+            variant: "destructive",
+          });
         }
-      } catch (error) {
-        console.error('Error al crear la reserva:', error);
-      }
+      } else {
+        // Validación de comprobante para Yape / Plin
+        if (!receiptFile) {
+          toast({
+            title: "Comprobante requerido",
+            description: `Por favor adjunta la captura de tu comprobante de ${payMethod === "yape" ? "Yape" : "Plin"} antes de continuar.`,
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
 
-    toast({
-      title: "¡Reserva confirmada!",
-      description: `Tu reserva para ${selectedCourt?.name} el ${
-        selectedDate
-          ? format(selectedDate, "dd/MM/yyyy", { locale: es })
-          : "hoy"
-      } a las ${selectedTime} ha sido confirmada.`,
-    });
-    // Reset states
-    setSelectedCourt(null);
-    setSelectedTime("");
-    setBookingData((prev) => ({ ...prev, notes: "" }));
+        // 1. Subir captura de comprobante
+        const uploadRes = await uploadPaymentReceipt(receiptFile);
+        const comprobanteUrl = uploadRes?.url;
+
+        // 2. Crear reserva online
+        const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
+        const newBooking = await createReservation({
+          courtId: selectedCourt.id,
+          date: fecha,
+          startTime: selectedTime,
+          duration,
+          userEmail: bookingData.email,
+        });
+
+        const bookingId = newBooking?.id || newBooking?.data?.id;
+
+        // 3. Registrar el pago en el backend
+        if (bookingId) {
+          await createBookingPayment(bookingId, {
+            metodo: payMethod === "yape" ? "YAPE" : "PLIN",
+            tipo: payType,
+            monto: payAmount,
+            comprobanteUrl,
+          });
+        }
+
+        const remainingText =
+          payOption === "advance"
+            ? ` (Saldo pendiente a pagar en club: S/ ${(totalPrice - advanceAmount).toFixed(2)})`
+            : "";
+
+        toast({
+          title: "¡Comprobante enviado!",
+          description: `Tu comprobante de ${payMethod === "yape" ? "Yape" : "Plin"} por S/ ${payAmount} ha sido enviado.${remainingText}`,
+        });
+
+        setShowPayment(false);
+        setSelectedCourt(null);
+        setSelectedTime("");
+        setReceiptFile(null);
+        setReceiptPreview(null);
+        setBookingData((prev) => ({ ...prev, notes: "" }));
+        router.push("/user/bookings");
+      }
+    } catch (error: any) {
+      console.error("Error al procesar el pago:", error);
+      toast({
+        title: "Error al procesar",
+        description: error?.response?.data?.message || "No se pudo registrar el pago. Intenta de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const nextImage = () => {
@@ -1200,56 +1316,324 @@ export function SearchResults({
 
       {/* Modal de Pago */}
       <Dialog open={showPayment} onOpenChange={setShowPayment}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Procesar Pago</DialogTitle>
-            <DialogDescription>Completa tu reserva</DialogDescription>
+            <DialogTitle>Pagar o Regularizar Reserva</DialogTitle>
+            <DialogDescription>
+              Completa el pago para confirmar tu turno en {selectedCourt?.name || "la cancha"}.
+            </DialogDescription>
           </DialogHeader>
 
           {selectedCourt && (
-            <div className="space-y-6">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Cancha:</span>
-                  <span>{selectedCourt.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Fecha:</span>
-                  <span>
-                    {selectedDate
-                      ? format(selectedDate, "dd/MM/yyyy", { locale: es })
-                      : "Hoy"}
+            <div className="space-y-4 py-2">
+              {/* Resumen de reserva */}
+              <div className="rounded-lg bg-muted/60 border p-4 space-y-2 text-sm">
+                <div className="flex items-center justify-between font-semibold">
+                  <span className="text-base">{selectedCourt.name}</span>
+                  <span className="text-emerald-500 font-bold text-base">
+                    S/ {selectedCourt.price * (+duration * 2)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Hora de Inicio:</span>
-                  <span>{selectedTime}</span>
+                <div className="space-y-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-center">
+                    <MapPinIcon className="mr-2 h-3.5 w-3.5" />
+                    <span>{selectedCourt.club || selectedCourt.clubData?.name || "Complejo Deportivo"}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <ClockIcon className="mr-2 h-3.5 w-3.5" />
+                    <span>
+                      {selectedDate
+                        ? format(selectedDate, "EEEE d 'de' MMMM", { locale: es })
+                        : "Hoy"}
+                      {selectedTime && duration ? (
+                        <span className="ml-1.5 font-medium">
+                          {`, ${selectedTime} a ${(() => {
+                            const [h, m] = selectedTime.split(":").map(Number);
+                            const d = new Date();
+                            d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
+                            const endH = d.getHours().toString().padStart(2, "0");
+                            const endM = d.getMinutes().toString().padStart(2, "0");
+                            return `${endH}:${endM}`;
+                          })()}`}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <ClockIcon className="mr-2 h-3.5 w-3.5" />
+                    <span>Duración: {duration} {duration === "1" ? "hora" : "horas"}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Horario:</span>
-                  <span>
-                    {selectedTime && duration
-                      ? `${selectedTime} a ${(() => {
-                          const [h, m] = selectedTime.split(":").map(Number);
-                          const d = new Date();
-                          d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
-                          const endH = d.getHours().toString().padStart(2, "0");
-                          const endM = d.getMinutes().toString().padStart(2, "0");
-                          return `${endH}:${endM}`;
-                        })()}`
-                      : selectedTime}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Duracion:</span>
-                  <span>{duration}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between font-semibold">
-                  <span>Total a pagar:</span>
-                  <span>S/ {selectedCourt.price * (+duration *2)}</span>
+
+                {(selectedCourt.whatsapp || selectedCourt.phone) && (
+                  <div className="pt-2 border-t flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground">¿Dudas con tu pago?</span>
+                    <a
+                      href={getWhatsAppLink(
+                        selectedCourt.whatsapp || selectedCourt.phone,
+                        `¡Hola! Tengo una consulta sobre el pago de mi reserva para la cancha "${selectedCourt.name}".`
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors"
+                    >
+                      <MessageCircle className="h-3 w-3 fill-emerald-600 text-white" />
+                      WhatsApp del Club
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Política de Adelanto del Club */}
+              {(() => {
+                const totalPrice = selectedCourt.price * (+duration * 2);
+                const advancePercent = Number(
+                  selectedCourt.clubData?.porcentajeAdelantoDefault ??
+                  selectedCourt.porcentajeAdelantoDefault ??
+                  50
+                );
+                const advanceAmount = Math.max(1, Number(((totalPrice * advancePercent) / 100).toFixed(2)));
+                const remainingAmount = Math.max(0, Number((totalPrice - advanceAmount).toFixed(2)));
+
+                return (
+                  <div className="space-y-2 p-3.5 rounded-xl border bg-amber-500/10 border-amber-500/20 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                        <span>📋</span> Política de Reserva del Club
+                      </span>
+                      <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 font-bold">
+                        Adelanto {advancePercent}%
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-[11px]">
+                      El club requiere como mínimo el <strong>{advancePercent}% (S/ {advanceAmount})</strong> para separar tu cancha. Puedes abonar el adelanto ahora y cancelar el saldo restante al ingresar al complejo, o pagar el total.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setPayOption("advance")}
+                        className={`p-2.5 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                          payOption === "advance"
+                            ? "border-amber-500 bg-amber-500/15 ring-1 ring-amber-500 font-semibold"
+                            : "border-border bg-card/60 hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Pagar Adelanto ({advancePercent}%)</span>
+                          {payOption === "advance" && <Check className="h-3 w-3 text-amber-600" />}
+                        </div>
+                        <p className="text-base font-bold text-amber-600 dark:text-amber-400 mt-1">
+                          S/ {advanceAmount}
+                        </p>
+                        <span className="text-[10px] text-muted-foreground">Falta en club: S/ {remainingAmount}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPayOption("full")}
+                        className={`p-2.5 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                          payOption === "full"
+                            ? "border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500 font-semibold"
+                            : "border-border bg-card/60 hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Pagar Total (100%)</span>
+                          {payOption === "full" && <Check className="h-3 w-3 text-emerald-600" />}
+                        </div>
+                        <p className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                          S/ {totalPrice}
+                        </p>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400">100% Cancelado</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Selector de métodos de pago */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  MÉTODO DE PAGO:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod("yape")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
+                      payMethod === "yape"
+                        ? "border-[#720e9e] bg-[#720e9e]/10 font-bold text-[#720e9e] dark:text-purple-300 shadow-sm"
+                        : "border-border hover:border-muted-foreground/40 bg-card"
+                    }`}
+                  >
+                    <Smartphone className="h-4 w-4 mb-1 text-[#720e9e] dark:text-purple-400" />
+                    <span className="text-xs">Yape</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod("plin")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
+                      payMethod === "plin"
+                        ? "border-[#00bcd4] bg-[#00bcd4]/10 font-bold text-[#008ba3] dark:text-cyan-300 shadow-sm"
+                        : "border-border hover:border-muted-foreground/40 bg-card"
+                    }`}
+                  >
+                    <Smartphone className="h-4 w-4 mb-1 text-[#00bcd4]" />
+                    <span className="text-xs">Plin</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod("mercadopago")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
+                      payMethod === "mercadopago"
+                        ? "border-sky-500 bg-sky-500/10 font-bold text-sky-600 dark:text-sky-400 shadow-sm"
+                        : "border-border hover:border-muted-foreground/40 bg-card"
+                    }`}
+                  >
+                    <CreditCardIcon className="h-4 w-4 mb-1 text-sky-500" />
+                    <span className="text-xs">Mercado Pago</span>
+                  </button>
                 </div>
               </div>
+
+              {/* Detalle si es YAPE o PLIN */}
+              {(payMethod === "yape" || payMethod === "plin") && (
+                <div className="space-y-3 p-4 rounded-xl border bg-card">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold">
+                      Pago con {payMethod === "yape" ? "Yape" : "Plin"}
+                    </span>
+                    <Badge variant="outline" className="text-xs font-semibold text-emerald-500 border-emerald-500/40">
+                      Monto a transferir: S/ {
+                        (() => {
+                          const totalPrice = selectedCourt.price * (+duration * 2);
+                          const advancePercent = Number(
+                            selectedCourt.clubData?.porcentajeAdelantoDefault ??
+                            selectedCourt.porcentajeAdelantoDefault ??
+                            50
+                          );
+                          const advanceAmount = Math.max(1, Number(((totalPrice * advancePercent) / 100).toFixed(2)));
+                          return payOption === "advance" ? advanceAmount : totalPrice;
+                        })()
+                      }
+                    </Badge>
+                  </div>
+
+                  {/* Número y QR del Club */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Número */}
+                    {(() => {
+                      const phone =
+                        (payMethod === "yape"
+                          ? selectedCourt.clubData?.yapeNumero || selectedCourt.yapeNumero
+                          : selectedCourt.clubData?.plinNumero || selectedCourt.plinNumero) ||
+                        selectedCourt.whatsapp ||
+                        selectedCourt.phone ||
+                        "987654321";
+                      return (
+                        <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
+                          <span className="text-[11px] text-muted-foreground">
+                            Número de {payMethod === "yape" ? "Yape" : "Plin"}:
+                          </span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-mono font-bold">{phone}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => handleCopyPhone(phone)}
+                            >
+                              {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                              <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* QR */}
+                    {(() => {
+                      const qrUrl =
+                        payMethod === "yape"
+                          ? selectedCourt.clubData?.yapeQrUrl || selectedCourt.yapeQrUrl
+                          : selectedCourt.clubData?.plinQrUrl || selectedCourt.plinQrUrl;
+                      return (
+                        <div className="p-3 bg-muted/40 rounded-xl border flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-muted-foreground">Código QR Oficial</span>
+                          {qrUrl ? (
+                            <img src={qrUrl} alt="QR" className="h-10 w-10 object-contain rounded border bg-white p-0.5" />
+                          ) : (
+                            <QrCode className="h-6 w-6 text-muted-foreground opacity-40" />
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Subida de Comprobante */}
+                  <div className="space-y-1.5 pt-2">
+                    <label className="text-xs font-semibold flex items-center gap-1">
+                      <Upload className="h-3.5 w-3.5 text-primary" />
+                      Captura del Comprobante *
+                    </label>
+
+                    {receiptPreview ? (
+                      <div className="relative border rounded-xl p-2.5 bg-muted/30 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 overflow-hidden">
+                          <img src={receiptPreview} alt="Comprobante" className="h-12 w-12 rounded-lg object-cover border" />
+                          <div className="truncate">
+                            <p className="text-xs font-medium truncate">{receiptFile?.name}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {receiptFile ? `${(receiptFile.size / 1024).toFixed(1)} KB` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            setReceiptFile(null);
+                            setReceiptPreview(null);
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-muted-foreground/30 hover:border-primary/60 hover:bg-primary/5 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors text-center">
+                        <Upload className="h-5 w-5 text-primary mb-1" />
+                        <span className="text-xs font-medium text-primary">Subir comprobante de pago</span>
+                        <span className="text-[10px] text-muted-foreground mt-0.5">Formatos: PNG, JPG, WEBP (Máx. 10MB)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Detalle si es Mercado Pago */}
+              {payMethod === "mercadopago" && (
+                <div className="p-3.5 rounded-xl border bg-sky-50/60 dark:bg-sky-950/20 text-xs text-sky-800 dark:text-sky-300 space-y-1">
+                  <p className="font-semibold flex items-center gap-1.5">
+                    <CreditCardIcon className="h-4 w-4 text-sky-600" />
+                    Pago Inmediato con Mercado Pago
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Serás redirigido a la pasarela segura para pagar con tarjeta de débito o crédito.
+                  </p>
+                </div>
+              )}
 
               <Alert className="border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200">
                 <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -1258,32 +1642,36 @@ export function SearchResults({
                 </AlertDescription>
               </Alert>
 
-              {(selectedCourt.whatsapp || selectedCourt.phone) && (
-                <div className="flex items-center justify-between p-2.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg text-xs">
-                  <span className="text-slate-600 dark:text-slate-300">¿Dudas con el pago?</span>
-                  <a
-                    href={getWhatsAppLink(
-                      selectedCourt.whatsapp || selectedCourt.phone,
-                      `¡Hola! Tengo una consulta sobre el pago de mi reserva para la cancha "${selectedCourt.name}".`
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
-                  >
-                    <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-white" />
-                    WhatsApp del Club
-                  </a>
-                </div>
-              )}
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={handleSeparate}
+                  disabled={isLoading}
+                  className="flex-1"
+                >
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Separar Cancha (Pagar después)
+                </Button>
 
-              <div className="mt-4 flex gap-4">
-                <Button variant="outline" onClick={handleSeparate} disabled={isLoading}>
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Separar Cancha
-                </Button>
-                <Button onClick={handleConfirmPayment} disabled={isLoading}>
-                  Proceder a Pagar
-                </Button>
+                {payMethod === "yape" || payMethod === "plin" ? (
+                  <Button
+                    onClick={handleConfirmPayment}
+                    disabled={isLoading || !receiptFile}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                  >
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    Enviar Comprobante
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleConfirmPayment}
+                    disabled={isLoading}
+                    className="flex-1 bg-sky-600 hover:bg-sky-700 text-white gap-1.5"
+                  >
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCardIcon className="h-4 w-4" />}
+                    Pagar con Mercado Pago
+                  </Button>
+                )}
               </div>
             </div>
           )}

@@ -529,9 +529,16 @@ function MetricsAuditTab() {
                       </td>
                       <td className="px-4 py-3">{methodBadge(p.method)}</td>
                       <td className="px-4 py-3">
-                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                          {p.type === "ADELANTO" ? "Adelanto" : "Pago Total"}
-                        </span>
+                        {(() => {
+                          const totalBookingPrice = Number(p.booking?.pricing?.totalPrice ?? (p.amount || 0))
+                          const paidAmount = Number(p.amount || 0)
+                          const isAdvance = p.type === "ADELANTO" || (totalBookingPrice > paidAmount && totalBookingPrice > 0)
+                          return (
+                            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {isAdvance ? "Adelanto" : "Pago Total"}
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-3">{statusBadge(p.status, p.autoConfirmed || p.booking?.autoConfirmed, p.pendingAudit || p.booking?.pendingAudit)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">

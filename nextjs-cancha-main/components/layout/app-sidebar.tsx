@@ -146,22 +146,6 @@ export function AppSidebar({ user }: AppSidebarProps) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent className="flex flex-col gap-2">
-            {user.role === "USER" && (
-              <SidebarMenu>
-                <SidebarMenuItem className="flex items-center gap-2">
-                  <SidebarMenuButton
-                    asChild
-                    tooltip="Reservar Cancha"
-                    className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
-                  >
-                    <a href="/user/search">
-                      <PlusCircleIcon />
-                      <span>Reservar Cancha</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            )}
             <SidebarMenu>
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>

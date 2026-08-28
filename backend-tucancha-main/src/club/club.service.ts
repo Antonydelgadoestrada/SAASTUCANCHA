@@ -138,24 +138,30 @@ export class ClubService {
       throw new BadRequestException('No tienes permisos para modificar la configuración de pagos de este club');
     }
 
-    if (dto.whatsapp !== undefined) club.whatsapp = dto.whatsapp ? dto.whatsapp.trim() : null;
-    if (dto.aceptaMercadopago !== undefined) club.aceptaMercadopago = dto.aceptaMercadopago;
-    if (dto.yapeNumero !== undefined) club.yapeNumero = dto.yapeNumero;
-    if (dto.yapeQrUrl !== undefined) club.yapeQrUrl = dto.yapeQrUrl;
-    if (dto.plinNumero !== undefined) club.plinNumero = dto.plinNumero;
-    if (dto.plinQrUrl !== undefined) club.plinQrUrl = dto.plinQrUrl;
-    if (dto.porcentajeAdelantoDefault !== undefined) club.porcentajeAdelantoDefault = dto.porcentajeAdelantoDefault;
-    if (dto.adelantoMinimo !== undefined) club.adelantoMinimo = dto.adelantoMinimo;
+    if (dto.whatsapp !== undefined) club.whatsapp = dto.whatsapp?.trim() || null;
+    if (dto.aceptaMercadopago !== undefined) club.aceptaMercadopago = Boolean(dto.aceptaMercadopago);
+    if (dto.yapeNumero !== undefined) club.yapeNumero = dto.yapeNumero?.trim() || null;
+    if (dto.yapeQrUrl !== undefined) club.yapeQrUrl = dto.yapeQrUrl?.trim() || null;
+    if (dto.plinNumero !== undefined) club.plinNumero = dto.plinNumero?.trim() || null;
+    if (dto.plinQrUrl !== undefined) club.plinQrUrl = dto.plinQrUrl?.trim() || null;
+    if (dto.porcentajeAdelantoDefault !== undefined) {
+      club.porcentajeAdelantoDefault = Number(dto.porcentajeAdelantoDefault) >= 0 ? Number(dto.porcentajeAdelantoDefault) : 50;
+    }
+    if (dto.adelantoMinimo !== undefined) {
+      club.adelantoMinimo = dto.adelantoMinimo !== null && dto.adelantoMinimo !== '' && !isNaN(Number(dto.adelantoMinimo))
+        ? Number(dto.adelantoMinimo)
+        : null;
+    }
 
     const saved = await this.repo.save(club);
     return {
       aceptaMercadopago: saved.aceptaMercadopago,
       whatsapp: saved.whatsapp || null,
-      yapeNumero: saved.yapeNumero,
-      yapeQrUrl: saved.yapeQrUrl,
-      plinNumero: saved.plinNumero,
-      plinQrUrl: saved.plinQrUrl,
-      porcentajeAdelantoDefault: saved.porcentajeAdelantoDefault,
+      yapeNumero: saved.yapeNumero || null,
+      yapeQrUrl: saved.yapeQrUrl || null,
+      plinNumero: saved.plinNumero || null,
+      plinQrUrl: saved.plinQrUrl || null,
+      porcentajeAdelantoDefault: saved.porcentajeAdelantoDefault ?? 50,
       adelantoMinimo: saved.adelantoMinimo ? Number(saved.adelantoMinimo) : null,
     };
   }
