@@ -115,11 +115,12 @@ export class BookingService {
       `public/bookings`)
   }
 
- async createObjectBooking({userEmail,duration,startTime,endTime , courtId, date}: CreateManualBookingDto, user: User){
+ async createObjectBooking(dto: any, user: User){
+  const { userEmail, duration, startTime, courtId, date, customerInfo } = dto;
   const userReservation = await this.userService.findByEmail(userEmail);
   if(!userReservation) throw new NotFoundException(`email: ${userEmail} no encontrado`)
   const court: any = await this.courtService.findOne(courtId , ['club']);
-  endTime = getEndTime(startTime, duration);
+  const endTime = getEndTime(startTime, duration);
   if (!court) throw new NotFoundException('Cancha no encontrada');
   const price = isNight()
   ? court.promoNight ?? court.priceNight
@@ -134,9 +135,10 @@ export class BookingService {
     endTime: endTime,
     duration: duration,
     customerInfo:{
-      name: userReservation.name,
-      email: userReservation.email,
-      phone: userReservation.phone,
+      name: customerInfo?.name || dto.name || userReservation.name || user?.name || 'Cliente',
+      email: customerInfo?.email || dto.email || userReservation.email || user?.email,
+      phone: customerInfo?.phone || dto.phone || userReservation.phone || user?.phone || '',
+      notes: customerInfo?.notes || dto.notes || '',
     },
     pricing:{
       basePrice: +price,
@@ -176,10 +178,10 @@ export class BookingService {
   return booking;
 }
 
- async createOnlineBooking(dto: CreateManualBookingDto, user: User) {
+  async createOnlineBooking(dto: any, user: User) {
     const statusManual = {
       status: BookingStatus.PENDING,
-      paymentMethod:'online',
+      paymentMethod: dto.paymentMethod || 'online',
       paymentStatus: PaymentStatus.PENDING,
     }
     let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, dto.duration);

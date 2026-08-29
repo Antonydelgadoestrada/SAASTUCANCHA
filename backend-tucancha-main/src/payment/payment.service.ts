@@ -148,17 +148,22 @@ export class PaymentService {
   
   async confirmPayment(dto: any){
     const booking = await this.bookingService.findOneComplete(dto.id);
-    return await this.confirmPreference(booking)
+    const amount = dto.amount ? Number(dto.amount) : undefined;
+    return await this.confirmPreference(booking, amount)
   }
 
-  async confirmPreference(booking:Booking){
+  async confirmPreference(booking: Booking, customAmount?: number){
     if (!booking.club || !booking.club.mpAccessToken) {
       throw new BadRequestException('El club no tiene Mercado Pago conectado');
     }
     const mpAccessToken = booking.club.mpAccessToken;
-    const totalPrice = booking.pricing.totalPrice;
+    const finalAmount = customAmount && customAmount > 0 ? customAmount : (booking.pricing?.totalPrice ?? 0);
+    const isSaldo = customAmount && booking.pricing?.totalPrice && customAmount < booking.pricing.totalPrice;
+    const title = isSaldo
+      ? `Saldo restante - ${booking.court?.name || "Cancha"}`
+      : `Reserva en ${booking.court?.name || "Cancha"}`;
     const bookingId = booking.id;
-    const email = booking.user.email;
+    const email = booking.user?.email || "";
     // 2. Crear una instancia temporal de MercadoPago con el token del club
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
@@ -170,13 +175,13 @@ export class PaymentService {
       body: {
         items: [
           {
-            id: booking.court.id,
-            title: `Reserva en ${booking.court.name}`,
-            description: `Club: ${booking.club.name} | fecha: ${booking.date} | Superficie: ${booking.court.surface} | Duracion: ${booking.startTime}-${booking.endTime}`,
+            id: booking.court?.id || "court",
+            title: title,
+            description: `Club: ${booking.club?.name || ""} | fecha: ${booking.date} | Superficie: ${booking.court?.surface || ""} | Duracion: ${booking.startTime}-${booking.endTime}`,
             quantity: 1,
             category_id: 'services',
             currency_id: 'PEN',
-            unit_price: totalPrice,
+            unit_price: finalAmount,
           },
         ],
         payer: {
@@ -627,34 +632,66 @@ export class PaymentService {
     // Parse safe type
     const rawType = (dto.type || dto.tipo || '').toString().toUpperCase();
     let safeType: PaymentType = PaymentType.PAGO_COMPLETO;
-    if (rawType.includes('ADELANTO') || (totalPrice > 0 && safeAmount < totalPrice - 0.01)) {
-      safeType = PaymentType.ADELANTO;
-    } else if (rawType.includes('SALDO')) {
+    if (rawType.includes('SALDO')) {
       safeType = PaymentType.SALDO;
+    } else if (rawType.includes('ADELANTO') || (totalPrice > 0 && safeAmount < totalPrice - 0.01)) {
+      safeType = PaymentType.ADELANTO;
     } else {
       safeType = PaymentType.PAGO_COMPLETO;
     }
 
-    const payment = this.paymentRepo.create({
-      booking,
-      user,
-      amount: safeAmount,
-      currency: dto.currency || 'PEN',
-      method: safeMethod,
-      paymentMethod: safeMethod,
-      status: PaymentStatus.PENDING,
-      type: safeType,
-      comprobanteUrl: dto.comprobanteUrl,
-      pendingAudit: true,
-      autoConfirmed: false,
-    });
+    let savedPayment: Payment;
 
-    const savedPayment = await this.paymentRepo.save(payment);
+    if (booking.payment) {
+      // Si la reserva ya tiene un registro de pago asociado
+      const existing = booking.payment;
+      if (safeType === PaymentType.SALDO || rawType.includes('SALDO')) {
+        // Es la cancelación o comprobante del saldo restante
+        existing.saldoAmount = safeAmount;
+        existing.saldoMethod = safeMethod;
+        existing.saldoComprobanteUrl = dto.comprobanteUrl;
+        existing.saldoStatus = 'PENDIENTE';
+        existing.saldoNotas = 'Comprobante de saldo enviado por el cliente';
+        existing.saldoFechaConfirmacion = new Date();
+      } else {
+        // Actualización de comprobante inicial
+        existing.amount = safeAmount;
+        existing.method = safeMethod;
+        existing.paymentMethod = safeMethod;
+        existing.status = PaymentStatus.PENDING;
+        existing.type = safeType;
+        existing.comprobanteUrl = dto.comprobanteUrl;
+        existing.pendingAudit = true;
+        existing.autoConfirmed = false;
+      }
+      savedPayment = await this.paymentRepo.save(existing);
+    } else {
+      // Crear nuevo pago
+      const payment = this.paymentRepo.create({
+        booking,
+        user,
+        amount: safeAmount,
+        currency: dto.currency || 'PEN',
+        method: safeMethod,
+        paymentMethod: safeMethod,
+        status: PaymentStatus.PENDING,
+        type: safeType,
+        comprobanteUrl: dto.comprobanteUrl,
+        pendingAudit: true,
+        autoConfirmed: false,
+      });
+      savedPayment = await this.paymentRepo.save(payment);
+    }
 
-    // Actualizar estado de la reserva a pendiente de verificación
+    // Actualizar estado de la reserva
     booking.payment = savedPayment;
     booking.paymentMethod = 'manual';
-    booking.paymentStatus = PaymentStatus.PENDING;
+    if (safeType !== PaymentType.SALDO) {
+      booking.paymentStatus = PaymentStatus.PENDING;
+    }
+    if (dto.comprobanteUrl) {
+      booking.proofOfPaymentUrl = dto.comprobanteUrl;
+    }
     await this.bookingRepo.save(booking);
 
     // Retener slots en calendario
@@ -672,7 +709,9 @@ export class PaymentService {
     }
 
     return {
-      message: 'Comprobante registrado exitosamente. El club validará tu pago.',
+      message: safeType === PaymentType.SALDO 
+        ? 'Comprobante de saldo restante enviado exitosamente. El club validará tu pago.'
+        : 'Comprobante registrado exitosamente. El club validará tu pago.',
       payment: savedPayment,
     };
   }
@@ -705,6 +744,7 @@ export class PaymentService {
 
     if (action === 'CONFIRMAR') {
       payment.status = PaymentStatus.PAID;
+      payment.pendingAudit = false;
       payment.fechaConfirmacion = new Date();
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = null;
@@ -720,6 +760,7 @@ export class PaymentService {
       if (payment.booking) {
         payment.booking.status = BookingStatus.CONFIRMED;
         payment.booking.paymentStatus = PaymentStatus.PAID;
+        payment.booking.pendingAudit = false;
         await this.bookingRepo.save(payment.booking);
 
         if (payment.booking.court && payment.booking.date && payment.booking.startTime) {
@@ -737,6 +778,7 @@ export class PaymentService {
       }
     } else {
       payment.status = PaymentStatus.REJECTED;
+      payment.pendingAudit = false;
       payment.fechaConfirmacion = new Date();
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = motivoRechazo || null;
@@ -744,6 +786,7 @@ export class PaymentService {
 
       if (payment.booking) {
         payment.booking.paymentStatus = PaymentStatus.REJECTED;
+        payment.booking.pendingAudit = false;
         await this.bookingRepo.save(payment.booking);
       }
     }

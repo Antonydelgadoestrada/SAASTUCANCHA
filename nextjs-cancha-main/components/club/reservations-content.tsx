@@ -469,8 +469,18 @@ export function ReservationsContent() {
                 <TableRow key={reservation.id}>
                   <TableCell className="font-medium">{reservation.id}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{reservation.customerInfo.name}</div>
-                    <div className="text-sm text-muted-foreground">{reservation.customerInfo.email}</div>
+                    <div className="font-medium">{reservation.customerInfo?.name || "Sin nombre"}</div>
+                    <div className="text-xs text-muted-foreground">{reservation.customerInfo?.email}</div>
+                    {reservation.customerInfo?.phone && (
+                      <div className="text-xs text-muted-foreground font-mono flex items-center gap-1 mt-0.5">
+                        <span>📞 {reservation.customerInfo.phone}</span>
+                      </div>
+                    )}
+                    {(reservation.paymentMethod === "whatsapp" || reservation.payment?.metodo === "WHATSAPP" || reservation.payment?.method === "WHATSAPP") && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-300">
+                        💬 Coordinación WhatsApp (2h)
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div>{reservation.court.name}</div>

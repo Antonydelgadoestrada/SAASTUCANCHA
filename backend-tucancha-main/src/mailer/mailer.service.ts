@@ -159,8 +159,13 @@ export class MailerService {
         <li><strong>Horario:</strong> ${startTime} - ${endTime}</li>
         <li><strong>Club:</strong> ${club.name}</li>
         <li><strong>Cancha:</strong> ${court.name}</li>
-        <li><strong>El club se pondra en contacto contigo </strong></li>
-        <li><strong>Numero de contacto del club:</strong> ${club.phone}</li>
+        <li><strong>Estado:</strong> ${booking.paymentStatus === 'paid' ? 'PAGADO' : 'PENDIENTE DE PAGO'}</li>
+        ${
+          booking.paymentStatus !== 'paid'
+            ? `<li style="color: #b91c1c;"><strong>⚠️ Tolerancia de pago:</strong> Dispones de <strong>15 minutos</strong> para subir tu comprobante de pago en 'Mis Reservas'. De lo contrario, tu turno se cancelará automáticamente.</li>`
+            : ''
+        }
+        <li><strong>Contacto del club:</strong> ${club.phone || 'Disponible en Mis Reservas'}</li>
       </ul>
     `;
     const detailsClub = `
@@ -170,8 +175,7 @@ export class MailerService {
         <li><strong>Horario:</strong> ${startTime} - ${endTime}</li>
         <li><strong>Club:</strong> ${club.name}</li>
         <li><strong>Cancha:</strong> ${court.name}</li>
-        <li><strong>Numero o correo del contacto del usuario:</strong> ${customerInfo?.phone ?? user?.phone }</li>
-
+        <li><strong>Contacto del usuario:</strong> ${customerInfo?.phone ?? user?.phone ?? 'No especificado'} (${customerInfo?.name || 'Cliente'})</li>
       </ul>
     `;
   
@@ -179,11 +183,14 @@ export class MailerService {
     await this.resend.emails.send({
       from: 'TuCancha <noreply@tucancha.com.pe>',
       to: customerInfo.email,
-      subject: 'Tu reserva ha sido confirmada',
+      subject: 'Tu reserva ha sido registrada',
       html: this.getEmailTemplate({
-        title: '¡Reserva Confirmada!',
+        title: '¡Reserva Registrada!',
         greeting: `Hola ${customerInfo.name},`,
-        message: 'Tu reserva ha sido confirmada con éxito. Aquí los detalles:',
+        message:
+          booking.paymentStatus === 'paid'
+            ? 'Tu reserva ha sido confirmada y pagada con éxito.'
+            : 'Tu reserva ha sido registrada en estado <strong>PENDIENTE</strong>. Recuerda que dispones de <strong>15 minutos</strong> para adjuntar tu comprobante de pago antes de que sea cancelada.',
         bookingDetailsHtml: detailsUsuario,
       }),
     });
@@ -193,9 +200,9 @@ export class MailerService {
       await this.resend.emails.send({
         from: 'TuCancha <noreply@tucancha.com.pe>',
         to: club.email,
-        subject: 'Nueva reserva',
+        subject: 'Nueva reserva registrada',
         html: this.getEmailTemplate({
-          title: 'Nueva reserva',
+          title: 'Nueva reserva registrada',
           greeting: `Hola ${club.name},`,
           message: 'Un usuario ha realizado una reserva en tu club.',
           bookingDetailsHtml: detailsClub,
@@ -288,7 +295,7 @@ export class MailerService {
   }
 
   /**
-   * Notificación cuando una reserva expira por falta de comprobante de pago tras 2 horas
+   * Notificación cuando una reserva expira por falta de comprobante de pago tras 15 minutos
    */
   async sendBookingExpiredUnpaidEmail(to: string, booking: Booking) {
     const { date, startTime, endTime, court, club, bookingReference, customerInfo } = booking;
@@ -301,9 +308,9 @@ export class MailerService {
     });
 
     const html = this.getEmailTemplate({
-      title: 'Tu reserva ha expirado por falta de pago',
+      title: 'Tu reserva ha expirado por falta de comprobante',
       greeting: `Hola ${customerInfo?.name || 'Cliente'},`,
-      message: 'El tiempo límite de 2 horas para registrar tu comprobante de pago ha vencido. Tu turno ha sido liberado automáticamente.',
+      message: 'El tiempo límite de 15 minutos para registrar tu comprobante de pago ha vencido. Tu turno ha sido liberado automáticamente.',
       bookingDetailsHtml: `
         <ul style="padding-left: 20px;">
           <li><strong>Referencia:</strong> ${bookingReference}</li>

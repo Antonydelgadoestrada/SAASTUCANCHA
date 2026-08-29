@@ -43,9 +43,17 @@ export function computePaymentDetails(payment: PaymentItem) {
   const booking = payment.booking
   const totalBookingPrice = Number(booking?.pricing?.totalPrice ?? (payment.amount || 0))
   const paidInitial = Number(payment.amount || 0)
-  const isAdvance = payment.type === "ADELANTO" || (totalBookingPrice > paidInitial && totalBookingPrice > 0)
-  const isSaldoPaid = payment.saldoStatus === "PAGADO"
-  const isComprobanteRejected = payment.status === "RECHAZADO" || payment.status === "REJECTED"
+  const isAdvance =
+    payment.type === "ADELANTO" ||
+    String(payment.type).toUpperCase().includes("ADELANTO") ||
+    (totalBookingPrice > paidInitial && totalBookingPrice > 0)
+  const isSaldoPaid =
+    payment.saldoStatus === "PAGADO" ||
+    String(payment.saldoStatus).toUpperCase() === "PAGADO" ||
+    String(payment.saldoStatus).toUpperCase() === "PAID"
+  const isComprobanteRejected =
+    String(payment.status).toUpperCase() === "RECHAZADO" ||
+    String(payment.status).toUpperCase() === "REJECTED"
   
   // Saldo faltante exacto por pagar
   const saldoFaltante = (isAdvance && !isSaldoPaid && !isComprobanteRejected)
@@ -60,15 +68,22 @@ export function computePaymentDetails(payment: PaymentItem) {
     ? paidInitial + saldoSettledAmount
     : paidInitial
 
-  const isComprobantePending =
-    payment.status === "PENDIENTE" ||
-    payment.status === "PENDING" ||
-    payment.pendingAudit ||
-    booking?.pendingAudit ||
-    payment.autoConfirmed ||
-    booking?.autoConfirmed
+  const normalizedStatus = String(payment.status || "").toUpperCase()
 
-  const isComprobanteApproved = payment.status === "CONFIRMADO" || payment.status === "PAID"
+  const isComprobantePending =
+    normalizedStatus === "PENDIENTE" ||
+    normalizedStatus === "PENDING" ||
+    Boolean(payment.pendingAudit) ||
+    Boolean(booking?.pendingAudit) ||
+    Boolean(payment.autoConfirmed) ||
+    Boolean(booking?.autoConfirmed)
+
+  const isComprobanteApproved =
+    normalizedStatus === "CONFIRMADO" ||
+    normalizedStatus === "CONFIRMED" ||
+    normalizedStatus === "PAID" ||
+    normalizedStatus === "PAGADO" ||
+    normalizedStatus === "APPROVED"
 
   return {
     totalBookingPrice,
@@ -92,16 +107,30 @@ function comprobanteBadge(status: string, autoConfirmed?: boolean, pendingAudit?
       </Badge>
     )
   }
+  const normalized = String(status || "").toUpperCase().trim()
   const map: Record<string, { label: string; className: string }> = {
-    PENDIENTE: { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
-    PENDING:   { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
-    CONFIRMADO:{ label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
-    PAID:      { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
-    RECHAZADO: { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
-    REJECTED:  { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
+    PENDIENTE:  { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
+    PENDING:    { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
+    CONFIRMADO: { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    CONFIRMED:  { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    PAID:       { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    PAGADO:     { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    APPROVED:   { label: "Aprobado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    APROBADO:   { label: "Aprobado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    RECHAZADO:  { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
+    REJECTED:   { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
+    CANCELADO:  { label: "Cancelado", className: "bg-slate-100 text-slate-600 border-slate-300" },
+    CANCELLED:  { label: "Cancelado", className: "bg-slate-100 text-slate-600 border-slate-300" },
   }
-  const v = map[status] || { label: status, className: "bg-slate-100 text-slate-600 border-slate-300" }
+  const v = map[normalized] || { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" }
   return <Badge variant="outline" className={`${v.className} font-medium text-xs`}>{v.label}</Badge>
+}
+
+function typeLabel(type?: string | null) {
+  const normalized = String(type || "").toUpperCase().trim()
+  if (normalized.includes("ADELANTO") || normalized.includes("ADVANCE")) return "Adelanto"
+  if (normalized.includes("SALDO")) return "Saldo Restante"
+  return "Pago Completo"
 }
 
 function saldoBadge(
@@ -136,8 +165,11 @@ function saldoBadge(
 }
 
 function methodBadge(method: string) {
+  const normalized = String(method || "").toUpperCase().trim()
   const map: Record<string, { label: string; color: string }> = {
     MERCADOPAGO:   { label: "Mercado Pago", color: "text-blue-600" },
+    MERCADO_PAGO:  { label: "Mercado Pago", color: "text-blue-600" },
+    MP:            { label: "Mercado Pago", color: "text-blue-600" },
     YAPE:          { label: "Yape", color: "text-purple-600" },
     PLIN:          { label: "Plin", color: "text-teal-600" },
     TRANSFERENCIA: { label: "Transferencia", color: "text-indigo-600" },
@@ -145,8 +177,11 @@ function methodBadge(method: string) {
     EFECTIVO:      { label: "Efectivo", color: "text-green-700" },
     CASH:          { label: "Efectivo", color: "text-green-700" },
     CARD:          { label: "Tarjeta / POS", color: "text-blue-700" },
+    CREDIT_CARD:   { label: "Tarjeta de Crédito", color: "text-blue-700" },
+    DEBIT_CARD:    { label: "Tarjeta de Débito", color: "text-blue-700" },
+    WHATSAPP:      { label: "WhatsApp", color: "text-emerald-600" },
   }
-  const v = map[method] || { label: method, color: "text-slate-500" }
+  const v = map[normalized] || { label: normalized || "Otro", color: "text-slate-500" }
   return <span className={`text-xs font-semibold ${v.color}`}>{v.label}</span>
 }
 
@@ -194,20 +229,20 @@ function SettleSaldoModal({
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const [comprobanteSaldoUrl, setComprobanteSaldoUrl] = useState<string | null>(null)
 
-  if (!payment) return null
-
-  const details = computePaymentDetails(payment)
-  const defaultRemaining = details.saldoFaltante > 0 ? details.saldoFaltante : 0
+  const details = payment ? computePaymentDetails(payment) : null
+  const defaultRemaining = details && details.saldoFaltante > 0 ? details.saldoFaltante : 0
   const effectiveMonto = montoCustom !== "" ? Number(montoCustom) : defaultRemaining
 
   const mutation = useMutation({
-    mutationFn: (data: { monto: number; metodo: string; comprobanteUrl?: string; notas?: string }) =>
-      settlePaymentSaldo(payment.id, {
+    mutationFn: (data: { monto: number; metodo: string; comprobanteUrl?: string; notas?: string }) => {
+      if (!payment) throw new Error("No hay pago seleccionado")
+      return settlePaymentSaldo(payment.id, {
         monto: data.monto,
         metodo: data.metodo,
         comprobanteUrl: data.comprobanteUrl,
         notas: data.notas,
-      }),
+      })
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-payments-list"] })
       queryClient.invalidateQueries({ queryKey: ["club-payment-metrics"] })
@@ -225,6 +260,8 @@ function SettleSaldoModal({
       })
     },
   })
+
+  if (!payment) return null
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -407,8 +444,10 @@ function PaymentDetailModal({
   const [showRejectInput, setShowRejectInput] = useState(false)
 
   const mutation = useMutation({
-    mutationFn: ({ action, motivo }: { action: "CONFIRMAR" | "RECHAZAR"; motivo?: string }) =>
-      confirmManualPayment(payment!.id, action, motivo),
+    mutationFn: ({ action, motivo }: { action: "CONFIRMAR" | "RECHAZAR"; motivo?: string }) => {
+      if (!payment) throw new Error("No hay pago seleccionado")
+      return confirmManualPayment(payment.id, action, motivo)
+    },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["club-payments-list"] })
       queryClient.invalidateQueries({ queryKey: ["club-payment-metrics"] })
@@ -545,7 +584,7 @@ function PaymentDetailModal({
               <div className="text-right">
                 <p className="text-xs text-slate-500">Método Usado</p>
                 {methodBadge(payment.method)}
-                <p className="text-[11px] text-slate-400 mt-0.5">{payment.type}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{typeLabel(payment.type)}</p>
               </div>
             </div>
 

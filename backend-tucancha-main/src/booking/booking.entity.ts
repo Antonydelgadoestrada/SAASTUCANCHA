@@ -100,8 +100,8 @@
     @OneToOne(() => Review, (review) => review.booking)
     review?: Review;
 
-    @Column({ type: 'enum', enum: ['online', 'manual'], default: 'online' })
-    paymentMethod: 'online' | 'manual';
+    @Column({ default: 'online', nullable: true })
+    paymentMethod: 'online' | 'manual' | 'whatsapp' | string;
 
     @Column({ nullable: true })
     proofOfPaymentUrl?: string;

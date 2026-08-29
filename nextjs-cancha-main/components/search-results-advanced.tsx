@@ -194,11 +194,81 @@ export function SearchResults({
     notes: "",
   });
   const [duration, setDuration] = useState<string>('1');
-  const [payMethod, setPayMethod] = useState<"yape" | "plin" | "mercadopago">("yape");
+  const [payMethod, setPayMethod] = useState<"yape" | "plin" | "mercadopago" | "whatsapp">("yape");
   const [payOption, setPayOption] = useState<"advance" | "full">("advance");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successBookingData, setSuccessBookingData] = useState<{
+    reference: string;
+    courtName: string;
+    clubName: string;
+    date: string;
+    timeRange: string;
+    customerPhone: string;
+    customerName: string;
+    paymentStatus: "PENDIENTE" | "PAGADO" | "ADELANTO" | "PAGO_COMPLETO" | "WHATSAPP_COORDINACION";
+    clubPhone?: string;
+    clubWhatsApp?: string;
+  } | null>(null);
+
+  const getWhatsAppConfirmationMessage = (data: {
+    reference: string;
+    courtName: string;
+    clubName: string;
+    date: string;
+    timeRange: string;
+    customerPhone: string;
+    customerName: string;
+    paymentStatus: "PENDIENTE" | "PAGADO" | "ADELANTO" | "PAGO_COMPLETO" | "WHATSAPP_COORDINACION";
+  }) => {
+    if (data.paymentStatus === "WHATSAPP_COORDINACION") {
+      return [
+        `🏟️ *SOLICITUD DE RESERVA Y COORDINACIÓN POR WHATSAPP*`,
+        `🔖 *Código:* ${data.reference}`,
+        `⚽ *Cancha:* ${data.courtName}`,
+        `🏢 *Club:* ${data.clubName}`,
+        `📅 *Fecha:* ${data.date}`,
+        `⏰ *Horario:* ${data.timeRange}`,
+        `👤 *Cliente:* ${data.customerName} (${data.customerPhone})`,
+        `💳 *Estado:* 🟡 *EN COORDINACIÓN (HORARIO BLOQUEADO 2 HORAS)*`,
+        ``,
+        `🔒 *Aviso:* Mi turno se encuentra bloqueado por 2 horas en TuCancha para evitar doble reserva mientras coordinamos el pago/reserva. Por favor, confirma mi reserva desde tu panel una vez acordemos los detalles. ¡Muchas gracias!`,
+      ].join("\n");
+    }
+
+    const isPending = data.paymentStatus === "PENDIENTE";
+    const lines = [
+      `🏟️ *CONFIRMACIÓN DE RESERVA - TUCANCHA*`,
+      `🔖 *Código:* ${data.reference}`,
+      `⚽ *Cancha:* ${data.courtName}`,
+      `🏢 *Club:* ${data.clubName}`,
+      `📅 *Fecha:* ${data.date}`,
+      `⏰ *Horario:* ${data.timeRange}`,
+      `👤 *Cliente:* ${data.customerName} (${data.customerPhone})`,
+      `💳 *Estado de Pago:* ${isPending ? "🟡 PENDIENTE DE COMPROBANTE" : "🟢 REGISTRADO / EN REVISIÓN"}`,
+    ];
+
+    if (isPending) {
+      lines.push(
+        ``,
+        `⚠️ *ADVERTENCIA IMPORTANTE:*`,
+        `Debes subir tu comprobante / voucher de pago dentro de los próximos *15 MINUTOS*.`,
+        `De lo contrario, transcurridos los 15 minutos tu reserva será *CANCELADA AUTOMÁTICAMENTE* y el horario quedará liberado.`,
+        ``,
+        `📲 Puedes adjuntar tu voucher desde la sección *Mis Reservas* en TuCancha o enviarlo directamente.`
+      );
+    } else {
+      lines.push(
+        ``,
+        `✅ *Tu comprobante ha sido registrado con éxito.* Tu cancha se encuentra reservada.`,
+        `Presenta este código al ingresar al complejo deportivo.`
+      );
+    }
+
+    return lines.join("\n");
+  };
   const filteredtimeOptions = getValidStartTimes(selectedCourt?.availability ?? ['10:00'], duration, selectedDate)
   // console.log({filteredtimeOptions})
   const { toast } = useToast();
@@ -356,25 +426,56 @@ export function SearchResults({
     setIsLoading(true);
     try {
       const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
-      await createReservation({
+      const fechaDisplay = selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: es }) : format(new Date(), "dd/MM/yyyy", { locale: es });
+      
+      const timeRange = selectedTime && duration ? (() => {
+        const [h, m] = selectedTime.split(":").map(Number);
+        const d = new Date();
+        d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
+        const endH = d.getHours().toString().padStart(2, "0");
+        const endM = d.getMinutes().toString().padStart(2, "0");
+        return `${selectedTime} a ${endH}:${endM}`;
+      })() : selectedTime;
+
+      const newBooking = await createReservation({
         courtId: selectedCourt.id,
         date: fecha,
         startTime: selectedTime,
         duration,
         userEmail: bookingData.email,
+        customerInfo: {
+          name: bookingData.name,
+          email: bookingData.email,
+          phone: bookingData.phone,
+          notes: bookingData.notes,
+        },
+        phone: bookingData.phone,
+        name: bookingData.name,
+      });
+
+      const bookingRef = newBooking?.bookingReference || newBooking?.data?.bookingReference || `REF-${Date.now()}`;
+      const clubPhone = selectedCourt.whatsapp || selectedCourt.phone || selectedCourt.clubData?.phone || selectedCourt.clubData?.whatsapp;
+
+      setSuccessBookingData({
+        reference: bookingRef,
+        courtName: selectedCourt.name,
+        clubName: selectedCourt.club || selectedCourt.venue || selectedCourt.clubData?.name || "Club Deportivo",
+        date: fechaDisplay,
+        timeRange,
+        customerPhone: bookingData.phone,
+        customerName: bookingData.name,
+        paymentStatus: "PENDIENTE",
+        clubPhone: selectedCourt.phone || selectedCourt.whatsapp,
+        clubWhatsApp: clubPhone,
       });
 
       toast({
         title: "¡Cancha separada con éxito!",
-        description: `Tu reserva para ${selectedCourt?.name} ha sido registrada. Puedes abonar el adelanto o pagar el total desde Mis Reservas.`,
+        description: `Tu reserva se encuentra PENDIENTE. Tienes 15 minutos para adjuntar tu comprobante de pago.`,
       });
+
       setShowPayment(false);
-      setSelectedCourt(null);
-      setSelectedTime("");
-      setReceiptFile(null);
-      setReceiptPreview(null);
-      setBookingData((prev) => ({ ...prev, notes: "" }));
-      router.push("/user/bookings");
+      setShowSuccessModal(true);
     } catch (error: any) {
       console.error("Error al crear la reserva:", error);
       toast({
@@ -407,7 +508,79 @@ export function SearchResults({
 
     setIsLoading(true);
     try {
-      if (payMethod === "mercadopago") {
+      if (payMethod === "whatsapp") {
+        const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
+        const fechaDisplay = selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: es }) : format(new Date(), "dd/MM/yyyy", { locale: es });
+
+        const timeRange = selectedTime && duration ? (() => {
+          const [h, m] = selectedTime.split(":").map(Number);
+          const d = new Date();
+          d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
+          const endH = d.getHours().toString().padStart(2, "0");
+          const endM = d.getMinutes().toString().padStart(2, "0");
+          return `${selectedTime} a ${endH}:${endM}`;
+        })() : selectedTime;
+
+        const newBooking = await createReservation({
+          courtId: selectedCourt.id,
+          date: fecha,
+          startTime: selectedTime,
+          duration,
+          userEmail: bookingData.email,
+          paymentMethod: 'whatsapp',
+          customerInfo: {
+            name: bookingData.name,
+            email: bookingData.email,
+            phone: bookingData.phone,
+            notes: bookingData.notes,
+          },
+          phone: bookingData.phone,
+          name: bookingData.name,
+        });
+
+        const bookingId = newBooking?.id || newBooking?.data?.id;
+        const bookingRef = newBooking?.bookingReference || newBooking?.data?.bookingReference || `REF-${Date.now()}`;
+        const clubPhone = selectedCourt.whatsapp || selectedCourt.phone || selectedCourt.clubData?.phone || selectedCourt.clubData?.whatsapp;
+
+        if (bookingId) {
+          await createBookingPayment(bookingId, {
+            metodo: "WHATSAPP",
+            tipo: "PAGO_COMPLETO",
+            monto: totalPrice,
+          });
+        }
+
+        const successObj = {
+          reference: bookingRef,
+          courtName: selectedCourt.name,
+          clubName: selectedCourt.club || selectedCourt.venue || selectedCourt.clubData?.name || "Club Deportivo",
+          date: fechaDisplay,
+          timeRange,
+          customerPhone: bookingData.phone,
+          customerName: bookingData.name,
+          paymentStatus: "WHATSAPP_COORDINACION" as const,
+          clubPhone: selectedCourt.phone || selectedCourt.whatsapp,
+          clubWhatsApp: clubPhone,
+        };
+
+        setSuccessBookingData(successObj);
+
+        toast({
+          title: "¡Horario bloqueado por 2 horas!",
+          description: "Tu turno ha sido bloqueado en el sistema. Coordina directamente con el Club por WhatsApp.",
+        });
+
+        // Abrir automáticamente el chat de WhatsApp con el Club
+        if (clubPhone) {
+          const waMsg = getWhatsAppConfirmationMessage(successObj);
+          const waUrl = getWhatsAppLink(clubPhone, waMsg);
+          window.open(waUrl, "_blank");
+        }
+
+        setShowPayment(false);
+        setShowSuccessModal(true);
+        return;
+      } else if (payMethod === "mercadopago") {
         const { init_point } = await createPreference({
           courtId: selectedCourt.id,
           date: format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es }),
@@ -444,15 +617,36 @@ export function SearchResults({
 
         // 2. Crear reserva online
         const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
+        const fechaDisplay = selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: es }) : format(new Date(), "dd/MM/yyyy", { locale: es });
+
+        const timeRange = selectedTime && duration ? (() => {
+          const [h, m] = selectedTime.split(":").map(Number);
+          const d = new Date();
+          d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
+          const endH = d.getHours().toString().padStart(2, "0");
+          const endM = d.getMinutes().toString().padStart(2, "0");
+          return `${selectedTime} a ${endH}:${endM}`;
+        })() : selectedTime;
+
         const newBooking = await createReservation({
           courtId: selectedCourt.id,
           date: fecha,
           startTime: selectedTime,
           duration,
           userEmail: bookingData.email,
+          customerInfo: {
+            name: bookingData.name,
+            email: bookingData.email,
+            phone: bookingData.phone,
+            notes: bookingData.notes,
+          },
+          phone: bookingData.phone,
+          name: bookingData.name,
         });
 
         const bookingId = newBooking?.id || newBooking?.data?.id;
+        const bookingRef = newBooking?.bookingReference || newBooking?.data?.bookingReference || `REF-${Date.now()}`;
+        const clubPhone = selectedCourt.whatsapp || selectedCourt.phone || selectedCourt.clubData?.phone || selectedCourt.clubData?.whatsapp;
 
         // 3. Registrar el pago en el backend
         if (bookingId) {
@@ -469,18 +663,26 @@ export function SearchResults({
             ? ` (Saldo pendiente a pagar en club: S/ ${(totalPrice - advanceAmount).toFixed(2)})`
             : "";
 
+        setSuccessBookingData({
+          reference: bookingRef,
+          courtName: selectedCourt.name,
+          clubName: selectedCourt.club || selectedCourt.venue || selectedCourt.clubData?.name || "Club Deportivo",
+          date: fechaDisplay,
+          timeRange,
+          customerPhone: bookingData.phone,
+          customerName: bookingData.name,
+          paymentStatus: payOption === "advance" ? "ADELANTO" : "PAGO_COMPLETO",
+          clubPhone: selectedCourt.phone || selectedCourt.whatsapp,
+          clubWhatsApp: clubPhone,
+        });
+
         toast({
           title: "¡Comprobante enviado!",
           description: `Tu comprobante de ${payMethod === "yape" ? "Yape" : "Plin"} por S/ ${payAmount} ha sido enviado.${remainingText}`,
         });
 
         setShowPayment(false);
-        setSelectedCourt(null);
-        setSelectedTime("");
-        setReceiptFile(null);
-        setReceiptPreview(null);
-        setBookingData((prev) => ({ ...prev, notes: "" }));
-        router.push("/user/bookings");
+        setShowSuccessModal(true);
       }
     } catch (error: any) {
       console.error("Error al procesar el pago:", error);
@@ -659,28 +861,14 @@ export function SearchResults({
             <span className="line-clamp-1">{court.address}</span>
           </div>
 
-          {/* teléfono y whatsapp */}
-          <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground flex-wrap">
-            <div className="flex items-center gap-2">
-              <PhoneIcon className="h-4 w-4 text-muted-foreground" />
-              <span>{court.phone || "Sin teléfono"}</span>
-            </div>
-
-            {(court.whatsapp || court.phone) && (
-              <a
-                href={getWhatsAppLink(
-                  court.whatsapp || court.phone,
-                  `¡Hola! Estoy interesado en la cancha "${court.name}" (${court.venue || ""}) que vi en TuCancha.`
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 transition-colors"
-                title="Chatear por WhatsApp con el Club"
-              >
-                <MessageCircle className="h-3 w-3 fill-emerald-600 dark:fill-emerald-400 text-white" />
-                <span>WhatsApp</span>
-              </a>
-            )}
+          {/* Información del club y aviso de contacto directo post-reserva */}
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground pt-0.5">
+            <span className="line-clamp-1 font-medium text-slate-600 dark:text-slate-400">
+              {court.venue || court.club || "Complejo Deportivo"}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/60">
+              Contacto directo tras reservar
+            </span>
           </div>
 
           {/* rating + precio */}
@@ -984,39 +1172,15 @@ export function SearchResults({
                   </div>
 
                   <div>
-                    <h3 className="font-semibold mb-2">Contacto</h3>
+                    <h3 className="font-semibold mb-2">Ubicación y Contacto</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2">
-                        <MapPinIcon className="h-4 w-4 text-muted-foreground" />
+                        <MapPinIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span>{selectedCourt.address}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <PhoneIcon className="h-4 w-4 text-muted-foreground" />
-                        <span>{selectedCourt.phone || "No especificado"}</span>
+                      <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300">
+                        <span className="font-semibold">📞 Comunicación Directa:</span> El teléfono y acceso directo a WhatsApp con el Club se activan automáticamente una vez confirmes o separes tu reserva.
                       </div>
-
-                      {(selectedCourt.whatsapp || selectedCourt.phone) && (
-                        <div className="pt-2">
-                          <a
-                            href={getWhatsAppLink(
-                              selectedCourt.whatsapp || selectedCourt.phone,
-                              `¡Hola! Quisiera consultar sobre la cancha "${selectedCourt.name}" (${selectedCourt.venue || ""}) que vi en TuCancha.`
-                            )}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex w-full"
-                          >
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] dark:text-[#25D366] border-[#25D366]/30 font-semibold text-xs gap-2 h-9"
-                            >
-                              <MessageCircle className="h-4 w-4 fill-[#25D366] text-white" />
-                              Contactar al WhatsApp del Club
-                            </Button>
-                          </a>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -1281,26 +1445,6 @@ export function SearchResults({
                 </AlertDescription>
               </Alert>
 
-              {(selectedCourt.whatsapp || selectedCourt.phone) && (
-                <div className="flex items-center justify-between p-2.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg text-xs">
-                  <span className="text-slate-600 dark:text-slate-300">¿Dudas con tu reserva?</span>
-                  <a
-                    href={getWhatsAppLink(
-                      selectedCourt.whatsapp || selectedCourt.phone,
-                      `¡Hola! Tengo una consulta sobre mi reserva para la cancha "${selectedCourt.name}" el ${
-                        selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: es }) : "día de hoy"
-                      } a las ${selectedTime || ""}.`
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
-                  >
-                    <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-white" />
-                    Chatear por WhatsApp
-                  </a>
-                </div>
-              )}
-
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" onClick={() => setShowBooking(false)}>
                   Cancelar
@@ -1364,24 +1508,6 @@ export function SearchResults({
                     <span>Duración: {duration} {duration === "1" ? "hora" : "horas"}</span>
                   </div>
                 </div>
-
-                {(selectedCourt.whatsapp || selectedCourt.phone) && (
-                  <div className="pt-2 border-t flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">¿Dudas con tu pago?</span>
-                    <a
-                      href={getWhatsAppLink(
-                        selectedCourt.whatsapp || selectedCourt.phone,
-                        `¡Hola! Tengo una consulta sobre el pago de mi reserva para la cancha "${selectedCourt.name}".`
-                      )}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors"
-                    >
-                      <MessageCircle className="h-3 w-3 fill-emerald-600 text-white" />
-                      WhatsApp del Club
-                    </a>
-                  </div>
-                )}
               </div>
 
               {/* Política de Adelanto del Club */}
@@ -1455,9 +1581,9 @@ export function SearchResults({
               {/* Selector de métodos de pago */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  MÉTODO DE PAGO:
+                  MÉTODO DE PAGO / RESERVA:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setPayMethod("yape")}
@@ -1496,8 +1622,42 @@ export function SearchResults({
                     <CreditCardIcon className="h-4 w-4 mb-1 text-sky-500" />
                     <span className="text-xs">Mercado Pago</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod("whatsapp")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
+                      payMethod === "whatsapp"
+                        ? "border-[#25D366] bg-[#25D366]/10 font-bold text-[#128C7E] dark:text-[#25D366] shadow-sm"
+                        : "border-border hover:border-muted-foreground/40 bg-card"
+                    }`}
+                  >
+                    <MessageCircle className="h-4 w-4 mb-1 fill-[#25D366] text-white" />
+                    <span className="text-xs">WhatsApp</span>
+                  </button>
                 </div>
               </div>
+
+              {/* Detalle si es WhatsApp */}
+              {payMethod === "whatsapp" && (
+                <div className="space-y-3 p-4 rounded-xl border border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-950/20 text-xs text-emerald-900 dark:text-emerald-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                      <MessageCircle className="h-4 w-4 fill-emerald-600 text-white" />
+                      Coordinación Directa por WhatsApp
+                    </span>
+                    <Badge variant="outline" className="border-emerald-500 text-emerald-700 dark:text-emerald-300 font-bold">
+                      Bloqueo 2 Horas
+                    </Badge>
+                  </div>
+                  <p className="text-[12px] text-muted-foreground leading-relaxed">
+                    Al seleccionar esta opción, tu horario quedará <strong>bloqueado por 2 horas</strong> (en estado <em>on-hold</em>) para que nadie más tome tu turno mientras acuerdas el pago o detalles con el Club por chat.
+                  </p>
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-medium text-emerald-800 dark:text-emerald-300">
+                    📌 <strong>Confirmación del Administrador:</strong> El club confirmará tu reserva manualmente desde su panel una vez que coordinen por WhatsApp. Si no se confirma en 2 horas, el turno se liberará automáticamente.
+                  </div>
+                </div>
+              )}
 
               {/* Detalle si es YAPE o PLIN */}
               {(payMethod === "yape" || payMethod === "plin") && (
@@ -1653,7 +1813,16 @@ export function SearchResults({
                   Separar Cancha (Pagar después)
                 </Button>
 
-                {payMethod === "yape" || payMethod === "plin" ? (
+                {payMethod === "whatsapp" ? (
+                  <Button
+                    onClick={handleConfirmPayment}
+                    disabled={isLoading}
+                    className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white gap-1.5 font-semibold"
+                  >
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4 fill-white text-[#25D366]" />}
+                    Bloquear Horario y Coordinar por WhatsApp
+                  </Button>
+                ) : payMethod === "yape" || payMethod === "plin" ? (
                   <Button
                     onClick={handleConfirmPayment}
                     disabled={isLoading || !receiptFile}
@@ -1672,6 +1841,199 @@ export function SearchResults({
                     Pagar con Mercado Pago
                   </Button>
                 )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmación Post-Reserva con Estado de Pago y Alerta de 15 Minutos / 2 Horas */}
+      <Dialog open={showSuccessModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowSuccessModal(false);
+          setSelectedCourt(null);
+          setSelectedTime("");
+          setReceiptFile(null);
+          setReceiptPreview(null);
+          setBookingData((prev) => ({ ...prev, notes: "" }));
+          router.push("/user/bookings");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-6 w-6" />
+              <DialogTitle className="text-xl">¡Reserva Registrada!</DialogTitle>
+            </div>
+            <DialogDescription>
+              Tu reserva ha sido procesada. Revisa el estado de tu pago y los detalles a continuación.
+            </DialogDescription>
+          </DialogHeader>
+
+          {successBookingData && (
+            <div className="space-y-4 py-2 text-sm">
+              {/* Tarjeta de Resumen */}
+              <div className="rounded-xl border bg-muted/40 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código de Reserva</span>
+                  <Badge variant="outline" className="font-mono font-bold text-xs bg-background">
+                    {successBookingData.reference}
+                  </Badge>
+                </div>
+
+                <div className="pt-1">
+                  <h4 className="font-bold text-base text-foreground">{successBookingData.courtName}</h4>
+                  <p className="text-xs text-muted-foreground">{successBookingData.clubName}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t">
+                  <div>
+                    <span className="text-muted-foreground block">Fecha:</span>
+                    <span className="font-medium">{successBookingData.date}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Horario:</span>
+                    <span className="font-medium">{successBookingData.timeRange}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Teléfono registrado:</span>
+                  <span className="font-semibold text-foreground flex items-center gap-1">
+                    <Smartphone className="h-3.5 w-3.5 text-primary" />
+                    {successBookingData.customerPhone || "No ingresado"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Estado de Pago y Advertencias */}
+              {successBookingData.paymentStatus === "WHATSAPP_COORDINACION" ? (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 p-4 space-y-2 text-emerald-900 dark:text-emerald-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                      <MessageCircle className="h-4 w-4 fill-emerald-600 text-white" />
+                      Estado: EN COORDINACIÓN POR WHATSAPP
+                    </span>
+                    <Badge variant="outline" className="text-[10px] font-bold border-emerald-500 text-emerald-700 dark:text-emerald-300">
+                      Bloqueado 2 Horas
+                    </Badge>
+                  </div>
+                  <p className="text-xs leading-relaxed">
+                    🔒 Tu horario se encuentra <strong>bloqueado por 2 horas</strong> en el sistema para que nadie más tome tu turno mientras coordinas con el Club por WhatsApp.
+                  </p>
+                  <p className="text-[11px] text-emerald-700/90 dark:text-emerald-300/90 font-medium">
+                    📌 <strong>Confirmación del Administrador:</strong> El club confirmará tu reserva manualmente desde su panel tras coordinar contigo. Si no se confirma en 2 horas, el turno se liberará automáticamente.
+                  </p>
+                </div>
+              ) : successBookingData.paymentStatus === "PENDIENTE" ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-50/80 dark:bg-red-950/30 p-4 space-y-2 text-red-900 dark:text-red-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 text-red-700 dark:text-red-400">
+                      <span>⚠️</span> Estado de Pago: PENDIENTE
+                    </span>
+                    <Badge variant="destructive" className="text-[10px] font-bold">
+                      Tolerancia 15 min
+                    </Badge>
+                  </div>
+                  <p className="text-xs leading-relaxed">
+                    <strong>¡Atención!</strong> Tu reserva está registrada pero <strong>debes subir tu comprobante / voucher de pago dentro de los próximos 15 minutos</strong> desde la sección <em>Mis Reservas</em>.
+                  </p>
+                  <p className="text-[11px] text-red-700/90 dark:text-red-300/90 font-medium">
+                    ⏱️ Si no adjuntas tu comprobante en 15 minutos, tu reserva será <u>cancelada automáticamente</u> y la cancha quedará libre para otros usuarios.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 p-4 space-y-1.5 text-emerald-900 dark:text-emerald-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                      <span>✅</span> Estado de Pago: COMPROBANTE REGISTRADO
+                    </span>
+                    <Badge variant="outline" className="text-[10px] font-bold border-emerald-500 text-emerald-700 dark:text-emerald-300">
+                      En Revisión
+                    </Badge>
+                  </div>
+                  <p className="text-xs">
+                    Tu comprobante ha sido enviado con éxito. Tu turno está protegido y asegurado.
+                  </p>
+                </div>
+              )}
+
+              {/* Acceso Directo de Comunicación Desbloqueado */}
+              <div className="rounded-xl border bg-emerald-500/5 border-emerald-500/20 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <MessageCircle className="h-4 w-4 fill-emerald-600 text-white" />
+                    Acceso de Comunicación Directa Activado
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300">
+                    Habilitado
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Al haber reservado, ahora dispones del contacto directo con el Club para coordinar o enviar tu confirmación.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  {(successBookingData.clubWhatsApp || successBookingData.clubPhone) && (
+                    <a
+                      href={getWhatsAppLink(
+                        successBookingData.clubWhatsApp || successBookingData.clubPhone,
+                        getWhatsAppConfirmationMessage(successBookingData)
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1"
+                    >
+                      <Button
+                        type="button"
+                        className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-semibold text-xs gap-1.5 h-9"
+                      >
+                        <MessageCircle className="h-4 w-4 fill-white text-[#25D366]" />
+                        Enviar Confirmación al Club por WhatsApp
+                      </Button>
+                    </a>
+                  )}
+
+                  {successBookingData.customerPhone && (
+                    <a
+                      href={getWhatsAppLink(
+                        successBookingData.customerPhone,
+                        getWhatsAppConfirmationMessage(successBookingData)
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1"
+                    >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full border-emerald-600/30 text-emerald-700 dark:text-emerald-400 font-semibold text-xs gap-1.5 h-9"
+                      >
+                        <Smartphone className="h-4 w-4 text-emerald-600" />
+                        Abrir en mi WhatsApp ({successBookingData.customerPhone})
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Botón de cierre e ir a Mis Reservas */}
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    setSelectedCourt(null);
+                    setSelectedTime("");
+                    setReceiptFile(null);
+                    setReceiptPreview(null);
+                    setBookingData((prev) => ({ ...prev, notes: "" }));
+                    router.push("/user/bookings");
+                  }}
+                >
+                  Entendido, Ir a Mis Reservas
+                </Button>
               </div>
             </div>
           )}

@@ -8,6 +8,7 @@ export type PaymentMethodEnum =
   | "PLIN"
   | "TRANSFERENCIA"
   | "EFECTIVO"
+  | "WHATSAPP"
 
 export type PaymentTypeEnum = "ADELANTO" | "SALDO" | "PAGO_COMPLETO"
 export type PaymentStatusEnum =
