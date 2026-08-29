@@ -12,6 +12,7 @@ import {
   SearchIcon,
   SettingsIcon,
   UsersIcon,
+  SparklesIcon,
 } from "lucide-react"
 
 import { UserNav } from "@/components/layout/user-nav"
@@ -83,6 +84,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
       icon: CalendarIcon,
       href: "/club/schedules",
       active: isActive("/club/schedules"),
+    },
+    {
+      title: "Eventos y Bloqueos",
+      icon: SparklesIcon,
+      href: "/club/events",
+      active: isActive("/club/events"),
     },
     {
       title: "Canchas",

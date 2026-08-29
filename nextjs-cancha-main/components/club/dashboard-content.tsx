@@ -622,7 +622,7 @@ export function ClubDashboardContent() {
               <CardDescription>Alquileres recurrentes y academias registradas en tus canchas</CardDescription>
             </div>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/club/schedules">
+              <Link href="/club/events">
                 Gestionar <ArrowRightIcon className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -644,7 +644,7 @@ export function ClubDashboardContent() {
                 <p className="text-muted-foreground font-medium">No hay eventos activos</p>
                 <p className="text-sm text-muted-foreground mt-1">Crea eventos recurrentes para academias u organizaciones</p>
                 <Button variant="outline" size="sm" className="mt-4" asChild>
-                  <Link href="/club/schedules">
+                  <Link href="/club/events">
                     <PlusCircleIcon className="mr-2 h-4 w-4" /> Crear Evento
                   </Link>
                 </Button>

@@ -54,7 +54,6 @@ import {
 import { getAllCourtsByClub } from "@/lib/courts";
 import { FormSidebar } from "@/components/ui/form-sidebar";
 import { ScheduleTemplateForm } from "./schedule-template-form";
-import { EventsTab } from "./events-tab";
 import { getAllReservation, createReservationManual } from "@/lib/reservation";
 import {
   Dialog,
@@ -453,60 +452,6 @@ export function ClubSchedulesContent() {
     }
   };
 
-  const eventsTabProps = useMemo(
-    () => ({
-      courts: filteredCourts.length ? filteredCourts : courts,
-      initialCourtId: selectedCourt !== "all" ? selectedCourt : undefined,
-      templateId: courtLinkedTemplateId,
-      templateSlotTimes,
-      templateWeekdayKeys,
-      onEventsChanged: refetchWeekCalendar,
-    }),
-    [
-      filteredCourts,
-      courts,
-      selectedCourt,
-      courtLinkedTemplateId,
-      templateSlotTimes,
-      templateWeekdayKeys,
-      refetchWeekCalendar,
-    ],
-  );
-
-  /** Panel "editar plantilla": Eventos si esa plantilla está asignada en alguna cancha (no depende del selector del calendario). */
-  const editionEventsTabProps = useMemo(() => {
-    const tid = templateToEdit?.id;
-    if (!tid) return null;
-    const courtsForTpl = courts.filter(
-      (c: { id?: string; schedule_template_id?: string | null }) =>
-        String(c.schedule_template_id ?? "") === String(tid),
-    );
-    if (courtsForTpl.length === 0) return null;
-
-    const slotList = Array.isArray(templateToEdit?.slots) ? templateToEdit.slots : [];
-    const editionSlotTimes = (slotList as { time?: string }[])
-      .map((s) => s?.time)
-      .filter(Boolean) as string[];
-    const days = Array.isArray(templateToEdit?.days) ? templateToEdit.days : [];
-    const editionWeekdayKeys = days.map((x: string) => String(x).toLowerCase());
-
-    const courtIds = courtsForTpl.map((c) => c.id);
-    let initialCourtId: string | undefined;
-    if (selectedCourt !== "all" && courtIds.includes(selectedCourt)) {
-      initialCourtId = selectedCourt;
-    } else {
-      initialCourtId = courtIds[0];
-    }
-
-    return {
-      courts: courtsForTpl,
-      initialCourtId,
-      templateId: tid,
-      templateSlotTimes: editionSlotTimes,
-      templateWeekdayKeys: editionWeekdayKeys,
-      onEventsChanged: refetchWeekCalendar,
-    };
-  }, [templateToEdit, courts, selectedCourt, refetchWeekCalendar]);
 
   useEffect(() => {
     if (selectedCourt === "all" || !selectedCourt) return;
@@ -649,18 +594,7 @@ export function ClubSchedulesContent() {
 
   const handleTriggerCreateEvent = () => {
     setIsActionDialogOpen(false);
-    if (!courtLinkedTemplateId) {
-      toast.error("La cancha debe tener una plantilla asignada para poder crear eventos.");
-      return;
-    }
-    const linkedTemplate = templates.find((t) => String(t.id) === String(courtLinkedTemplateId));
-    if (!linkedTemplate) {
-      toast.error("No se encontró la plantilla vinculada a esta cancha.");
-      return;
-    }
-    setTemplateToEdit(linkedTemplate);
-    setSidebarDefaultTab("eventos");
-    setEditionTemplate(true);
+    toast.info("Para gestionar eventos ve a la sección de 'Eventos y Bloqueos' en el menú.");
   };
 
   const handleSlotStatusChange = async (
@@ -760,18 +694,6 @@ export function ClubSchedulesContent() {
                     description:
                       "Crea una nueva plantilla de horarios para aplicarla a tus canchas.",
                     content: <ScheduleTemplateForm onSubmit={handleApplyTemplate} />,
-                  },
-                  ...(courtHasTemplateLinked
-                    ? [
-                        {
-                          id: "eventos" as const,
-                          title: "Eventos",
-                          description:
-                            "Solo disponible cuando la cancha seleccionada en el calendario tiene una plantilla asignada.",
-                          content: <EventsTab {...eventsTabProps} />,
-                        },
-                      ]
-                    : []),
                 ]}
                 defaultTab="horarios"
               />

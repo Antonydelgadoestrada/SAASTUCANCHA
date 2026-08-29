@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Patch,
   Query,
   UseGuards,
   UsePipes,
@@ -16,6 +17,7 @@ import { GetUser } from '../auth/get-user.decorator';
 import { User } from '../user/user.entity';
 import { CourtScheduleEventService } from './court-schedule-event.service';
 import { CreateCourtScheduleEventDto } from './dto/create-court-schedule-event.dto';
+import { UpdateCourtScheduleEventDto } from './dto/update-court-schedule-event.dto';
 
 @Controller('court-schedule-events')
 export class CourtScheduleEventController {
@@ -38,6 +40,20 @@ export class CourtScheduleEventController {
       throw new ForbiddenException('Club no disponible');
     }
     return this.courtScheduleEventService.create(dto, user.club.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':eventId')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async update(
+    @Param('eventId') eventId: string,
+    @Body() dto: UpdateCourtScheduleEventDto,
+    @GetUser() user: Partial<User>,
+  ) {
+    if (!user?.club?.id) {
+      throw new ForbiddenException('Club no disponible');
+    }
+    return this.courtScheduleEventService.update(eventId, dto, user.club.id);
   }
 
   @UseGuards(JwtAuthGuard)

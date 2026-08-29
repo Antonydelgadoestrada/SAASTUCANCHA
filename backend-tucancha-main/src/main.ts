@@ -31,9 +31,8 @@ async function bootstrap() {
     app.useGlobalFilters(new AllExceptionsFilter());
 
     const port = Number(process.env.PORT) || 3001;
-    const host = process.env.HOST || '0.0.0.0';
-    await app.listen(port, host);
-    console.log(`API listening on http://${host}:${port}`);
+    await app.listen(port);
+    console.log(`API listening on port ${port}`);
   } catch (error) {
     console.error('Failed to start API:', error);
     process.exit(1);

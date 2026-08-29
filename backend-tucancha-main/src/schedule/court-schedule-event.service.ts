@@ -10,6 +10,7 @@ import { addDays, eachDayOfInterval, format, parseISO, startOfDay } from 'date-f
 import { CourtScheduleEvent } from './court_schedule_event.entity';
 import { CourtService } from '../court/court.service';
 import { CreateCourtScheduleEventDto } from './dto/create-court-schedule-event.dto';
+import { UpdateCourtScheduleEventDto } from './dto/update-court-schedule-event.dto';
 
 export type ExpandedEventSlot = {
   date: string;
@@ -122,6 +123,12 @@ export class CourtScheduleEventService {
     type: string,
     cfg: Record<string, unknown>,
   ): boolean {
+    const limitDate = cfg.limitDate as string | undefined;
+    if (limitDate) {
+      const dStr = format(d, 'yyyy-MM-dd');
+      if (dStr > limitDate) return false;
+    }
+
     const t = String(type || '').toLowerCase();
     if (t === 'weekly') {
       const weekdays = (cfg as any).weekdays;
@@ -346,7 +353,7 @@ export class CourtScheduleEventService {
   }
 
   /** Comprueba solape contra todos los eventos de la cancha, sea cual sea su tipo de bloqueo / recurrencia. */
-  private async assertNoOverlappingCourtEvent(dto: CreateCourtScheduleEventDto): Promise<void> {
+  private async assertNoOverlappingCourtEvent(dto: CreateCourtScheduleEventDto, excludeEventId?: string): Promise<void> {
     const newRanges = this.normalizedRangesFromDto(dto.timeRanges as any);
     const newType = String(dto.recurrenceType || '').toLowerCase();
     const newCfg = (dto.recurrenceConfig || {}) as Record<string, unknown>;
@@ -357,6 +364,8 @@ export class CourtScheduleEventService {
     });
 
     for (const ev of others) {
+      if (excludeEventId && ev.id === excludeEventId) continue;
+      
       const oldRanges = this.normalizedRangesFromDto(ev.timeRanges as any);
       const oldType = String(ev.recurrenceType || '').toLowerCase();
       const oldCfg = (ev.recurrenceConfig || {}) as Record<string, unknown>;
@@ -468,6 +477,57 @@ export class CourtScheduleEventService {
       isActive: dto.isActive !== false,
     });
     return this.eventRepo.save(row);
+  }
+
+  async update(id: string, dto: UpdateCourtScheduleEventDto, clubId: string): Promise<CourtScheduleEvent> {
+    const ev = await this.eventRepo.findOne({ where: { id } });
+    if (!ev) throw new NotFoundException('Evento no encontrado');
+    
+    // Si mandan un courtId nuevo (aunque suele ser el mismo) verificamos que pertenezca al club
+    const courtIdToUse = dto.courtId ?? ev.courtId;
+    const court = await this.assertCourtInClub(courtIdToUse, clubId);
+
+    // Mergeamos data para validaciones
+    const mergedDto: CreateCourtScheduleEventDto = {
+      courtId: courtIdToUse,
+      templateId: dto.templateId !== undefined ? dto.templateId : ev.templateId,
+      name: dto.name ?? ev.name,
+      description: dto.description !== undefined ? dto.description : ev.description,
+      recurrenceType: dto.recurrenceType ?? (ev.recurrenceType as any),
+      recurrenceConfig: dto.recurrenceConfig ?? ev.recurrenceConfig,
+      timeRanges: (dto.timeRanges ?? ev.timeRanges) as any,
+      price: dto.price ?? ev.price,
+      isActive: dto.isActive ?? ev.isActive,
+    };
+
+    this.validateRecurrence(mergedDto);
+
+    const linkedId = (court as any).schedule_template_id ?? null;
+    if (!linkedId) {
+      throw new BadRequestException(
+        'La cancha debe tener una plantilla de horarios asignada antes de crear/editar eventos',
+      );
+    }
+    if (mergedDto.templateId != null && String(mergedDto.templateId) !== String(linkedId)) {
+      throw new BadRequestException('La plantilla no coincide con la asignada a esta cancha');
+    }
+
+    await this.assertNoOverlappingCourtEvent(mergedDto, id);
+
+    ev.name = mergedDto.name.trim();
+    if (mergedDto.description !== undefined) {
+      ev.description = mergedDto.description?.trim() || null;
+    }
+    ev.recurrenceType = mergedDto.recurrenceType;
+    ev.recurrenceConfig = mergedDto.recurrenceConfig;
+    ev.timeRanges = mergedDto.timeRanges.map((r) => ({
+      start: this.rangeStart(r),
+      until: this.rangeUntil(r as any),
+    }));
+    ev.price = mergedDto.price ?? 0;
+    ev.isActive = mergedDto.isActive !== false;
+
+    return this.eventRepo.save(ev);
   }
 
   async deleteById(eventId: string, clubId: string): Promise<void> {
