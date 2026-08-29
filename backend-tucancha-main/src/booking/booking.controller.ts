@@ -111,6 +111,52 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     } 
 
     @UseGuards(JwtAuthGuard)
+    @Post('/getHourlyOccupancyDemand')
+    getHourlyOccupancyDemand(
+      @Body() data: { startDate: Date; endDate: Date; sport?: string; courtId?: string },
+      @GetUser() user: User
+    ) {
+      if (!user?.club?.id) {
+        throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
+      }
+      return this.bookingService.getHourlyOccupancyDemand(
+        user.club.id,
+        new Date(data.startDate),
+        new Date(data.endDate),
+        data.sport,
+        data.courtId
+      );
+    } 
+
+    @UseGuards(JwtAuthGuard)
+    @Post('/getDemandTrendStats')
+    getDemandTrendStats(
+      @Body()
+      data: {
+        timeframe?: 'day' | 'week' | 'month';
+        date?: string;
+        courtId?: string;
+        sport?: string;
+        startDate?: string;
+        endDate?: string;
+      },
+      @GetUser() user: User
+    ) {
+      if (!user?.club?.id) {
+        throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
+      }
+      return this.bookingService.getDemandTrendStats(
+        user.club.id,
+        data.timeframe,
+        data.date,
+        data.courtId,
+        data.sport,
+        data.startDate,
+        data.endDate
+      );
+    } 
+
+    @UseGuards(JwtAuthGuard)
     @Post('deferred')
     createDeferredBooking(@Body() dto: CreateBookingDto, @GetUser() user: User) {
       return this.bookingService.createDeferredBooking(dto, user);
