@@ -36,8 +36,12 @@ class PricingDto {
 }
 
 export class CreateBookingDto {
+  @IsOptional()
   @IsDateString()
-  date: Date;
+  date?: Date;
+
+  @IsOptional()
+  dates?: Date[];
 
   @IsString()
   startTime: string;
@@ -81,8 +85,12 @@ export class CreateManualBookingDto {
   @IsString()
   courtId: string;
 
+  @IsOptional()
   @IsDateString()
-  date: Date;
+  date?: Date;
+
+  @IsOptional()
+  dates?: Date[];
 
   @IsString()
   startTime: string;

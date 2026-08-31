@@ -138,8 +138,8 @@ export class PaymentService {
   }
   async createPreference(dto: CreateManualBookingDto, user: User){
     try{
-      const booking = await this.bookingService.createOnlineBooking(dto,user);
-      return await this.confirmPreference(booking)
+      const bookings = await this.bookingService.createOnlineBooking(dto,user);
+      return await this.confirmPreference(bookings)
     }
     catch(error){
       throw new Error(`Error in createPreference, detail: ${error.message}`)
@@ -151,14 +151,20 @@ export class PaymentService {
     return await this.confirmPreference(booking)
   }
 
-  async confirmPreference(booking:Booking){
-    if (!booking.club || !booking.club.mpAccessToken) {
+  async confirmPreference(bookingData: Booking | Booking[]){
+    const isMulti = Array.isArray(bookingData);
+    const bookings = isMulti ? bookingData : [bookingData];
+    const firstBooking = bookings[0];
+
+    if (!firstBooking.club || !firstBooking.club.mpAccessToken) {
       throw new BadRequestException('El club no tiene Mercado Pago conectado');
     }
-    const mpAccessToken = booking.club.mpAccessToken;
-    const totalPrice = booking.pricing.totalPrice;
-    const bookingId = booking.id;
-    const email = booking.user.email;
+
+    const mpAccessToken = firstBooking.club.mpAccessToken;
+    const totalPrice = bookings.reduce((sum, b) => sum + b.pricing.totalPrice, 0);
+    const externalRef = isMulti && firstBooking.groupId ? firstBooking.groupId : firstBooking.id;
+    const email = firstBooking.user.email;
+
     // 2. Crear una instancia temporal de MercadoPago con el token del club
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
@@ -170,9 +176,9 @@ export class PaymentService {
       body: {
         items: [
           {
-            id: booking.court.id,
-            title: `Reserva en ${booking.court.name}`,
-            description: `Club: ${booking.club.name} | fecha: ${booking.date} | Superficie: ${booking.court.surface} | Duracion: ${booking.startTime}-${booking.endTime}`,
+            id: firstBooking.court.id,
+            title: isMulti ? `Multi-reserva en ${firstBooking.court.name} (${bookings.length} fechas)` : `Reserva en ${firstBooking.court.name}`,
+            description: `Club: ${firstBooking.club.name} | ${isMulti ? `Varias fechas` : `Fecha: ${firstBooking.date}`} | Duracion: ${firstBooking.startTime}-${firstBooking.endTime}`,
             quantity: 1,
             category_id: 'services',
             currency_id: 'PEN',
@@ -190,8 +196,7 @@ export class PaymentService {
           failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
           pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
         },
-        // auto_return: 'approved',
-        external_reference: `${bookingId}`,
+        external_reference: `${externalRef}`,
         marketplace_fee: 5, // 💰 comisión
       },
     });
@@ -275,83 +280,100 @@ export class PaymentService {
       }
 
       // 4. Ejecución atómica en transacción
-      const updatedBooking = await this.paymentRepo.manager.transaction(async (trxManager) => {
-        const booking = await this.bookingService.findOneComplete(externalRef);
-        if (!booking) {
+      const updatedBookings = await this.paymentRepo.manager.transaction(async (trxManager) => {
+        const bookings = await this.bookingService.findManyByReference(externalRef);
+        if (!bookings || bookings.length === 0) {
           console.warn(`Reserva no encontrada para referencia externa: ${externalRef}`);
           return null;
         }
 
-        // Si ya está pagado por otra solicitud concurrente, abortar
-        if (booking.paymentStatus === PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
-          console.log(`ℹ️ [Concurrencia] Reserva ${booking.id} ya marcada como PAID.`);
-          return booking;
-        }
+        const processedBookings = [];
 
-        booking.paymentStatus = targetPaymentStatus;
-        booking.status = targetBookingStatus;
-        booking.pricing = {
-          ...booking.pricing,
-          basePrice: netoVendedor,
-          totalPrice: totalPagado,
-        };
+        for (const booking of bookings) {
+          // Si ya está pagado por otra solicitud concurrente, saltar
+          if (booking.paymentStatus === PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
+            console.log(`ℹ️ [Concurrencia] Reserva ${booking.id} ya marcada como PAID.`);
+            processedBookings.push(booking);
+            continue;
+          }
 
-        let paymentRecord = existingPayment || await trxManager.findOne(Payment, {
-          where: { transactionId: String(mpPayment.id) },
-        });
+          booking.paymentStatus = targetPaymentStatus;
+          booking.status = targetBookingStatus;
+          
+          // Dividir los montos equitativamente para cada reserva en la base de datos
+          const bookingNetoVendedor = netoVendedor / bookings.length;
+          const bookingTotalPagado = totalPagado / bookings.length;
+          const bookingComisionMp = comisionMp / bookings.length;
+          const bookingComisionApp = comisionApp / bookings.length;
 
-        if (paymentRecord) {
-          paymentRecord.status = targetPaymentStatus;
-          paymentRecord.amount = totalPagado;
-          paymentRecord.netAmount = netoVendedor;
-          paymentRecord.feeAmount = comisionMp + comisionApp;
-          paymentRecord.paymentType = paymentType;
-          paymentRecord.paymentMethod = paymentMethod;
-          paymentRecord.gatewayResponse = mpPayment;
-          await trxManager.save(Payment, paymentRecord);
-        } else {
-          paymentRecord = trxManager.create(Payment, {
-            user: booking.user,
-            booking,
-            amount: totalPagado,
-            currency: mpPayment.currency_id || 'PEN',
-            method: mappedMethod,
-            status: targetPaymentStatus,
-            transactionId: String(mpPayment.id),
-            netAmount: netoVendedor,
-            feeAmount: comisionMp + comisionApp,
-            paymentType,
-            paymentMethod,
-            gatewayResponse: mpPayment,
+          booking.pricing = {
+            ...booking.pricing,
+            basePrice: bookingNetoVendedor,
+            totalPrice: bookingTotalPagado,
+          };
+
+          let paymentRecord = await trxManager.findOne(Payment, {
+            where: { booking: { id: booking.id } },
           });
-          await trxManager.save(Payment, paymentRecord);
+
+          if (paymentRecord) {
+            paymentRecord.status = targetPaymentStatus;
+            paymentRecord.amount = bookingTotalPagado;
+            paymentRecord.netAmount = bookingNetoVendedor;
+            paymentRecord.feeAmount = bookingComisionMp + bookingComisionApp;
+            paymentRecord.paymentType = paymentType;
+            paymentRecord.paymentMethod = paymentMethod;
+            paymentRecord.gatewayResponse = mpPayment;
+            await trxManager.save(Payment, paymentRecord);
+          } else {
+            paymentRecord = trxManager.create(Payment, {
+              user: booking.user,
+              booking,
+              amount: bookingTotalPagado,
+              currency: mpPayment.currency_id || 'PEN',
+              method: mappedMethod,
+              status: targetPaymentStatus,
+              transactionId: String(mpPayment.id),
+              netAmount: bookingNetoVendedor,
+              feeAmount: bookingComisionMp + bookingComisionApp,
+              paymentType,
+              paymentMethod,
+              gatewayResponse: mpPayment,
+            });
+            await trxManager.save(Payment, paymentRecord);
+          }
+
+          booking.payment = paymentRecord;
+          await trxManager.save(Booking, booking);
+          processedBookings.push(booking);
         }
 
-        booking.payment = paymentRecord;
-        await trxManager.save(Booking, booking);
-        return booking;
+        return processedBookings;
       });
 
-      if (!updatedBooking) {
+      if (!updatedBookings || updatedBookings.length === 0) {
         return;
       }
   
       // 5. Ocupar slots en calendario si el pago fue aprobado
       if (status === 'approved') {
-        await this.generateSlotOccupied(
-          updatedBooking.court.id,
-          updatedBooking.date,
-          updatedBooking.startTime,
-          updatedBooking.duration
-        );
+        for (const booking of updatedBookings) {
+          await this.generateSlotOccupied(
+            booking.court.id,
+            booking.date,
+            booking.startTime,
+            booking.duration
+          );
+        }
       }
   
       // 6. Enviar correos informativos sin bloquear la respuesta del webhook
       try {
         if (correoAEnviar === 'pago_exitoso') {
-          await this.mailerService.sendBookingPaidNotifications(updatedBooking);
+          await this.mailerService.sendBookingPaidNotifications(updatedBookings[0]);
         } else if (correoAEnviar === 'pago_rechazado') {
-          await this.mailerService.sendBookingCancelledEmail(updatedBooking.customerInfo?.email || updatedBooking.user?.email, updatedBooking);
+          const firstB = updatedBookings[0];
+          await this.mailerService.sendBookingCancelledEmail(firstB.customerInfo?.email || firstB.user?.email, firstB);
         }
       } catch (mailErr) {
         console.error(`⚠️ Error al enviar correos de confirmación: ${mailErr.message}`);

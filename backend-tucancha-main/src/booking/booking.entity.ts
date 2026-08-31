@@ -77,6 +77,9 @@
   
     @Column()
     bookingReference: string;
+
+    @Column({ nullable: true })
+    groupId?: string;
   
     @CreateDateColumn()
     createdAt: Date;
