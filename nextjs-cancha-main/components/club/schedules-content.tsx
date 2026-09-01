@@ -694,6 +694,7 @@ export function ClubSchedulesContent() {
                     description:
                       "Crea una nueva plantilla de horarios para aplicarla a tus canchas.",
                     content: <ScheduleTemplateForm onSubmit={handleApplyTemplate} />,
+                  }
                 ]}
                 defaultTab="horarios"
               />
@@ -768,17 +769,7 @@ export function ClubSchedulesContent() {
                       />
                     ) : null,
                   },
-                  ...(editionEventsTabProps
-                    ? [
-                        {
-                          id: "eventos" as const,
-                          title: "Eventos",
-                          description:
-                            "Canchas que tienen esta plantilla asignada. El calendario debajo sigue usando la cancha que elijas allí.",
-                          content: <EventsTab {...editionEventsTabProps} />,
-                        },
-                      ]
-                    : []),
+
                 ]}
                 defaultTab={sidebarDefaultTab}
               />

@@ -138,8 +138,14 @@ export class PaymentService {
   }
   async createPreference(dto: CreateManualBookingDto, user: User){
     try{
-      const bookings = await this.bookingService.createOnlineBooking(dto,user);
-      return await this.confirmPreference(bookings)
+      const bookings = await this.bookingService.createOnlineBooking(dto, user);
+      if (Array.isArray(bookings)) {
+        if (bookings.length === 1) {
+          return await this.confirmPreference(bookings[0]);
+        }
+        return await this.confirmPreferenceMulti(bookings);
+      }
+      return await this.confirmPreference(bookings as any);
     }
     catch(error){
       throw new Error(`Error in createPreference, detail: ${error.message}`)
@@ -151,20 +157,14 @@ export class PaymentService {
     return await this.confirmPreference(booking)
   }
 
-  async confirmPreference(bookingData: Booking | Booking[]){
-    const isMulti = Array.isArray(bookingData);
-    const bookings = isMulti ? bookingData : [bookingData];
-    const firstBooking = bookings[0];
-
-    if (!firstBooking.club || !firstBooking.club.mpAccessToken) {
+  async confirmPreference(booking:Booking){
+    if (!booking.club || !booking.club.mpAccessToken) {
       throw new BadRequestException('El club no tiene Mercado Pago conectado');
     }
-
-    const mpAccessToken = firstBooking.club.mpAccessToken;
-    const totalPrice = bookings.reduce((sum, b) => sum + b.pricing.totalPrice, 0);
-    const externalRef = isMulti && firstBooking.groupId ? firstBooking.groupId : firstBooking.id;
-    const email = firstBooking.user.email;
-
+    const mpAccessToken = booking.club.mpAccessToken;
+    const totalPrice = booking.pricing.totalPrice;
+    const bookingId = booking.id;
+    const email = booking.user.email;
     // 2. Crear una instancia temporal de MercadoPago con el token del club
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
@@ -176,9 +176,9 @@ export class PaymentService {
       body: {
         items: [
           {
-            id: firstBooking.court.id,
-            title: isMulti ? `Multi-reserva en ${firstBooking.court.name} (${bookings.length} fechas)` : `Reserva en ${firstBooking.court.name}`,
-            description: `Club: ${firstBooking.club.name} | ${isMulti ? `Varias fechas` : `Fecha: ${firstBooking.date}`} | Duracion: ${firstBooking.startTime}-${firstBooking.endTime}`,
+            id: booking.court.id,
+            title: `Reserva en ${booking.court.name}`,
+            description: `Club: ${booking.club.name} | fecha: ${booking.date} | Superficie: ${booking.court.surface} | Duracion: ${booking.startTime}-${booking.endTime}`,
             quantity: 1,
             category_id: 'services',
             currency_id: 'PEN',
@@ -196,12 +196,62 @@ export class PaymentService {
           failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
           pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
         },
-        external_reference: `${externalRef}`,
+        // auto_return: 'approved',
+        external_reference: `${bookingId}`,
         marketplace_fee: 5, // 💰 comisión
       },
     });
   
     // 4. Retornar el enlace
+    return { init_point };
+  }
+  
+  async confirmPreferenceMulti(bookings: Booking[]) {
+    if (!bookings.length) throw new BadRequestException('No hay reservas creadas');
+    const firstBooking = bookings[0];
+    if (!firstBooking.club || !firstBooking.club.mpAccessToken) {
+      throw new BadRequestException('El club no tiene Mercado Pago conectado');
+    }
+    
+    const mpAccessToken = firstBooking.club.mpAccessToken;
+    const email = firstBooking.user.email;
+    const bookingIds = bookings.map(b => b.id).join(',');
+    
+    const client = new MercadoPagoConfig({
+      accessToken: mpAccessToken,
+    });
+    const preferenceClient = new Preference(client);
+    
+    // Generar un item por cada reserva
+    const items = bookings.map(b => ({
+      id: b.court.id,
+      title: `Reserva en ${b.court.name}`,
+      description: `Club: ${b.club.name} | fecha: ${b.date} | Superficie: ${b.court.surface} | Duracion: ${b.startTime}-${b.endTime}`,
+      quantity: 1,
+      category_id: 'services',
+      currency_id: 'PEN',
+      unit_price: b.pricing.totalPrice,
+    }));
+    
+    const { init_point } = await preferenceClient.create({
+      body: {
+        items: items,
+        payer: {
+          email: email,
+        },
+        metadata: {
+          email
+        },
+        back_urls: {
+          success: `${process.env.WEB_SERVICES_URL}/user/payments/success`,
+          failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
+          pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
+        },
+        external_reference: bookingIds, // Pasamos la lista de IDs separados por coma
+        marketplace_fee: 5,
+      },
+    });
+  
     return { init_point };
   }
   
@@ -281,83 +331,78 @@ export class PaymentService {
 
       // 4. Ejecución atómica en transacción
       const updatedBookings = await this.paymentRepo.manager.transaction(async (trxManager) => {
-        const bookings = await this.bookingService.findManyByReference(externalRef);
-        if (!bookings || bookings.length === 0) {
+        const bookingIds = externalRef.split(',');
+        const bookings = await trxManager.find(Booking, {
+          where: { id: In(bookingIds) },
+          relations: ['user', 'court', 'club']
+        });
+        
+        if (!bookings.length) {
           console.warn(`Reserva no encontrada para referencia externa: ${externalRef}`);
           return null;
         }
 
-        const processedBookings = [];
-
-        for (const booking of bookings) {
-          // Si ya está pagado por otra solicitud concurrente, saltar
-          if (booking.paymentStatus === PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
-            console.log(`ℹ️ [Concurrencia] Reserva ${booking.id} ya marcada como PAID.`);
-            processedBookings.push(booking);
-            continue;
-          }
-
-          booking.paymentStatus = targetPaymentStatus;
-          booking.status = targetBookingStatus;
-          
-          // Dividir los montos equitativamente para cada reserva en la base de datos
-          const bookingNetoVendedor = netoVendedor / bookings.length;
-          const bookingTotalPagado = totalPagado / bookings.length;
-          const bookingComisionMp = comisionMp / bookings.length;
-          const bookingComisionApp = comisionApp / bookings.length;
-
-          booking.pricing = {
-            ...booking.pricing,
-            basePrice: bookingNetoVendedor,
-            totalPrice: bookingTotalPagado,
-          };
-
-          let paymentRecord = await trxManager.findOne(Payment, {
-            where: { booking: { id: booking.id } },
-          });
-
-          if (paymentRecord) {
-            paymentRecord.status = targetPaymentStatus;
-            paymentRecord.amount = bookingTotalPagado;
-            paymentRecord.netAmount = bookingNetoVendedor;
-            paymentRecord.feeAmount = bookingComisionMp + bookingComisionApp;
-            paymentRecord.paymentType = paymentType;
-            paymentRecord.paymentMethod = paymentMethod;
-            paymentRecord.gatewayResponse = mpPayment;
-            await trxManager.save(Payment, paymentRecord);
-          } else {
-            paymentRecord = trxManager.create(Payment, {
-              user: booking.user,
-              booking,
-              amount: bookingTotalPagado,
-              currency: mpPayment.currency_id || 'PEN',
-              method: mappedMethod,
-              status: targetPaymentStatus,
-              transactionId: String(mpPayment.id),
-              netAmount: bookingNetoVendedor,
-              feeAmount: bookingComisionMp + bookingComisionApp,
-              paymentType,
-              paymentMethod,
-              gatewayResponse: mpPayment,
-            });
-            await trxManager.save(Payment, paymentRecord);
-          }
-
-          booking.payment = paymentRecord;
-          await trxManager.save(Booking, booking);
-          processedBookings.push(booking);
+        // Si ya está pagado por otra solicitud concurrente, abortar
+        if (bookings[0].paymentStatus === PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
+          console.log(`ℹ️ [Concurrencia] Reservas ya marcadas como PAID.`);
+          return bookings;
         }
 
-        return processedBookings;
+        let paymentRecord = existingPayment || await trxManager.findOne(Payment, {
+          where: { transactionId: String(mpPayment.id) },
+        });
+
+        if (paymentRecord) {
+          paymentRecord.status = targetPaymentStatus;
+          paymentRecord.amount = totalPagado;
+          paymentRecord.netAmount = netoVendedor;
+          paymentRecord.feeAmount = comisionMp + comisionApp;
+          paymentRecord.paymentType = paymentType;
+          paymentRecord.paymentMethod = paymentMethod;
+          paymentRecord.gatewayResponse = mpPayment;
+          await trxManager.save(Payment, paymentRecord);
+        } else {
+          paymentRecord = trxManager.create(Payment, {
+            user: bookings[0].user,
+            amount: totalPagado,
+            currency: mpPayment.currency_id || 'PEN',
+            method: mappedMethod,
+            status: targetPaymentStatus,
+            transactionId: String(mpPayment.id),
+            netAmount: netoVendedor,
+            feeAmount: comisionMp + comisionApp,
+            paymentType,
+            paymentMethod,
+            gatewayResponse: mpPayment,
+          });
+          await trxManager.save(Payment, paymentRecord);
+        }
+
+        for (let booking of bookings) {
+          booking.paymentStatus = targetPaymentStatus;
+          booking.status = targetBookingStatus;
+          // Actualizamos los montos netos solo si es una sola reserva para no complicar el split
+          if (bookings.length === 1) {
+            booking.pricing = {
+              ...booking.pricing,
+              basePrice: netoVendedor,
+              totalPrice: totalPagado,
+            };
+          }
+          booking.payment = paymentRecord;
+          await trxManager.save(Booking, booking);
+        }
+        
+        return bookings;
       });
 
-      if (!updatedBookings || updatedBookings.length === 0) {
+      if (!updatedBookings) {
         return;
       }
   
       // 5. Ocupar slots en calendario si el pago fue aprobado
       if (status === 'approved') {
-        for (const booking of updatedBookings) {
+        for (let booking of updatedBookings) {
           await this.generateSlotOccupied(
             booking.court.id,
             booking.date,
@@ -370,16 +415,17 @@ export class PaymentService {
       // 6. Enviar correos informativos sin bloquear la respuesta del webhook
       try {
         if (correoAEnviar === 'pago_exitoso') {
+          // Send for the first one as representative or a group email
+          await this.mailerService.sendBookingConfirmationEmail(updatedBookings[0].customerInfo.email, updatedBookings[0]);
           await this.mailerService.sendBookingPaidNotifications(updatedBookings[0]);
         } else if (correoAEnviar === 'pago_rechazado') {
-          const firstB = updatedBookings[0];
-          await this.mailerService.sendBookingCancelledEmail(firstB.customerInfo?.email || firstB.user?.email, firstB);
+          await this.mailerService.sendBookingCancelledEmail(updatedBookings[0].customerInfo.email, updatedBookings[0]);
         }
       } catch (mailErr) {
         console.error(`⚠️ Error al enviar correos de confirmación: ${mailErr.message}`);
       }
   
-      console.log(`✅ Webhook procesado correctamente con idempotencia para booking ${updatedBooking.id}`);
+      console.log(`✅ Webhook procesado correctamente con idempotencia para booking ${updatedBookings[0].id}`);
     } catch (error) {
       console.error(`Error al procesar webhook para ID ${paymentId}:`, error);
       throw error;
@@ -395,8 +441,8 @@ export class PaymentService {
     }
 
     const payments = await this.paymentRepo.find({
-      where: { booking: { club: { id: clubId } } },
-      relations: ['booking', 'booking.club', 'user'],
+      where: { bookings: { club: { id: clubId } } },
+      relations: ['bookings', 'bookings.club', 'user'],
     });
 
     const bookings = await this.bookingRepo.find({
@@ -469,7 +515,7 @@ export class PaymentService {
 
     const query = this.paymentRepo
       .createQueryBuilder('payment')
-      .leftJoinAndSelect('payment.booking', 'booking')
+      .leftJoinAndSelect('payment.bookings', 'booking')
       .leftJoinAndSelect('booking.court', 'court')
       .leftJoinAndSelect('booking.user', 'customer')
       .leftJoinAndSelect('payment.user', 'payer')
@@ -503,10 +549,10 @@ export class PaymentService {
     if (filters.search) {
       const s = filters.search.toLowerCase();
       return rawList.filter((p) => {
-        const ref = (p.booking as any)?.bookingReference?.toLowerCase() || '';
-        const court = p.booking?.court?.name?.toLowerCase() || '';
-        const name = (p.booking as any)?.customerInfo?.name?.toLowerCase() || (p.booking as any)?.user?.name?.toLowerCase() || '';
-        const email = (p.booking as any)?.customerInfo?.email?.toLowerCase() || (p.booking as any)?.user?.email?.toLowerCase() || '';
+        const ref = (p.bookings?.[0] as any)?.bookingReference?.toLowerCase() || '';
+        const court = p.bookings?.[0]?.court?.name?.toLowerCase() || '';
+        const name = (p.bookings?.[0] as any)?.customerInfo?.name?.toLowerCase() || (p.bookings?.[0] as any)?.user?.name?.toLowerCase() || '';
+        const email = (p.bookings?.[0] as any)?.customerInfo?.email?.toLowerCase() || (p.bookings?.[0] as any)?.user?.email?.toLowerCase() || '';
         return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s);
       });
     }
@@ -622,7 +668,7 @@ export class PaymentService {
     }
 
     const payment = this.paymentRepo.create({
-      booking,
+      bookings: [booking],
       user,
       amount: safeAmount,
       currency: dto.currency || 'PEN',
@@ -668,7 +714,7 @@ export class PaymentService {
    */
   async getPaymentsByBooking(bookingId: string) {
     return this.paymentRepo.find({
-      where: { booking: { id: bookingId } },
+      where: { bookings: { id: bookingId } },
       order: { createdAt: 'DESC' },
     });
   }
@@ -685,7 +731,7 @@ export class PaymentService {
   ) {
     const payment = await this.paymentRepo.findOne({
       where: { id: paymentId },
-      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
     });
     if (!payment) throw new BadRequestException('Pago no encontrado');
 
@@ -696,21 +742,23 @@ export class PaymentService {
       payment.motivoRechazo = null;
 
       // Confirmar reserva asociada
-      if (payment.booking) {
-        payment.booking.status = BookingStatus.CONFIRMED;
-        payment.booking.paymentStatus = PaymentStatus.PAID;
-        await this.bookingRepo.save(payment.booking);
+      if (payment.bookings && payment.bookings.length > 0) {
+        for (let booking of payment.bookings) {
+          booking.status = BookingStatus.CONFIRMED;
+          booking.paymentStatus = PaymentStatus.PAID;
+          await this.bookingRepo.save(booking);
 
-        if (payment.booking.court && payment.booking.date && payment.booking.startTime) {
-          try {
-            await this.generateSlotOccupied(
-              payment.booking.court.id,
-              payment.booking.date,
-              payment.booking.startTime,
-              Number(payment.booking.duration) || 1,
-            );
-          } catch (e) {
-            console.warn('Error al ocupar slots:', e);
+          if (booking.court && booking.date && booking.startTime) {
+            try {
+              await this.generateSlotOccupied(
+                booking.court.id,
+                booking.date,
+                booking.startTime,
+                Number(booking.duration) || 1,
+              );
+            } catch (e) {
+              console.warn('Error al ocupar slots:', e);
+            }
           }
         }
       }
@@ -720,9 +768,11 @@ export class PaymentService {
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = motivoRechazo || null;
 
-      if (payment.booking) {
-        payment.booking.paymentStatus = PaymentStatus.REJECTED;
-        await this.bookingRepo.save(payment.booking);
+      if (payment.bookings && payment.bookings.length > 0) {
+        for (let booking of payment.bookings) {
+          booking.paymentStatus = PaymentStatus.REJECTED;
+          await this.bookingRepo.save(booking);
+        }
       }
     }
 

@@ -45,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -179,6 +180,8 @@ export function SearchResults({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedTime, setSelectedTime] = useState("1");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceWeeks, setRecurrenceWeeks] = useState("1");
   const [bookingData, setBookingData] = useState({
     name: user?.name || "",
     email: user?.email || "",
@@ -186,21 +189,6 @@ export function SearchResults({
     notes: "",
   });
   const [duration, setDuration] = useState<string>('1');
-  const [repeatWeeks, setRepeatWeeks] = useState<string>('1');
-
-  const getMultiDates = (date: Date | undefined, weeks: number) => {
-    if (!date) return [];
-    const dates = [];
-    for (let i = 0; i < weeks; i++) {
-      const newDate = new Date(date);
-      newDate.setDate(newDate.getDate() + i * 7);
-      dates.push(newDate);
-    }
-    return dates;
-  };
-
-  const multiDates = getMultiDates(selectedDate, parseInt(repeatWeeks));
-
   const filteredtimeOptions = getValidStartTimes(selectedCourt?.availability ?? ['10:00'], duration, selectedDate)
   // console.log({filteredtimeOptions})
   const { toast } = useToast();
@@ -317,13 +305,14 @@ export function SearchResults({
     }
     setShowBooking(false);
     setShowPayment(true);
+  };
   const handleSeparate = async()=>{
     setIsLoading(true)
     try {
-      const dates = multiDates.map(d => format(d, "yyyy-MM-dd", { locale: es }));
+      const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
       const result = await createReservation({
         courtId: selectedCourt.id,
-        dates: dates,
+        date:fecha,
         startTime: selectedTime,
         duration,
         userEmail: bookingData.email,
@@ -335,28 +324,52 @@ export function SearchResults({
     }finally{
       setIsLoading(false)
     }
+    console.log({
+      title: "¡Reserva confirmada!",
+      description: `Tu reserva para ${selectedCourt?.name} el ${
+        selectedDate
+          ? format(selectedDate, "dd/MM/yyyy", { locale: es })
+          : "hoy"
+      } a las ${selectedTime} ha sido confirmada`,
+    })
     toast({
       title: "¡Reserva confirmada!",
-      description: `Tu reserva ha sido confirmada.`,
+      description: `Tu reserva para ${selectedCourt?.name} el ${
+        selectedDate
+          ? format(selectedDate, "dd/MM/yyyy", { locale: es })
+          : "hoy"
+      } a las ${selectedTime} ha sido confirmada`,
     });
     setShowPayment(false);
 
     setSelectedCourt(null);
     setSelectedTime("");
     setBookingData((prev) => ({ ...prev, notes: "" }));
-    setRepeatWeeks("1");
   }
   const handleConfirmPayment = async() => {
     setShowPayment(false);
     try {
-      const dates = multiDates.map(d => format(d, "yyyy-MM-dd", { locale: es }));
-      const {init_point} = await createPreference({
-        courtId: selectedCourt.id, 
-        dates: dates,
-        startTime:selectedTime, 
-        duration, 
-        userEmail: bookingData.email,
-      })
+    let dates = [];
+    if (isRecurring && recurrenceWeeks) {
+      const weeks = parseInt(recurrenceWeeks, 10);
+      let currentDate = selectedDate || new Date();
+      for (let i = 0; i < weeks; i++) {
+        dates.push(format(currentDate, "yyyy-MM-dd", { locale: es }));
+        let nextDate = new Date(currentDate);
+        nextDate.setDate(nextDate.getDate() + 7);
+        currentDate = nextDate;
+      }
+    } else {
+      dates = [format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es })];
+    }
+
+    const {init_point} = await createPreference({
+      courtId: selectedCourt.id, 
+      dates: dates,
+      startTime:selectedTime, 
+      duration, 
+      userEmail: bookingData.email,
+    })
         // Redireccionar al checkout de Mercado Pago
         if (init_point) {
           window.location.href = init_point;
@@ -368,14 +381,17 @@ export function SearchResults({
       }
 
     toast({
-      title: "Redirigiendo a pasarela de pago...",
-      description: `Generando orden de pago para tu reserva.`,
+      title: "¡Reserva confirmada!",
+      description: `Tu reserva para ${selectedCourt?.name} el ${
+        selectedDate
+          ? format(selectedDate, "dd/MM/yyyy", { locale: es })
+          : "hoy"
+      } a las ${selectedTime} ha sido confirmada.`,
     });
     // Reset states
     setSelectedCourt(null);
     setSelectedTime("");
     setBookingData((prev) => ({ ...prev, notes: "" }));
-    setRepeatWeeks("1");
   };
 
   const nextImage = () => {
@@ -1039,6 +1055,42 @@ export function SearchResults({
               <Separator />
 
               <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-sm">Reserva Recurrente</h3>
+                    <p className="text-xs text-muted-foreground">Reservar automáticamente el mismo día en las próximas semanas</p>
+                  </div>
+                  <Switch
+                    checked={isRecurring}
+                    onCheckedChange={setIsRecurring}
+                  />
+                </div>
+                {isRecurring && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="recurrence">Repetir por</Label>
+                      <Select
+                        value={recurrenceWeeks}
+                        onValueChange={setRecurrenceWeeks}
+                      >
+                        <SelectTrigger id="recurrence">
+                          <SelectValue placeholder="Seleccionar periodo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2">2 semanas</SelectItem>
+                          <SelectItem value="3">3 semanas</SelectItem>
+                          <SelectItem value="4">1 mes (4 semanas)</SelectItem>
+                          <SelectItem value="8">2 meses (8 semanas)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
                 <h3 className="font-semibold">Datos del reservante</h3>
                 {!user && (
                   <Alert>
@@ -1149,34 +1201,18 @@ export function SearchResults({
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Duracion en horas:</span>
-                  <span>{duration}</span>
+                  <span>Horas por fecha:</span>
+                  <span>{duration} hrs</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-emerald-600">Repetir reserva:</span>
-                  <Select
-                    value={repeatWeeks}
-                    onValueChange={setRepeatWeeks}
-                  >
-                    <SelectTrigger className="w-40 h-8">
-                      <SelectValue placeholder="Semanas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Solo esta fecha</SelectItem>
-                      <SelectItem value="2">Por 2 semanas</SelectItem>
-                      <SelectItem value="3">Por 3 semanas</SelectItem>
-                      <SelectItem value="4">Por 4 semanas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {parseInt(repeatWeeks) > 1 && (
-                  <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
-                    Fechas: {multiDates.map(d => format(d, "dd/MM")).join(", ")}
+                {isRecurring && (
+                  <div className="flex justify-between font-medium text-primary">
+                    <span>Fechas totales:</span>
+                    <span>x {recurrenceWeeks}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-semibold">
-                  <span>Total a pagar:</span>
-                  <span>S/ {selectedCourt.price * (+duration * 2) * parseInt(repeatWeeks)}</span>
+                  <span>Total:</span>
+                  <span>S/ {selectedCourt.price * (+duration*2) * (isRecurring ? parseInt(recurrenceWeeks, 10) : 1)}</span>
                 </div>
               </div>
 
@@ -1264,18 +1300,18 @@ export function SearchResults({
                 </div>
                 <div className="flex justify-between">
                   <span>Duracion:</span>
-                  <span>{duration}</span>
+                  <span>{duration} hrs</span>
                 </div>
-                {parseInt(repeatWeeks) > 1 && (
-                  <div className="flex justify-between">
-                    <span>Semanas a repetir:</span>
-                    <span>{repeatWeeks} semanas</span>
+                {isRecurring && (
+                  <div className="flex justify-between font-medium text-primary">
+                    <span>Fechas totales:</span>
+                    <span>x {recurrenceWeeks}</span>
                   </div>
                 )}
                 <Separator />
                 <div className="flex justify-between font-semibold">
                   <span>Total a pagar:</span>
-                  <span>S/ {selectedCourt.price * (+duration * 2) * parseInt(repeatWeeks)}</span>
+                  <span>S/ {selectedCourt.price * (+duration *2) * (isRecurring ? parseInt(recurrenceWeeks, 10) : 1)}</span>
                 </div>
               </div>
 

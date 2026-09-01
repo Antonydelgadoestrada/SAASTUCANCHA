@@ -177,44 +177,35 @@ export class BookingService {
 }
 
  async createOnlineBooking(dto: CreateManualBookingDto, user: User) {
-    const datesToBook = dto.dates?.length ? dto.dates : (dto.date ? [dto.date] : []);
-    if (datesToBook.length === 0) throw new BadRequestException('Se requiere al menos una fecha');
-
-    const groupId = datesToBook.length > 1 ? `MULTI-${Date.now()}` : null;
-    const createdBookings = [];
-
-    // Validar disponibilidad de todas las fechas primero
-    for (const date of datesToBook) {
-      await this.checkAvailability(dto.courtId, date as Date, dto.startTime, dto.duration);
-    }
-
     const statusManual = {
       status: BookingStatus.PENDING,
-      paymentMethod:'online' as const,
+      paymentMethod:'online',
       paymentStatus: PaymentStatus.PENDING,
     };
+    
+    let datesToProcess = dto.dates && dto.dates.length > 0 ? dto.dates : [dto.date];
+    let createdBookings = [];
 
-    for (const date of datesToBook) {
-      const singleDto = { ...dto, date: date as Date };
-      let bookingData = await this.createObjectBooking(singleDto, user);
-      bookingData = Object.assign(bookingData, statusManual);
+    for (const date of datesToProcess) {
+      if (!date) continue;
       
-      if (groupId) {
-        bookingData.groupId = groupId;
-      }
+      let slots = await this.checkAvailability(dto.courtId, date, dto.startTime, dto.duration);
       
-      const saveBooking = await this.bookingRepo.create(bookingData);
+      let currentDto = { ...dto, date: date };
+      let booking = await this.createObjectBooking(currentDto, user);
+      booking = Object.assign(booking, statusManual);
+      
+      const saveBooking = await this.bookingRepo.create(booking);
       const result = await this.bookingRepo.save(saveBooking);
       
-      let slots = await this.checkAvailability(dto.courtId, date as Date, dto.startTime, dto.duration);
-      slots = slots.map((slot) => Object.assign(slot, { status: 'on-hold' }));
+      slots = slots.map((slot) => (Object.assign(slot, { status: 'on-hold' })));
       await this.scheduleTemplateService.bulkUpdate(slots);
       
       createdBookings.push(result);
     }
 
-    // 📩 Enviar correo de confirmación (usando la primera reserva por simplicidad)
     if (createdBookings.length > 0) {
+      // Por ahora enviamos notificación basada en la primera reserva, o podríamos hacer una nueva plantilla multi-reserva.
       await this.mailerService.sendBookingReservationNotifications(createdBookings[0]);
     }
     
@@ -225,35 +216,64 @@ export class BookingService {
     const userReservation = await this.userService.findByEmail(dto.userEmail);
     const pricing = dto.pricing ? JSON.parse(dto.pricing) : null;
     if(!userReservation) throw new NotFoundException(`email: ${dto.userEmail} no encontrado`)
-    let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, dto.duration);
+    
+    let datesToBook: Date[] = [];
+    if (dto.dates && dto.dates.length > 0) {
+      if (typeof dto.dates === 'string') {
+        datesToBook = (dto.dates as string).split(',').map(d => new Date(d));
+      } else {
+        datesToBook = dto.dates.map(d => new Date(d));
+      }
+    } else if (dto.date) {
+      datesToBook = [new Date(dto.date)];
+    } else {
+      throw new BadRequestException('Se requiere una fecha o un arreglo de fechas');
+    }
+
     const court: any = await this.courtService.findOne(dto.courtId , ['club']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
-    const booking = this.bookingRepo.create({
-      user:userReservation,
-      court,
-      club: user.club,
-      date: new Date(dto.date),
-      startTime: dto.startTime,
-      endTime: dto.endTime,
-      duration: dto.duration,
-      customerInfo:{
-        name: userReservation.name,
-        email: userReservation.email,
-        phone: userReservation.phone,
-      },
-      pricing,
-      status: BookingStatus.PENDING,
-      paymentMethod:'manual',
-      paymentStatus: PaymentStatus.PENDING,
-      bookingReference: `REF-${Date.now()}`,
-    });
-    const result = await this.bookingRepo.save(booking);
-    // slots= slots.map((slot)=>(Object.assign(slot, { status: 'occupied' })))
-    slots= slots.map((slot)=>(Object.assign(slot, { status: 'on-hold' })))
-    await this.scheduleTemplateService.bulkUpdate(slots);
-    // 📩 Enviar correo de reserva pagada
-    await this.mailerService.sendBookingConfirmationEmail(result.customerInfo.email, result);
-    return result;
+    
+    const createdBookings = [];
+    // Ajustar el precio si hay multiples reservas para el calculo del manual
+    const finalPricing = pricing ? {
+      ...pricing,
+      totalPrice: pricing.totalPrice / datesToBook.length,
+      basePrice: pricing.basePrice / datesToBook.length
+    } : null;
+
+    for (let currentdate of datesToBook) {
+      let slots = await this.checkAvailability(dto.courtId, currentdate, dto.startTime, dto.duration);
+      const booking = this.bookingRepo.create({
+        user:userReservation,
+        court,
+        club: user.club,
+        date: currentdate,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        duration: dto.duration,
+        customerInfo:{
+          name: userReservation.name,
+          email: userReservation.email,
+          phone: userReservation.phone,
+        },
+        pricing: finalPricing,
+        status: BookingStatus.PENDING,
+        paymentMethod:'manual',
+        paymentStatus: PaymentStatus.PENDING,
+        bookingReference: `REF-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      });
+      const result = await this.bookingRepo.save(booking);
+      slots = slots.map((slot)=>(Object.assign(slot, { status: 'on-hold' })))
+      await this.scheduleTemplateService.bulkUpdate(slots);
+      createdBookings.push(result);
+    }
+    
+    // 📩 Enviar correo de reserva pagada solo al representante (el primero)
+    if (createdBookings.length > 0) {
+      await this.mailerService.sendBookingConfirmationEmail(createdBookings[0].customerInfo.email, createdBookings[0]);
+    }
+    
+    return createdBookings;
   }
 
   async createDeferredBooking(dto: CreateBookingDto, user: User) {
@@ -313,17 +333,7 @@ export class BookingService {
     return this.bookingRepo.findOne({ where: { id }, relations: ['user', 'court']});
   }
 
-  async findManyByReference(ref: string): Promise<Booking[]> {
-    return this.bookingRepo.find({
-      where: [
-        { id: ref },
-        { groupId: ref }
-      ],
-      relations: ['user', 'court', 'club', 'payment'],
-    });
-  }
-
-  async findOneComplete(id: string): Promise<Booking> {
+  findOneComplete(id: string) {
     return this.bookingRepo.findOne({ where: { id }, relations: ['user', 'court', 'club']});
   }
 

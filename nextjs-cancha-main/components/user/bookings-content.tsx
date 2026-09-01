@@ -174,11 +174,8 @@ export function UserBookingsContent() {
 
       // 3. Registrar el pago manual en el backend
       await createBookingPayment(selectedBooking.id, {
-        method: payMethod === "yape" ? "YAPE" : "PLIN",
         metodo: payMethod === "yape" ? "YAPE" : "PLIN",
-        type: payType,
-        tipo: payType,
-        amount: payAmount,
+        tipo: payType as "ADELANTO" | "PAGO_COMPLETO" | "SALDO",
         monto: payAmount,
         comprobanteUrl,
       })

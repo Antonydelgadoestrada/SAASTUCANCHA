@@ -77,9 +77,6 @@
   
     @Column()
     bookingReference: string;
-
-    @Column({ nullable: true })
-    groupId?: string;
   
     @CreateDateColumn()
     createdAt: Date;
@@ -96,7 +93,7 @@
     @Column({ nullable: true })
     cancellationReason?: string;
   
-    @OneToOne(() => Payment, (payment) => payment.booking, { nullable: true })
+    @ManyToOne(() => Payment, (payment) => payment.bookings, { onDelete: 'SET NULL', nullable: true })
     @JoinColumn()
     payment?: Payment;
 

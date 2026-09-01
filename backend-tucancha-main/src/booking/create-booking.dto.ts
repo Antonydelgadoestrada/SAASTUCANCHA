@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsEmail, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BookingStatus } from './booking-status.enum';
 import { PaymentStatus } from '../payment/payment-status.enum';
@@ -41,6 +41,8 @@ export class CreateBookingDto {
   date?: Date;
 
   @IsOptional()
+  @IsArray()
+  @IsDateString({}, { each: true })
   dates?: Date[];
 
   @IsString()
@@ -90,6 +92,8 @@ export class CreateManualBookingDto {
   date?: Date;
 
   @IsOptional()
+  @IsArray()
+  @IsDateString({}, { each: true })
   dates?: Date[];
 
   @IsString()
