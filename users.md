@@ -1,6 +1,6 @@
 
 Admin:
-brussitocomunica2017@gmail.com
+tucancha100@gmail.com
 Password: admin123
 
 Club:
