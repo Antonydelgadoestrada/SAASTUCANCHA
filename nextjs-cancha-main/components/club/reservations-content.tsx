@@ -94,10 +94,10 @@ export function ReservationsContent() {
   const filteredReservations = reservations.filter((reservation) => {
     // Filtro por búsqueda
     const searchMatch =
-      reservation.customerInfo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reservation.customerInfo?.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (reservation.customerInfo?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (reservation.customerInfo?.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       reservation.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reservation.court.name.toLowerCase().includes(searchTerm.toLowerCase())
+      (reservation.court?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
 
     // Filtro por estado
     const statusMatch = statusFilter === "all" || reservation.status === statusFilter
@@ -198,9 +198,14 @@ export function ReservationsContent() {
     setIsSubmitting(true);
     try {
       const result = await createReservationManual(data);
-      setReservations((prev) => [...prev, result]);
+      // Backend now returns an array of bookings for multi-reserve
+      if (Array.isArray(result)) {
+        setReservations((prev) => [...prev, ...result]);
+      } else {
+        setReservations((prev) => [...prev, result]);
+      }
       setIsCreateDialogOpen(false);
-      toast.success("Reserva creada con éxito");
+      toast.success(Array.isArray(result) && result.length > 1 ? `${result.length} reservas creadas con éxito` : "Reserva creada con éxito");
     } catch (error:any) {
        // Si el error tiene respuesta de la API (Axios)
         if (error.response?.data?.message) {
@@ -232,7 +237,7 @@ export function ReservationsContent() {
                 Nueva Reserva
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Crear Nueva Reserva</DialogTitle>
                 <DialogDescription>Completa el formulario para crear una reserva manualmente</DialogDescription>

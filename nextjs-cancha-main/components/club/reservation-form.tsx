@@ -119,6 +119,7 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
   const [price, setPrice] = useState("0")
   const [timeOptions, setTimeOptions] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
 
   // Filtrar canchas según la sede seleccionada
   const filteredCourts = courts
@@ -197,15 +198,25 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
     let dates = [];
     if (isRecurring && recurrenceWeeks) {
       const weeks = parseInt(recurrenceWeeks, 10);
-      let currentDate = selectedDate || new Date();
+      let currentDate = new Date(selectedDate || new Date());
+      currentDate.setHours(12, 0, 0, 0); // Normalizar a mediodía para evitar problemas de zona horaria
       for (let i = 0; i < weeks; i++) {
-        dates.push(format(currentDate, "yyyy-MM-dd", { locale: es }));
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dates.push(`${year}-${month}-${day}`);
         let nextDate = new Date(currentDate);
         nextDate.setDate(nextDate.getDate() + 7);
         currentDate = nextDate;
       }
     } else {
-      dates = [selectedDate?.toISOString() || ""];
+      // También normalizar la fecha individual
+      const d = new Date(selectedDate || new Date());
+      d.setHours(12, 0, 0, 0);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      dates = [`${year}-${month}-${day}`];
     }
 
     const priceNum = isRecurring ? (Number(price) * parseInt(recurrenceWeeks, 10)).toString() : price;
@@ -250,7 +261,7 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Fecha</Label>
-            <Popover>
+            <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -264,7 +275,10 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
                 <Calendar
                   mode="single"
                   selected={selectedDate}
-                  onSelect={setSelectedDate}
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    setIsCalendarOpen(false);
+                  }}
                   initialFocus
                   disabled={(date) => {
                     const today = new Date();
@@ -290,37 +304,6 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="space-y-4 col-span-1 sm:col-span-3">
-             <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-sm">Reserva Recurrente</h3>
-                  <p className="text-xs text-muted-foreground">Repetir automáticamente esta reserva</p>
-                </div>
-                <Switch
-                  checked={isRecurring}
-                  onCheckedChange={setIsRecurring}
-                />
-              </div>
-              {isRecurring && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="recurrence">Repetir por</Label>
-                    <Select value={recurrenceWeeks} onValueChange={setRecurrenceWeeks}>
-                      <SelectTrigger id="recurrence">
-                        <SelectValue placeholder="Seleccionar periodo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2">2 semanas</SelectItem>
-                        <SelectItem value="3">3 semanas</SelectItem>
-                        <SelectItem value="4">1 mes (4 semanas)</SelectItem>
-                        <SelectItem value="8">2 meses (8 semanas)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
           </div>
 
           <div className="space-y-2">
@@ -356,6 +339,37 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
           </div>
 
          
+        </div>
+
+        <div className="space-y-4">
+           <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm">Reserva Recurrente</h3>
+                <p className="text-xs text-muted-foreground">Repetir automáticamente esta reserva</p>
+              </div>
+              <Switch
+                checked={isRecurring}
+                onCheckedChange={setIsRecurring}
+              />
+            </div>
+            {isRecurring && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="recurrence">Repetir por</Label>
+                  <Select value={recurrenceWeeks} onValueChange={setRecurrenceWeeks}>
+                    <SelectTrigger id="recurrence">
+                      <SelectValue placeholder="Seleccionar periodo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 semanas</SelectItem>
+                      <SelectItem value="3">3 semanas</SelectItem>
+                      <SelectItem value="4">1 mes (4 semanas)</SelectItem>
+                      <SelectItem value="8">2 meses (8 semanas)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
         </div>
 
         <div className="space-y-2">

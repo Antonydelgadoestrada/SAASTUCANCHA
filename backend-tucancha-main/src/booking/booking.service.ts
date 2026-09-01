@@ -268,9 +268,13 @@ export class BookingService {
       createdBookings.push(result);
     }
     
-    // 📩 Enviar correo de reserva pagada solo al representante (el primero)
-    if (createdBookings.length > 0) {
-      await this.mailerService.sendBookingConfirmationEmail(createdBookings[0].customerInfo.email, createdBookings[0]);
+    // 📩 Enviar un correo de confirmación por cada reserva creada
+    for (const booking of createdBookings) {
+      try {
+        await this.mailerService.sendBookingConfirmationEmail(booking.customerInfo.email, booking);
+      } catch (e) {
+        console.warn(`Error al enviar correo para reserva ${booking.id}:`, e);
+      }
     }
     
     return createdBookings;
