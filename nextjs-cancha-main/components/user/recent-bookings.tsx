@@ -88,7 +88,7 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
               <TableBody>
                 {recentBookings.map((booking) => {
                   const formattedDate = formatSafeDate(booking.date, "d MMM yyyy", { locale: es })
-                  const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
+                  const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * (parseFloat(booking.court.priceDay) || 0)) : 0)
                   return (
                     <TableRow key={booking.id}>
                       <TableCell>
@@ -143,7 +143,7 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
       <div className="grid gap-4 md:hidden">
         {recentBookings.map((booking) => {
           const formattedDate = formatSafeDate(booking.date, "d MMM yyyy", { locale: es })
-          const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)
+          const price = booking.pricing?.totalPrice || (booking.court ? (booking.duration * (parseFloat(booking.court.priceDay) || 0)) : 0)
           return (
             <Card key={booking.id} className="shadow-sm">
               <CardHeader className="pb-2">

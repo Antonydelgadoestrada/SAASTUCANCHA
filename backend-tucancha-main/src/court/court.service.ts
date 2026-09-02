@@ -186,23 +186,20 @@ export class CourtService {
           minimumBookingTime
         } = court;
 
-        const price = isNight()
-          ? court.priceNight
-          : court.priceDay;
-        const promoPrice = isNight()?court.promoNight: court.promoDay  
-  
         const availableSlots = availabilities
           .filter((a: any) => a.status === 'available')
           .sort((a: any, b: any) => a.time.localeCompare(b.time))
           .map((a: any) => a.time);
-        
+
         return {
           id,
           name,
           club: club?.name || '',
           sport: type,
-          price: Number(price),
-          promoPrice:Number(promoPrice),
+          priceDay: Number(court.priceDay || 0),
+          priceNight: Number(court.priceNight || 0),
+          promoDay: court.promoDay ? Number(court.promoDay) : null,
+          promoNight: court.promoNight ? Number(court.promoNight) : null,
           minimumBookingTime,
           rating: 4.5,
           reviews: 128,

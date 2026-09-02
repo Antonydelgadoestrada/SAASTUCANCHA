@@ -156,6 +156,17 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string, 
   return validStartTimes
 }
 
+export  const handleClearFilters = () => {
+    setSearchQuery("")
+    setSelectedSport("")
+    setSelectedTeamSize("")
+    setSelectedClub("")
+    setSelectedPriceRange("")
+    setSelectedDate(undefined)
+    setCurrentLocation(null)
+    setUseLocation(false)
+  }
+
 export function SearchResults({
   searchQuery,
   selectedSport,
@@ -206,6 +217,36 @@ export function SearchResults({
     const sport = selectedCourt?.sport?.toLowerCase() ?? ""
   
     const isFut = sport.startsWith("fut")
+
+  const getCalculatedHourlyPrice = () => {
+    if (!selectedCourt) return 0;
+    // Default to day price if no time is selected
+    if (!selectedTime) {
+      const pDay = Number(selectedCourt.priceDay || 0);
+      const prDay = Number(selectedCourt.promoDay || 0);
+      return prDay > 0 ? prDay : pDay;
+    }
+    
+    const h = parseInt(selectedTime.split(":")[0], 10);
+    const isNightTime = h >= 18;
+    
+    if (isNightTime) {
+      const pNight = Number(selectedCourt.priceNight || selectedCourt.priceDay || 0);
+      const prNight = Number(selectedCourt.promoNight || selectedCourt.promoDay || 0);
+      return prNight > 0 ? prNight : pNight;
+    } else {
+      const pDay = Number(selectedCourt.priceDay || 0);
+      const prDay = Number(selectedCourt.promoDay || 0);
+      return prDay > 0 ? prDay : pDay;
+    }
+  }
+
+  const getCalculatedTotal = () => {
+    const hourly = getCalculatedHourlyPrice();
+    const dur = Number(duration) || 0;
+    const weeks = isRecurring ? parseInt(recurrenceWeeks, 10) : 1;
+    return hourly * dur * weeks;
+  }
   
     // Si es futbol, permitir solo 1 o 2 horas, pero nunca 1.5
     if (isFut) {
@@ -493,14 +534,13 @@ export function SearchResults({
        
 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
   {filteredCourts.map((court) => {
-    // Ajusta el multiplicador si ese "* 2" representa 2 horas u otro cálculo
-    const hoursMultiplier = 2;
+    const hoursMultiplier = 1;
 
-    const baseUnit = Number(court.price);
-    const basePrice = Number.isFinite(baseUnit) ? baseUnit * hoursMultiplier : undefined;
+    const baseUnit = Number(court.priceDay || 0);
+    const basePrice = Number.isFinite(baseUnit) && baseUnit > 0 ? baseUnit * hoursMultiplier : undefined;
 
-    const promoUnit = Number(court.promoPrice);
-    const promo = Number.isFinite(promoUnit) ? promoUnit * hoursMultiplier : undefined;
+    const promoUnit = Number(court.promoDay || 0);
+    const promo = Number.isFinite(promoUnit) && promoUnit > 0 ? promoUnit * hoursMultiplier : undefined;
 
     const showPromo = hasPromo(basePrice, promo);
     const pct = showPromo && promo && basePrice ? discountPct(basePrice, promo) : 0;
@@ -877,7 +917,7 @@ export function SearchResults({
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Precio:</span>
                         <span className="font-semibold">
-                          S/ {selectedCourt.price}/hora
+                          S/ {selectedCourt.priceDay}/hora
                         </span>
                       </div>
                     </div>
@@ -1212,7 +1252,7 @@ export function SearchResults({
                 )}
                 <div className="flex justify-between font-semibold">
                   <span>Total:</span>
-                  <span>S/ {selectedCourt.price * (+duration*2) * (isRecurring ? parseInt(recurrenceWeeks, 10) : 1)}</span>
+                  <span>S/ {getCalculatedTotal()}</span>
                 </div>
               </div>
 
@@ -1311,7 +1351,7 @@ export function SearchResults({
                 <Separator />
                 <div className="flex justify-between font-semibold">
                   <span>Total a pagar:</span>
-                  <span>S/ {selectedCourt.price * (+duration *2) * (isRecurring ? parseInt(recurrenceWeeks, 10) : 1)}</span>
+                  <span>S/ {getCalculatedTotal()}</span>
                 </div>
               </div>
 
