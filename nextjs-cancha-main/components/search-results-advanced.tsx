@@ -1827,12 +1827,12 @@ export function SearchResults({
               {/* Detalle si es WhatsApp */}
               {payMethod === "whatsapp" && (
                 <div className="space-y-3 p-4 rounded-xl border border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-950/20 text-xs text-emerald-900 dark:text-emerald-200">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <span className="font-bold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 break-words">
                       <MessageCircle className="h-4 w-4 fill-emerald-600 text-white" />
                       Coordinación Directa por WhatsApp
                     </span>
-                    <Badge variant="outline" className="border-emerald-500 text-emerald-700 dark:text-emerald-300 font-bold">
+                    <Badge variant="outline" className="border-emerald-500 text-emerald-700 dark:text-emerald-300 font-bold whitespace-nowrap shrink-0">
                       Bloqueo 2 Horas
                     </Badge>
                   </div>
@@ -2073,7 +2073,7 @@ export function SearchResults({
                 </AlertDescription>
               </Alert>
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <div className="flex flex-col gap-2 pt-2">
                 <Button
                   variant="outline"
                   onClick={handleSeparate}
@@ -2091,7 +2091,7 @@ export function SearchResults({
                     className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white gap-1.5 font-semibold"
                   >
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4 fill-white text-[#25D366]" />}
-                    Bloquear Horario y Coordinar por WhatsApp
+                    <span className="whitespace-normal text-center">Bloquear Horario y Coordinar por WhatsApp</span>
                   </Button>
                 ) : payMethod === "yape" || payMethod === "plin" ? (
                   <Button
