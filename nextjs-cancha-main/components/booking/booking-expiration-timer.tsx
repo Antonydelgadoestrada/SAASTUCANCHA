@@ -34,8 +34,8 @@ export function BookingExpirationTimer({
     paymentMethod?.toLowerCase() === "whatsapp" ||
     paymentMethod?.toLowerCase() === "solo whatsapp"
 
-  // 120 minutos para WhatsApp, 15 minutos para método regular
-  const limitMinutes = isWhatsApp ? 120 : 15
+  // 120 minutos para WhatsApp, 5 minutos para método regular (Yape/Plin)
+  const limitMinutes = isWhatsApp ? 120 : 5
 
   useEffect(() => {
     if (!createdAt) return

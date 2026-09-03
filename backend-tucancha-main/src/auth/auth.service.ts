@@ -203,29 +203,32 @@ export class AuthService {
   
     let createdClub = null;
     try {
-      // Enviar correo de confirmación
-      await this.mailerService.sendConfirmationEmail(email, emailToken);
-  
-      // Si es club, crear el club
+      // Si es usuario regular (jugador), enviar correo de bienvenida
+      if (role !== UserRole.CLUB) {
+        await this.mailerService.sendUserWelcomeEmail(email, name, emailToken);
+      }
+
+      // Si es club, crear el club y enviar notificaciones de espera y alerta a admin
       if (role === UserRole.CLUB) {
         if (!club) throw new BadRequestException('Información del club requerida para rol CLUB');
-  
+
         const newClub = this.clubRepository.create({
           ...club,
           email: email,
           owner: savedUser,
           status: 'PENDING',
         });
-  
+
         createdClub = await this.clubRepository.save(newClub);
         try {
-          await this.mailerService.sendClubActivationRequestToAdmin(createdClub);
-          await this.mailerService.sendClubRequestConfirmationToOwner(createdClub.email, createdClub.name, '933282785');
+          const adminEmail = process.env.ADMIN_EMAIL || 'tucancha100@gmail.com';
+          await this.mailerService.sendClubRegisteredPendingApprovalEmail(savedUser.email, createdClub, savedUser.name);
+          await this.mailerService.sendNewClubAdminNotificationEmail(adminEmail, createdClub, savedUser);
         } catch (mailErr) {
           console.warn('⚠️ No se pudieron enviar correos de notificación de club:', mailErr?.message);
         }
       }
-  
+
       return {
         message: 'Usuario registrado correctamente.' + (isDev ? ' Cuenta verificada automáticamente en modo desarrollo.' : ' Revisa tu correo para confirmar tu cuenta.'),
         user: {
@@ -235,7 +238,7 @@ export class AuthService {
           role: savedUser.role
         },
       };
-  
+
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof ConflictException) {
         throw error;

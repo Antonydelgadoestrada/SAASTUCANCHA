@@ -354,8 +354,8 @@ export function SearchResults({
       lines.push(
         ``,
         `⚠️ *ADVERTENCIA IMPORTANTE:*`,
-        `Debes subir tu comprobante / voucher de pago dentro de los próximos *15 MINUTOS*.`,
-        `De lo contrario, transcurridos los 15 minutos tu reserva será *CANCELADA AUTOMÁTICAMENTE* y el horario quedará liberado.`,
+        `Debes subir tu comprobante / voucher de pago dentro de los próximos *5 MINUTOS*.`,
+        `De lo contrario, transcurridos los 5 minutos tu reserva será *CANCELADA AUTOMÁTICAMENTE* y el horario quedará liberado.`,
         ``,
         `📲 Puedes adjuntar tu voucher desde la sección *Mis Reservas* en TuCancha o enviarlo directamente.`
       );
@@ -625,7 +625,7 @@ export function SearchResults({
 
       toast({
         title: "¡Cancha separada con éxito!",
-        description: `Tu reserva se encuentra PENDIENTE. Tienes 15 minutos para adjuntar tu comprobante de pago.`,
+        description: `Tu reserva se encuentra PENDIENTE. Tienes 5 minutos para adjuntar tu comprobante de pago.`,
       });
 
       setShowPayment(false);
@@ -2272,14 +2272,14 @@ export function SearchResults({
                       <span>⚠️</span> Estado de Pago: PENDIENTE
                     </span>
                     <Badge variant="destructive" className="text-[10px] font-bold shrink-0">
-                      Tolerancia 15 min
+                      Tolerancia 5 min
                     </Badge>
                   </div>
                   <p className="text-xs leading-relaxed">
-                    <strong>¡Atención!</strong> Tu reserva está registrada pero <strong>debes subir tu comprobante / voucher de pago dentro de los próximos 15 minutos</strong> desde la sección <em>Mis Reservas</em>.
+                    <strong>¡Atención!</strong> Tu reserva está registrada pero <strong>debes subir tu comprobante / voucher de pago dentro de los próximos 5 minutos</strong> desde la sección <em>Mis Reservas</em>.
                   </p>
                   <p className="text-[11px] text-red-700/90 dark:text-red-300/90 font-medium">
-                    ⏱️ Si no adjuntas tu comprobante en 15 minutos, tu reserva será <u>cancelada automáticamente</u> y la cancha quedará libre para otros usuarios.
+                    ⏱️ Si no adjuntas tu comprobante en 5 minutos, tu reserva será <u>cancelada automáticamente</u> y la cancha quedará libre para otros usuarios.
                   </p>
                 </div>
               ) : (

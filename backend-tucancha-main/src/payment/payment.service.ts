@@ -18,7 +18,6 @@ import { MailerService } from '../mailer/mailer.service';
 import { Booking } from '../booking/booking.entity';
 import { S3Service } from '../aws/s3.service';
 import { CourtService } from '../court/court.service';
-import { BookingStatus } from '../booking/booking-status.enum';
 
 @Injectable()
 export class PaymentService {
@@ -889,7 +888,8 @@ export class PaymentService {
 
           // Liberar los slots ocupados
           try {
-            const dateStr = typeof b.date === 'string' ? b.date.substring(0, 10) : new Date(b.date).toISOString().substring(0, 10);
+            const rawDate = b.date as any;
+            const dateStr = typeof rawDate === 'string' ? rawDate.substring(0, 10) : new Date(rawDate).toISOString().substring(0, 10);
             const times = this.generateTimeSlots(b.startTime, Number(b.duration) || 1);
             const payload = times.map((t) => ({
               courtId: b.court.id,

@@ -1229,11 +1229,11 @@ export function UserBookingsContent() {
                     )
                   })()}
 
-                  {/* Aviso de tiempo límite de 15 minutos */}
+                  {/* Aviso de tiempo límite de 5 minutos */}
                   <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
                     <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
                     <p className="leading-snug">
-                      ⏳ <strong>Tienes 15 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
+                      ⏳ <strong>Tienes 5 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
                     </p>
                   </div>
 
