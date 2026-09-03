@@ -300,7 +300,12 @@ export function ClubSchedulesContent() {
 
   const isSlotOccupiedByBooking = useCallback((booking: any, dateStr: string, timeStr: string) => {
     if (!booking || booking.status === "CANCELLED" || booking.status === "cancelled") return false;
-    const bookingDateStr = new Date(booking.date).toISOString().split("T")[0];
+    
+    // Garantizar formato YYYY-MM-DD sin problemas de zona horaria
+    const bookingDateStr = typeof booking.date === "string" 
+      ? booking.date.substring(0, 10) 
+      : new Date(booking.date).toISOString().substring(0, 10);
+      
     if (bookingDateStr !== dateStr) return false;
     const times = getBookingSlots(booking.startTime, booking.duration);
     return times.includes(timeStr);
@@ -358,13 +363,9 @@ export function ClubSchedulesContent() {
     booking?: any,
     eventSlot?: any
   ) => {
-    if (status === "occupied" || status === "on-hold") {
-      if (booking) {
-        setSelectedItemDetails({ type: "booking", data: booking });
-        setIsDetailsSidebarOpen(true);
-      } else {
-        toast.error("No se encontraron detalles para esta reserva.");
-      }
+    if ((status === "occupied" || status === "on-hold") && booking) {
+      setSelectedItemDetails({ type: "booking", data: booking });
+      setIsDetailsSidebarOpen(true);
     } else if (status === "event") {
       const eventDetail = courtEvents.find(e => e.id === eventSlot?.eventId);
       setSelectedItemDetails({
@@ -372,9 +373,12 @@ export function ClubSchedulesContent() {
         data: eventDetail || { name: eventSlot?.name || "Evento", id: eventSlot?.eventId }
       });
       setIsDetailsSidebarOpen(true);
-    } else if (status === "available" || status === "blocked") {
+    } else {
       setSelectedSlotForAction({ time, date });
       setIsActionDialogOpen(true);
+      if (status === "occupied" || status === "on-hold") {
+        toast.info("Este horario figura ocupado pero no tiene una reserva de usuario asociada.");
+      }
     }
   };
 
