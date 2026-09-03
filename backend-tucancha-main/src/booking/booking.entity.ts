@@ -39,7 +39,7 @@
     @Column()
     endTime: string;
   
-    @Column()
+    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
     duration: number;
   
     @Column('jsonb')

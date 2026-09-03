@@ -80,7 +80,7 @@ export function UserUpcomingBookings({ bookings }: UserUpcomingBookingsProps) {
                   </div>
                 )}
                 <div className="pt-2 font-bold text-foreground">
-                  Total: S/ {booking.pricing?.totalPrice || (booking.court ? (booking.duration * (parseFloat(booking.court.priceDay) || 0)) : 0)}
+                  Total: S/ {booking.pricing?.totalPrice || (booking.court ? (booking.duration * 2 * (parseFloat(booking.court.priceDay) || 0)) : 0)}
                 </div>
               </div>
             </CardContent>

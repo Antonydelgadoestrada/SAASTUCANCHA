@@ -156,14 +156,14 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
     if (selectedCourt && duration) {
       const courtObj = courts.find(c => c.id === selectedCourt || c.id === parseInt(selectedCourt));
       if (courtObj) {
-        let basePrice = Number(courtObj.priceDay) || 0;
+        let basePrice = Number(courtObj.promoDay || courtObj.priceDay || 0);
         if (startTime) {
           const [h] = startTime.split(":").map(Number);
           if (h >= 18) {
-            basePrice = Number(courtObj.priceNight) || basePrice;
+            basePrice = Number(courtObj.promoNight || courtObj.priceNight || basePrice);
           }
         }
-        const total = basePrice * parseFloat(duration);
+        const total = (basePrice * 2) * parseFloat(duration);
         setPrice(total.toString());
       }
     } else {

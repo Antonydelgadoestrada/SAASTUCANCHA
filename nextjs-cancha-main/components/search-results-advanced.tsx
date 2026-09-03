@@ -212,19 +212,13 @@ export function SearchResults({
   // const filteredOptionsR = durationOptions.filter(
   //   (opt) => parseFloat(opt.value) >= parseFloat(selectedCourt?.minimumBookingTime ?? '1')
   // );
-  const filteredOptions = durationOptions.filter((opt) => {
-    const minBooking = parseFloat(selectedCourt?.minimumBookingTime ?? '1')
-    const sport = selectedCourt?.sport?.toLowerCase() ?? ""
-  
-    const isFut = sport.startsWith("fut")
-
   const getCalculatedHourlyPrice = () => {
     if (!selectedCourt) return 0;
     // Default to day price if no time is selected
     if (!selectedTime) {
       const pDay = Number(selectedCourt.priceDay || 0);
       const prDay = Number(selectedCourt.promoDay || 0);
-      return prDay > 0 ? prDay : pDay;
+      return (prDay > 0 ? prDay : pDay) * 2;
     }
     
     const h = parseInt(selectedTime.split(":")[0], 10);
@@ -233,11 +227,11 @@ export function SearchResults({
     if (isNightTime) {
       const pNight = Number(selectedCourt.priceNight || selectedCourt.priceDay || 0);
       const prNight = Number(selectedCourt.promoNight || selectedCourt.promoDay || 0);
-      return prNight > 0 ? prNight : pNight;
+      return (prNight > 0 ? prNight : pNight) * 2;
     } else {
       const pDay = Number(selectedCourt.priceDay || 0);
       const prDay = Number(selectedCourt.promoDay || 0);
-      return prDay > 0 ? prDay : pDay;
+      return (prDay > 0 ? prDay : pDay) * 2;
     }
   }
 
@@ -247,6 +241,12 @@ export function SearchResults({
     const weeks = isRecurring ? parseInt(recurrenceWeeks, 10) : 1;
     return hourly * dur * weeks;
   }
+
+  const filteredOptions = durationOptions.filter((opt) => {
+    const minBooking = parseFloat(selectedCourt?.minimumBookingTime ?? '1')
+    const sport = selectedCourt?.sport?.toLowerCase() ?? ""
+  
+    const isFut = sport.startsWith("fut")
   
     // Si es futbol, permitir solo 1 o 2 horas, pero nunca 1.5
     if (isFut) {
@@ -534,7 +534,7 @@ export function SearchResults({
        
 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
   {filteredCourts.map((court) => {
-    const hoursMultiplier = 1;
+    const hoursMultiplier = 2;
 
     const baseUnit = Number(court.priceDay || 0);
     const basePrice = Number.isFinite(baseUnit) && baseUnit > 0 ? baseUnit * hoursMultiplier : undefined;
@@ -917,7 +917,7 @@ export function SearchResults({
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Precio:</span>
                         <span className="font-semibold">
-                          S/ {selectedCourt.priceDay}/hora
+                          S/ {getCalculatedHourlyPrice()}/hora
                         </span>
                       </div>
                     </div>
