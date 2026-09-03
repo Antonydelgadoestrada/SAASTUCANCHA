@@ -112,7 +112,7 @@ export function computePaymentDetails(payment: PaymentItem) {
 function comprobanteBadge(status: string, autoConfirmed?: boolean, pendingAudit?: boolean) {
   if (autoConfirmed || pendingAudit) {
     return (
-      <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-300 font-medium text-xs">
+      <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-300 font-medium text-xs">
         Auto-Confirmado
       </Badge>
     )
@@ -157,14 +157,14 @@ function saldoBadge(
   }
   if (!isAdvance) {
     return (
-      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-medium text-xs">
+      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
         100% Pagado
       </Badge>
     )
   }
   if (isSaldoPaid) {
     return (
-      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-medium text-xs">
+      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
         Liquidado ({saldoMethod || "Efectivo"})
       </Badge>
     )
@@ -185,7 +185,7 @@ function saldoBadge(
     )
   }
   return (
-    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 font-semibold text-xs">
+    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-300 font-semibold text-xs">
       Saldo Pendiente
     </Badge>
   )
@@ -329,7 +329,7 @@ function SettleSaldoModal({
 
         <div className="space-y-4 text-sm pt-1">
           {/* Card Resumen de Deuda */}
-          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+          <div className="p-4 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
             <div className="flex justify-between items-start mb-2">
               <div>
                 <p className="text-xs font-semibold text-muted-foreground">Cliente & Reserva</p>
@@ -386,8 +386,8 @@ function SettleSaldoModal({
                   onClick={() => setSelectedMethod(m.id)}
                   className={`p-2.5 rounded-lg border text-xs font-medium text-left transition-all ${
                     selectedMethod === m.id
-                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-500"
-                      : "border-border hover:bg-slate-50 dark:hover: text-foreground"
+                      ? "border-emerald-500 bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-500"
+                      : "border-border hover:bg-muted/40 dark:hover: text-foreground"
                   }`}
                 >
                   {m.label}
@@ -541,7 +541,7 @@ function PaymentDetailModal({
         <div className="space-y-5 text-sm pt-1">
           {/* Banner de Estado General */}
           {details.isAdvance && !details.isSaldoPaid && !details.isComprobanteRejected ? (
-            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+            <div className="p-3.5 bg-amber-500/10 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
               <div className="flex items-center justify-between">
                 <p className="font-bold flex items-center gap-1.5 text-sm">
                    Modalidad: Adelanto — Saldo Pendiente
@@ -555,7 +555,7 @@ function PaymentDetailModal({
               </p>
             </div>
           ) : details.isAdvance && details.isSaldoPaid ? (
-            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
+            <div className="p-3.5 bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
               <p className="font-bold flex items-center gap-1.5 text-sm">
                  Reserva Totalmente Liquidada (100% Pagada)
               </p>
@@ -564,7 +564,7 @@ function PaymentDetailModal({
               </p>
             </div>
           ) : (
-            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
+            <div className="p-3.5 bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
               <p className="font-bold flex items-center gap-1.5 text-sm">
                  Pago Completo (100%)
               </p>
@@ -575,7 +575,7 @@ function PaymentDetailModal({
           )}
 
           {isAutoConfirmed && (
-            <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl text-xs text-sky-800 dark:text-sky-300">
+            <div className="p-3 bg-sky-500/10 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-xl text-xs text-sky-800 dark:text-sky-300">
               <strong>Cancha Asegurada Automáticamente:</strong> Pasaron más de 2 horas sin auditar el comprobante inicial. Por favor valida los datos para cerrar la auditoría.
             </div>
           )}
@@ -643,7 +643,7 @@ function PaymentDetailModal({
 
             {/* Visualizador de Comprobante 1 */}
             {payment.comprobanteUrl ? (
-              <div className="space-y-2 p-3 bg-muted/30/70 rounded-xl border">
+              <div className="space-y-2 p-3 bg-muted/40 rounded-xl border">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <FileTextIcon className="w-3.5 h-3.5 text-emerald-600" />
@@ -716,7 +716,7 @@ function PaymentDetailModal({
             )}
 
             {payment.motivoRechazo && (
-              <div className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 rounded-lg text-xs text-red-700">
+              <div className="p-2.5 bg-red-500/10 dark:bg-red-950/20 border border-red-200 rounded-lg text-xs text-red-700">
                 <strong>Motivo de rechazo (1er Pago):</strong> {payment.motivoRechazo}
               </div>
             )}
@@ -732,7 +732,7 @@ function PaymentDetailModal({
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
-                      className="text-red-600 border-red-300 hover:bg-red-50 flex-1 text-xs h-8"
+                      className="text-red-600 border-red-300 hover:bg-red-500/10 flex-1 text-xs h-8"
                       onClick={() => setShowRejectInput1(true)}
                       disabled={mutation1.isPending}
                     >
@@ -753,7 +753,7 @@ function PaymentDetailModal({
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200">
+                  <div className="space-y-2 p-3 bg-red-500/10 dark:bg-red-950/20 rounded-lg border border-red-200">
                     <Label className="text-xs font-semibold text-red-800">Motivo del rechazo del 1er Comprobante</Label>
                     <Textarea
                       placeholder="Ej. El monto no coincide con el abono registrado, comprobante ilegible..."
@@ -778,7 +778,7 @@ function PaymentDetailModal({
                   </div>
                 )
               ) : details.isComprobanteApproved ? (
-                <div className="flex items-center justify-between p-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
+                <div className="flex items-center justify-between p-2 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-200 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
                   <span className="flex items-center gap-1.5 font-semibold">
                     <CheckCircle2Icon className="w-4 h-4 text-emerald-600" />
                     1er Pago Aprobado y Validado
@@ -786,14 +786,14 @@ function PaymentDetailModal({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 text-[11px] text-red-600 hover:bg-red-50 hover:text-red-700"
+                    className="h-6 text-[11px] text-red-600 hover:bg-red-500/10 hover:text-red-700"
                     onClick={() => setShowRejectInput1(true)}
                   >
                     Re-evaluar / Rechazar
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-950/20 border border-red-200 rounded-lg text-xs text-red-800 dark:text-red-300">
+                <div className="flex items-center justify-between p-2 bg-red-500/10 dark:bg-red-950/20 border border-red-200 rounded-lg text-xs text-red-800 dark:text-red-300">
                   <span className="flex items-center gap-1.5 font-semibold">
                     <XCircleIcon className="w-4 h-4 text-red-600" />
                     1er Pago Rechazado
@@ -801,7 +801,7 @@ function PaymentDetailModal({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-6 text-[11px] text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                    className="h-6 text-[11px] text-emerald-700 border-emerald-300 hover:bg-emerald-500/10"
                     onClick={() => mutation1.mutate({ action: "CONFIRMAR" })}
                     disabled={mutation1.isPending}
                   >
@@ -871,7 +871,7 @@ function PaymentDetailModal({
 
                 {/* Visualizador de Comprobante de Saldo (2do pago) */}
                 {payment.saldoComprobanteUrl ? (
-                  <div className="space-y-2 p-3 bg-muted/30/70 rounded-xl border">
+                  <div className="space-y-2 p-3 bg-muted/40 rounded-xl border">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                         <FileTextIcon className="w-3.5 h-3.5 text-amber-600" />
@@ -963,7 +963,7 @@ function PaymentDetailModal({
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <Button
                           variant="outline"
-                          className="text-red-600 border-red-300 hover:bg-red-50 text-xs h-8 flex-1"
+                          className="text-red-600 border-red-300 hover:bg-red-500/10 text-xs h-8 flex-1"
                           onClick={() => setShowRejectInput2(true)}
                           disabled={mutationSaldo.isPending}
                         >
@@ -996,7 +996,7 @@ function PaymentDetailModal({
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200">
+                      <div className="space-y-2 p-3 bg-red-500/10 dark:bg-red-950/20 rounded-lg border border-red-200">
                         <Label className="text-xs font-semibold text-red-800">Motivo de rechazo de comprobante de saldo</Label>
                         <Textarea
                           placeholder="Ej. Comprobante no corresponde al saldo faltante, no visible..."
@@ -1021,7 +1021,7 @@ function PaymentDetailModal({
                       </div>
                     )
                   ) : !details.isSaldoPaid ? (
-                    <div className="flex items-center justify-between p-3 bg-amber-50/70 dark:bg-amber-950/20 rounded-lg border border-amber-200">
+                    <div className="flex items-center justify-between p-3 bg-amber-500/10/70 dark:bg-amber-950/20 rounded-lg border border-amber-200">
                       <div>
                         <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">Saldo pendiente por cobrar:</p>
                         <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{fmt(details.saldoFaltante)}</p>
@@ -1039,7 +1039,7 @@ function PaymentDetailModal({
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between p-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
+                    <div className="flex items-center justify-between p-2 bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-200 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
                       <span className="flex items-center gap-1.5 font-semibold">
                         <CheckCircle2Icon className="w-4 h-4 text-emerald-600" />
                         Saldo 100% Liquidado ({payment.saldoMethod || "Efectivo"})
@@ -1228,7 +1228,7 @@ function MetricsAuditTab() {
               Audita el 1er y 2do comprobante de forma independiente y confirma la liquidación de saldos en tiempo real.
             </p>
           </div>
-          <Badge variant="outline" className="text-xs font-semibold bg-white dark:bg-slate-800">
+          <Badge variant="outline" className="text-xs font-semibold bg-card dark:bg-slate-800">
             {payments.length} registro{payments.length !== 1 ? "s" : ""}
           </Badge>
         </div>
@@ -1268,8 +1268,8 @@ function MetricsAuditTab() {
                   return (
                     <tr
                       key={p.id}
-                      className={`hover:bg-slate-50 dark:hover:/50 transition-colors ${
-                        isAuditRequired1 || isAuditRequired2 ? "bg-amber-50/30 dark:bg-amber-950/10" : ""
+                      className={`hover:bg-muted/40 dark:hover:/50 transition-colors ${
+                        isAuditRequired1 || isAuditRequired2 ? "bg-amber-500/10/30 dark:bg-amber-950/10" : ""
                       }`}
                     >
                       {/* Cliente & Cancha */}
@@ -1386,7 +1386,7 @@ function MetricsAuditTab() {
                         <div className="space-y-1.5">
                           {!details.isAdvance ? (
                             <div className="space-y-0.5">
-                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-medium text-xs">
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
                                 100% Pagado
                               </Badge>
                               <p className="text-[10px] text-muted-foreground/80">No aplica saldo</p>
@@ -1494,7 +1494,7 @@ function MetricsAuditTab() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-6 px-2 text-[11px] font-semibold border-emerald-400 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 gap-1"
+                                  className="h-6 px-2 text-[11px] font-semibold border-emerald-400 text-emerald-700 hover:bg-emerald-500/10 dark:hover:bg-emerald-950/40 gap-1"
                                   onClick={() => openSettle(p)}
                                 >
                                   <BanknoteIcon className="w-3 h-3" />
