@@ -6,6 +6,7 @@ import { CheckCircleIcon, ClockIcon, XCircleIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { BookingStatusBadge } from "@/components/ui/booking-status-badge"
 
 // Datos de ejemplo
 const recentBookings = [
@@ -91,22 +92,8 @@ export function ClubRecentBookings() {
             </p>
           </div>
           <div className="ml-auto flex flex-col items-end gap-1">
-            <Badge
-              variant={
-                booking.status === "confirmed" ? "default" : booking.status === "pending" ? "outline" : "destructive"
-              }
-              className="flex items-center gap-1"
-            >
-              {booking.status === "confirmed" ? (
-                <CheckCircleIcon className="h-3 w-3" />
-              ) : booking.status === "pending" ? (
-                <ClockIcon className="h-3 w-3" />
-              ) : (
-                <XCircleIcon className="h-3 w-3" />
-              )}
-              {booking.status === "confirmed" ? "Confirmada" : booking.status === "pending" ? "Pendiente" : "Cancelada"}
-            </Badge>
-            <span className="text-sm font-medium">${booking.price}</span>
+            <BookingStatusBadge status={booking.status} />
+            <span className="text-sm font-medium">S/ {booking.price}</span>
           </div>
         </div>
       ))}

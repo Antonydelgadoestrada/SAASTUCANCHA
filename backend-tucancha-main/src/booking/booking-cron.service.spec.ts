@@ -7,7 +7,7 @@ import { Payment } from '../payment/payment.entity';
 import { PaymentStatus } from '../payment/payment-status.enum';
 import { ScheduleTemplateService } from '../schedule/schedule-template.service';
 import { MailerService } from '../mailer/mailer.service';
-import { subHours, addHours } from 'date-fns';
+import { subHours, subMinutes, addHours } from 'date-fns';
 
 describe('BookingCronService - Auto Cancellation & Auto Confirmation Lifecycle', () => {
   let service: BookingCronService;
@@ -70,14 +70,14 @@ describe('BookingCronService - Auto Cancellation & Auto Confirmation Lifecycle',
     expect(service).toBeDefined();
   });
 
-  describe('1) Auto-Cancelación: Reservó pero NO subió comprobante (> 2 horas)', () => {
+  describe('1) Auto-Cancelación: Reservó pero NO subió comprobante (> 15 minutos)', () => {
     it('debe cancelar la reserva, liberar los slots y enviar correo de expiración', async () => {
       const now = new Date();
       const expiredUnpaidBooking: Partial<Booking> = {
         id: 'booking-unpaid-1',
         bookingReference: 'REF-UNPAID-1',
         status: BookingStatus.PENDING,
-        createdAt: subHours(now, 3),
+        createdAt: subMinutes(now, 20),
         date: new Date('2026-08-25'),
         startTime: '18:00',
         endTime: '19:00',
@@ -96,7 +96,7 @@ describe('BookingCronService - Auto Cancellation & Auto Confirmation Lifecycle',
 
       expect(expiredUnpaidBooking.status).toBe(BookingStatus.CANCELLED);
       expect(expiredUnpaidBooking.autoCancelled).toBe(true);
-      expect(expiredUnpaidBooking.cancellationReason).toContain('2 horas excedido sin comprobante');
+      expect(expiredUnpaidBooking.cancellationReason).toContain('15 minutos excedido sin comprobante');
       expect(mockBookingRepo.save).toHaveBeenCalledWith(expiredUnpaidBooking);
 
       // Verifica que se liberaron los slots (available)
@@ -132,9 +132,65 @@ describe('BookingCronService - Auto Cancellation & Auto Confirmation Lifecycle',
       expect(bookingWithVoucher.status).toBe(BookingStatus.PENDING);
       expect(mockScheduleTemplateService.bulkUpdate).not.toHaveBeenCalled();
     });
+
+    it('NO debe cancelar a los 15 minutos si la reserva es por método WhatsApp (tiene tolerancia de 2 horas)', async () => {
+      const now = new Date();
+      const whatsappBooking: Partial<Booking> = {
+        id: 'booking-wa-1',
+        paymentMethod: 'whatsapp',
+        status: BookingStatus.PENDING,
+        createdAt: subMinutes(now, 20),
+        autoCancelled: false,
+        autoConfirmed: false,
+      };
+
+      mockBookingRepo.find.mockResolvedValueOnce([whatsappBooking]);
+
+      await service.handleUnpaidBookingsAutoCancellation();
+
+      // No se cancela en el ciclo de 15 minutos
+      expect(whatsappBooking.status).toBe(BookingStatus.PENDING);
+      expect(mockBookingRepo.save).not.toHaveBeenCalled();
+    });
   });
 
-  describe('2) Auto-Confirmación: YA subió comprobante y pasaron > 2 horas sin auditar', () => {
+  describe('2) Auto-Cancelación: Reservó por "Solo WhatsApp" y pasaron > 2 horas sin confirmar por admin', () => {
+    it('debe cancelar la reserva de WhatsApp, liberar los slots y registrar motivo de expiración', async () => {
+      const now = new Date();
+      const expiredWaBooking: Partial<Booking> = {
+        id: 'booking-wa-expired',
+        bookingReference: 'REF-WA-EXP-1',
+        paymentMethod: 'whatsapp',
+        status: BookingStatus.PENDING,
+        createdAt: subHours(now, 3),
+        date: new Date('2026-08-25'),
+        startTime: '19:00',
+        endTime: '20:00',
+        duration: 1,
+        court: { id: 'court-wa-1' } as any,
+        customerInfo: { name: 'Mario Rossi', email: 'mario@test.com', phone: '998877665' },
+        autoCancelled: false,
+        autoConfirmed: false,
+      };
+
+      mockBookingRepo.find.mockResolvedValueOnce([expiredWaBooking]);
+
+      await service.handleWhatsAppUnconfirmedBookingsAutoCancellation();
+
+      expect(expiredWaBooking.status).toBe(BookingStatus.CANCELLED);
+      expect(expiredWaBooking.autoCancelled).toBe(true);
+      expect(expiredWaBooking.cancellationReason).toContain('coordinación por WhatsApp (2 horas) expirado');
+      expect(mockBookingRepo.save).toHaveBeenCalledWith(expiredWaBooking);
+
+      expect(mockScheduleTemplateService.bulkUpdate).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ courtId: 'court-wa-1', status: 'available' }),
+        ]),
+      );
+    });
+  });
+
+  describe('3) Auto-Confirmación: YA subió comprobante y pasaron > 2 horas sin auditar', () => {
     it('NO debe liberar la cancha; debe AUTO-CONFIRMARLA con pendingAudit=true y asegurar slots (occupied)', async () => {
       const now = new Date();
       const bookingWithVoucher: Partial<Booking> = {

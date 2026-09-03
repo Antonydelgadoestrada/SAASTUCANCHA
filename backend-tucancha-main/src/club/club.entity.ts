@@ -103,10 +103,16 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
     yapeQrUrl?: string;
 
     @Column({ nullable: true })
+    yapeTitular?: string;
+
+    @Column({ nullable: true })
     plinNumero?: string;
 
     @Column({ nullable: true })
     plinQrUrl?: string;
+
+    @Column({ nullable: true })
+    plinTitular?: string;
 
     @Column({ type: 'int', default: 50 })
     porcentajeAdelantoDefault: number;

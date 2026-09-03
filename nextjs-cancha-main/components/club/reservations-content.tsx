@@ -36,13 +36,7 @@ import { toast } from "sonner"
 import { getAllCourtsByClub } from "@/lib/courts"
 import { cancelBooking, createReservationManual, getAllReservation, paymemtManual } from "@/lib/reservation"
 import { Skeleton } from "../ui/skeleton"
-
-const statusColors = {
-  confirmed: "bg-green-100 text-green-800 hover:bg-green-200",
-  pending: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
-  cancelled: "bg-red-100 text-red-800 hover:bg-red-200",
-  completed: "bg-blue-100 text-blue-800 hover:bg-blue-200",
-}
+import { BookingStatusBadge } from "@/components/ui/booking-status-badge"
 
 const paymentStatusColors = {
   paid: "bg-emerald-100 text-emerald-800",
@@ -168,14 +162,7 @@ export function ReservationsContent() {
   }
 
   const getStatusBadge = (status: string) => {
-    const statusLabels: Record<string, string> = {
-      confirmed: "Confirmada",
-      pending: "Pendiente",
-      cancelled: "Cancelada",
-      completed: "Completada",
-    }
-
-    return <Badge className={statusColors[status as keyof typeof statusColors]}>{statusLabels[status] || status}</Badge>
+    return <BookingStatusBadge status={status} />
   }
 
   const getPaymentStatusBadge = (status: string) => {
@@ -469,8 +456,18 @@ export function ReservationsContent() {
                 <TableRow key={reservation.id}>
                   <TableCell className="font-medium">{reservation.id}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{reservation.customerInfo.name}</div>
-                    <div className="text-sm text-muted-foreground">{reservation.customerInfo.email}</div>
+                    <div className="font-medium">{reservation.customerInfo?.name || "Sin nombre"}</div>
+                    <div className="text-xs text-muted-foreground">{reservation.customerInfo?.email}</div>
+                    {reservation.customerInfo?.phone && (
+                      <div className="text-xs text-muted-foreground font-mono flex items-center gap-1 mt-0.5">
+                        <span>📞 {reservation.customerInfo.phone}</span>
+                      </div>
+                    )}
+                    {(reservation.paymentMethod === "whatsapp" || reservation.payment?.metodo === "WHATSAPP" || reservation.payment?.method === "WHATSAPP") && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-300">
+                        💬 Coordinación WhatsApp (2h)
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div>{reservation.court.name}</div>

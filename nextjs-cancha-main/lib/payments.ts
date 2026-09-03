@@ -8,6 +8,7 @@ export type PaymentMethodEnum =
   | "PLIN"
   | "TRANSFERENCIA"
   | "EFECTIVO"
+  | "WHATSAPP"
 
 export type PaymentTypeEnum = "ADELANTO" | "SALDO" | "PAGO_COMPLETO"
 export type PaymentStatusEnum =
@@ -21,8 +22,10 @@ export interface ClubPaymentConfig {
   whatsapp?: string | null
   yapeNumero?: string | null
   yapeQrUrl?: string | null
+  yapeTitular?: string | null
   plinNumero?: string | null
   plinQrUrl?: string | null
+  plinTitular?: string | null
   porcentajeAdelantoDefault: number
   adelantoMinimo?: number | null
 }
@@ -58,12 +61,26 @@ export interface PaymentItem {
   fechaConfirmacion?: string | null
   autoConfirmed?: boolean
   pendingAudit?: boolean
+  // Liquidación del saldo restante
+  saldoStatus?: "PENDIENTE" | "PAGADO" | "NO_APLICA" | null
+  saldoAmount?: number | null
+  saldoMethod?: PaymentMethodEnum | string | null
+  saldoComprobanteUrl?: string | null
+  saldoFechaConfirmacion?: string | null
+  saldoNotas?: string | null
+  saldoConfirmadoPor?: { id: string; name: string } | null
   booking?: {
     id: string
     bookingReference?: string
     date?: string
     startTime?: string
     endTime?: string
+    pricing?: {
+      basePrice?: number
+      discounts?: number
+      taxes?: number
+      totalPrice?: number
+    }
     court?: { id: string; name: string }
     customerInfo?: { name: string; email: string; phone?: string }
     autoConfirmed?: boolean
@@ -114,7 +131,7 @@ export const getClubPaymentsList = async (
   return res.data
 }
 
-// ─── AUDITAR COMPROBANTE ──────────────────────────────────────────────────────
+// ─── AUDITAR COMPROBANTE INICIAL ──────────────────────────────────────────────
 
 export const confirmManualPayment = async (
   paymentId: string,
@@ -125,6 +142,35 @@ export const confirmManualPayment = async (
     action,
     motivoRechazo,
   })
+  return res.data
+}
+
+// ─── AUDITAR COMPROBANTE DE SALDO ─────────────────────────────────────────────
+
+export const confirmSaldoPayment = async (
+  paymentId: string,
+  action: "CONFIRMAR" | "RECHAZAR",
+  motivoRechazo?: string
+): Promise<{ status: string; message: string; payment: PaymentItem }> => {
+  const res = await api.patch(`/payments/${paymentId}/confirm-saldo`, {
+    action,
+    motivoRechazo,
+  })
+  return res.data
+}
+
+// ─── LIQUIDAR / COBRAR SALDO RESTANTE ────────────────────────────────────────
+
+export const settlePaymentSaldo = async (
+  paymentId: string,
+  data: {
+    monto?: number
+    metodo: PaymentMethodEnum | string
+    comprobanteUrl?: string
+    notas?: string
+  }
+): Promise<{ status: string; message: string; payment: PaymentItem }> => {
+  const res = await api.patch(`/payments/${paymentId}/settle-saldo`, data)
   return res.data
 }
 
@@ -172,14 +218,24 @@ export const uploadClubQr = async (
 export const createBookingPayment = async (
   bookingId: string,
   data: {
-    metodo: PaymentMethodEnum
-    tipo: PaymentTypeEnum
-    monto: number
+    metodo?: PaymentMethodEnum | string
+    method?: PaymentMethodEnum | string
+    tipo?: PaymentTypeEnum | string
+    type?: PaymentTypeEnum | string
+    monto?: number
+    amount?: number
     comprobanteUrl?: string
     currency?: string
   }
 ) => {
-  const res = await api.post(`/payments/booking/${bookingId}`, data)
+  const payload = {
+    metodo: data.metodo || data.method,
+    tipo: data.tipo || data.type,
+    monto: data.monto ?? data.amount,
+    comprobanteUrl: data.comprobanteUrl,
+    currency: data.currency,
+  }
+  const res = await api.post(`/payments/booking/${bookingId}`, payload)
   return res.data
 }
 
@@ -199,4 +255,32 @@ export const uploadPaymentReceipt = async (
     headers: { "Content-Type": "multipart/form-data" },
   })
   return res.data
+}
+
+// ─── HELPER PARA DESCARGAR IMÁGENES (QR / COMPROBANTES) ──────────────────────
+
+export async function downloadImage(url: string, defaultFilename: string = "descarga.png") {
+  if (!url) return
+  try {
+    const response = await fetch(url, { mode: "cors" })
+    if (!response.ok) throw new Error("Error en red")
+    const blob = await response.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = blobUrl
+    link.download = defaultFilename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err) {
+    // Fallback directo por si hay restricciones de CORS
+    const link = document.createElement("a")
+    link.href = url
+    link.target = "_blank"
+    link.download = defaultFilename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 }

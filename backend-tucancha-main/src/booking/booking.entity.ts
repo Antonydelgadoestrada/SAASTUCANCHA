@@ -39,7 +39,7 @@
     @Column()
     endTime: string;
   
-    @Column()
+    @Column({ type: 'float', default: 1 })
     duration: number;
   
     @Column('jsonb')
@@ -100,8 +100,8 @@
     @OneToOne(() => Review, (review) => review.booking)
     review?: Review;
 
-    @Column({ type: 'enum', enum: ['online', 'manual'], default: 'online' })
-    paymentMethod: 'online' | 'manual';
+    @Column({ default: 'online', nullable: true })
+    paymentMethod: 'online' | 'manual' | 'whatsapp' | string;
 
     @Column({ nullable: true })
     proofOfPaymentUrl?: string;
@@ -117,6 +117,12 @@
 
     @Column({ default: false })
     autoCancelled: boolean;
+
+    @Column({ default: false })
+    reminderSent: boolean;
+
+    @Column({ type: 'timestamp', nullable: true })
+    reminderSentAt?: Date;
   }
 
   

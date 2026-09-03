@@ -151,13 +151,16 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
       const courtObj = courts.find(c => c.id === selectedCourt || c.id === parseInt(selectedCourt));
       if (courtObj) {
         let basePrice = Number(courtObj.priceDay) || 0;
+        let promoPrice = Number(courtObj.promoDay) || 0;
         if (startTime) {
           const [h] = startTime.split(":").map(Number);
           if (h >= 18) {
             basePrice = Number(courtObj.priceNight) || basePrice;
+            promoPrice = Number(courtObj.promoNight) || 0;
           }
         }
-        const total = basePrice * parseFloat(duration);
+        const unitPrice = promoPrice > 0 && promoPrice < basePrice ? promoPrice : basePrice;
+        const total = unitPrice * parseFloat(duration);
         setPrice(total.toString());
       }
     } else {
@@ -187,7 +190,7 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
       courtId:selectedCourt,
       date:selectedDate?.toISOString() || "",
       startTime,
-      duration,
+      duration: parseFloat(duration) || 1,
       userEmail,
       "endTime":calculateEndTime(),
       pricing:{"taxes": 0, "basePrice": price, "discounts": 0, "totalPrice": price},

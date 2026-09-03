@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -19,7 +20,7 @@ import { UpdateMembershipPlanDto } from './dto/update-membership-plan.dto';
 import { Club } from '../club/club.entity';
 
 @Injectable()
-export class MembershipService {
+export class MembershipService implements OnModuleInit {
   private mercadopago: MercadoPagoConfig;
 
   constructor(
@@ -36,6 +37,46 @@ export class MembershipService {
     this.mercadopago = new MercadoPagoConfig({
       accessToken: process.env.MP_ACCESS_TOKEN || '',
     });
+  }
+
+  async onModuleInit() {
+    try {
+      // 1. Asegurar que membershipId en membership_payments sea NULLABLE en base de datos
+      await this.paymentRepo.query(
+        'ALTER TABLE membership_payments ALTER COLUMN "membershipId" DROP NOT NULL;',
+      ).catch(() => {});
+
+      // 2. Corregir planes anuales existentes a mensuales
+      const annualPlans = await this.planRepo.find({
+        where: [
+          { name: 'Plan Pro Anual' },
+          { interval: BillingInterval.ANNUAL },
+        ],
+      });
+      for (const plan of annualPlans) {
+        plan.name = 'Plan Pro Mensual';
+        plan.interval = BillingInterval.MONTHLY;
+        await this.planRepo.save(plan);
+      }
+
+      // 3. Corregir membresías de clubes existentes con vigencia de 1 año (> 35 días) a 1 mes
+      const allMemberships = await this.membershipRepo.find({
+        relations: ['plan'],
+      });
+      for (const m of allMemberships) {
+        const start = new Date(m.startDate);
+        const end = new Date(m.endDate);
+        const diffInDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+        if (diffInDays > 35) {
+          const newEnd = addMonths(start, 1);
+          m.endDate = newEnd;
+          m.graceEndDate = addDays(newEnd, m.plan?.graceDays || 7);
+          await this.membershipRepo.save(m);
+        }
+      }
+    } catch (e) {
+      // Ignorar errores durante inicialización si la BD aún no migró
+    }
   }
 
   // ----------------------------------------------------
@@ -264,10 +305,14 @@ export class MembershipService {
       throw new BadRequestException('Este plan de membresía no está activo actualmente');
     }
 
+    const currentActive = await this.getClubActiveMembership(clubId);
+
     // 1. Crear registro de pago pendiente
     const payment = this.paymentRepo.create({
       clubId,
       club,
+      membershipId: currentActive?.id || undefined,
+      membership: currentActive || undefined,
       planId: plan.id,
       plan,
       amount: Number(plan.price),

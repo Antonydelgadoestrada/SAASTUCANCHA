@@ -20,6 +20,12 @@ export enum PaymentType {
   PAGO_COMPLETO = 'PAGO_COMPLETO',
 }
 
+export enum SaldoStatus {
+  PENDIENTE = 'PENDIENTE',
+  PAGADO = 'PAGADO',
+  NO_APLICA = 'NO_APLICA',
+}
+
 @Entity()
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
@@ -34,7 +40,7 @@ export class Payment {
   user: User;
 
   // Monto total del pago
-  @Column()
+  @Column({ type: 'float', default: 0 })
   amount: number;
 
   // Moneda, ej. 'PEN'
@@ -93,6 +99,36 @@ export class Payment {
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'confirmadoPorId' })
   confirmadoPor?: User;
+
+  // ─── CONTROL Y LIQUIDACIÓN DE SALDO RESTANTE ───
+  // Estado de liquidación del saldo restante
+  @Column({ type: 'varchar', default: 'PENDIENTE', nullable: true })
+  saldoStatus?: string; // 'PENDIENTE' | 'PAGADO' | 'NO_APLICA'
+
+  // Monto cobrado al liquidar el saldo restante
+  @Column({ type: 'float', default: 0, nullable: true })
+  saldoAmount?: number;
+
+  // Método con el que se cobró el saldo restante (EFECTIVO, YAPE, PLIN, TRANSFERENCIA, MERCADOPAGO)
+  @Column({ nullable: true })
+  saldoMethod?: string;
+
+  // Comprobante de cancelación de saldo (opcional)
+  @Column({ nullable: true })
+  saldoComprobanteUrl?: string;
+
+  // Fecha en que se cobró o confirmó el saldo restante
+  @Column({ type: 'timestamp', nullable: true })
+  saldoFechaConfirmacion?: Date;
+
+  // Notas adicionales del cobro del saldo (ej. "Cobrado en efectivo en recepción")
+  @Column({ nullable: true })
+  saldoNotas?: string;
+
+  // Usuario del club que cobró/confirmó el saldo restante
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'saldoConfirmadoPorId' })
+  saldoConfirmadoPor?: User;
 
   @Column({ default: false })
   autoConfirmed: boolean;

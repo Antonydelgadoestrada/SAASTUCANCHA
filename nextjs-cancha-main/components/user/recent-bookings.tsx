@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { parseSafeDate, formatSafeDate } from "@/lib/utils"
+import { BookingStatusBadge } from "@/components/ui/booking-status-badge"
 
 interface UserRecentBookingsProps {
   bookings: any[]
@@ -43,29 +44,7 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "completed":
-      case "confirmed":
-        return (
-          <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600 flex w-fit items-center gap-1">
-            <CheckCircleIcon className="h-3 w-3" />
-            <span>Completada</span>
-          </Badge>
-        )
-      case "cancelled":
-        return (
-          <Badge variant="destructive" className="flex w-fit items-center gap-1">
-            <XCircleIcon className="h-3 w-3" />
-            <span>Cancelada</span>
-          </Badge>
-        )
-      default:
-        return (
-          <Badge variant="secondary" className="flex w-fit items-center gap-1">
-            <span>Finalizada</span>
-          </Badge>
-        )
-    }
+    return <BookingStatusBadge status={status} />
   }
 
   return (

@@ -18,6 +18,7 @@ import { PaymentStatus } from '../payment/payment-status.enum';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+import { BillingInterval } from '../membership/enums/billing-interval.enum';
 import { MembershipPlan } from '../membership/entities/membership_plan.entity';
 import { ClubMembership } from '../membership/entities/club_membership.entity';
 import { MembershipPayment } from '../membership/entities/membership_payment.entity';
@@ -113,11 +114,11 @@ await AppDataSource.query(`
   const membershipRepo = AppDataSource.getRepository(ClubMembership);
 
   const planPro = planRepo.create({
-    name: 'Plan Pro Anual',
+    name: 'Plan Pro Mensual',
     description: 'Acceso total a gestión de canchas, reservas y pagos automatizados',
     price: 120,
     currency: 'PEN',
-    interval: 'ANNUAL' as any,
+    interval: BillingInterval.MONTHLY,
     graceDays: 7,
     maxCourts: 10,
     features: ['Gestión de horarios', 'Pasarela de pago', 'Soporte prioritario'],
@@ -156,8 +157,8 @@ await AppDataSource.query(`
     plan: planPro,
     status: 'ACTIVE' as any,
     startDate: new Date(),
-    endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-    graceEndDate: new Date(Date.now() + 372 * 24 * 60 * 60 * 1000),
+    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    graceEndDate: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000),
     autoRenew: true,
   });
   await membershipRepo.save(clubMembership);

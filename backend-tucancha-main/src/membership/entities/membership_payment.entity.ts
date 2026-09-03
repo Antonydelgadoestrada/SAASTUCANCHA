@@ -27,12 +27,12 @@ export class MembershipPayment {
   club: Club;
 
   @Index()
-  @Column()
-  membershipId: string;
+  @Column({ nullable: true })
+  membershipId?: string;
 
-  @ManyToOne(() => ClubMembership, (membership) => membership.payments, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ClubMembership, (membership) => membership.payments, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'membershipId' })
-  membership: ClubMembership;
+  membership?: ClubMembership;
 
   @Index()
   @Column()

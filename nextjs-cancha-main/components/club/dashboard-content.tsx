@@ -15,6 +15,8 @@ import {
   TrophyIcon,
   ArrowRightIcon,
   UserIcon,
+  Flame,
+  Snowflake,
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -31,7 +33,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subDays } from "date-fns"
 
 import { ClubBookingsChart } from "./bookings-chart"
+import { DemandPeakChart } from "./demand-peak-chart"
 import { ClubPopularCourts, formatSoles } from "./popular-courts"
+import { HourlyOccupancyView } from "./hourly-occupancy-view"
 import { DateRange } from "react-day-picker"
 import { getBookingsReportByClub, getCountByClub, getDailyStatsByClub, getDashboardSummary, getPopularCourtsByClub } from "@/lib/dashboard"
 import { getAllReservation } from "@/lib/reservation"
@@ -696,34 +700,61 @@ export function ClubDashboardContent() {
       </section>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Resumen</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="overview">Resumen General</TabsTrigger>
+          <TabsTrigger value="occupancy" className="gap-1.5">
+            <span className="flex items-center gap-1">
+              <Flame className="h-3.5 w-3.5 text-amber-500" />
+              Horarios Pico & Muertos
+              <Snowflake className="h-3.5 w-3.5 text-sky-500" />
+            </span>
+          </TabsTrigger>
         </TabsList>
+
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <Card className="col-span-4 lg:col-span-4 shadow-sm border-0 ring-1 ring-border/50">
-              <CardHeader>
-                <CardTitle>Ingresos Estimados (Mensual)</CardTitle>
-              </CardHeader>
-              <CardContent className="pl-2">
-                <ClubBookingsChart data={stats} />
-              </CardContent>
-            </Card>
-          
+          {/* Banner de acceso rápido al análisis de Horarios Muertos */}
+          <div className="p-4 rounded-xl border bg-gradient-to-r from-amber-500/10 via-sky-500/10 to-emerald-500/10 dark:from-amber-950/20 dark:via-sky-950/20 dark:to-emerald-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="font-bold text-sm flex items-center gap-1.5 text-slate-800 dark:text-slate-100">
+                <Flame className="h-4 w-4 text-amber-500" />
+                <span>¿Quieres saber qué horas quedan vacías y cuáles se llenan siempre?</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Descubre el mapa de calor semanal por deporte y detecta franjas muertas para activar precios promocionales.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setActiveTab("occupancy")}
+              className="bg-primary text-primary-foreground text-xs shrink-0"
+            >
+              Ver Horarios Muertos & Pico <ArrowRightIcon className="ml-1 h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {/* Diagrama de Curvas de Picos y Valles (Ingresos y Reservas) */}
+          <div className="space-y-4">
+            <DemandPeakChart />
           </div>
        
-          <div className="grid gap-4 ">
-            <Card className="">
-              <CardHeader>
-                <CardTitle>Canchas Populares</CardTitle>
+          <div className="grid gap-4">
+            <Card className="shadow-sm border-slate-200 dark:border-slate-800">
+              <CardHeader className="pb-3 border-b">
+                <CardTitle className="text-base font-bold">Rendimiento por Canchas (Ocupación Global)</CardTitle>
+                <CardDescription className="text-xs">
+                  Porcentaje de ocupación acumulado e ingresos generados por cada cancha.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 <ClubPopularCourts popularCourts={popularCourts}/>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
+        <TabsContent value="occupancy" className="space-y-4">
+          <HourlyOccupancyView />
+        </TabsContent>
       </Tabs>
     </div>
   )

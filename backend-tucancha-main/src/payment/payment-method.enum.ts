@@ -7,4 +7,5 @@ export enum PaymentMethod {
   CASH = 'CASH',
   EFECTIVO = 'EFECTIVO',
   MERCADOPAGO = 'MERCADOPAGO',
+  WHATSAPP = 'WHATSAPP',
 }

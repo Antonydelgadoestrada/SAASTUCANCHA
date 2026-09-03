@@ -148,17 +148,22 @@ export class PaymentService {
   
   async confirmPayment(dto: any){
     const booking = await this.bookingService.findOneComplete(dto.id);
-    return await this.confirmPreference(booking)
+    const amount = dto.amount ? Number(dto.amount) : undefined;
+    return await this.confirmPreference(booking, amount)
   }
 
-  async confirmPreference(booking:Booking){
+  async confirmPreference(booking: Booking, customAmount?: number){
     if (!booking.club || !booking.club.mpAccessToken) {
       throw new BadRequestException('El club no tiene Mercado Pago conectado');
     }
     const mpAccessToken = booking.club.mpAccessToken;
-    const totalPrice = booking.pricing.totalPrice;
+    const finalAmount = customAmount && customAmount > 0 ? customAmount : (booking.pricing?.totalPrice ?? 0);
+    const isSaldo = customAmount && booking.pricing?.totalPrice && customAmount < booking.pricing.totalPrice;
+    const title = isSaldo
+      ? `Saldo restante - ${booking.court?.name || "Cancha"}`
+      : `Reserva en ${booking.court?.name || "Cancha"}`;
     const bookingId = booking.id;
-    const email = booking.user.email;
+    const email = booking.user?.email || "";
     // 2. Crear una instancia temporal de MercadoPago con el token del club
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
@@ -170,13 +175,13 @@ export class PaymentService {
       body: {
         items: [
           {
-            id: booking.court.id,
-            title: `Reserva en ${booking.court.name}`,
-            description: `Club: ${booking.club.name} | fecha: ${booking.date} | Superficie: ${booking.court.surface} | Duracion: ${booking.startTime}-${booking.endTime}`,
+            id: booking.court?.id || "court",
+            title: title,
+            description: `Club: ${booking.club?.name || ""} | fecha: ${booking.date} | Superficie: ${booking.court?.surface || ""} | Duracion: ${booking.startTime}-${booking.endTime}`,
             quantity: 1,
             category_id: 'services',
             currency_id: 'PEN',
-            unit_price: totalPrice,
+            unit_price: finalAmount,
           },
         ],
         payer: {
@@ -374,11 +379,7 @@ export class PaymentService {
 
     const payments = await this.paymentRepo.find({
       where: { booking: { club: { id: clubId } } },
-      relations: ['booking', 'booking.club', 'user'],
-    });
-
-    const bookings = await this.bookingRepo.find({
-      where: { club: { id: clubId } },
+      relations: ['booking', 'booking.club', 'booking.court', 'user'],
     });
 
     let totalRecaudado = 0;
@@ -390,12 +391,39 @@ export class PaymentService {
     let comprobantesPendientesCount = 0;
     let totalConfirmadosCount = 0;
     let totalRechazadosCount = 0;
+    let saldoPendienteTotal = 0;
 
     for (const p of payments) {
       const isConfirmed = p.status === PaymentStatus.PAID || (p.status as string) === 'CONFIRMADO';
       const isPending = p.status === PaymentStatus.PENDING || (p.status as string) === 'PENDIENTE';
       const isRejected = p.status === PaymentStatus.REJECTED || (p.status as string) === 'RECHAZADO';
       const amount = Number(p.amount) || 0;
+      const isSaldoPaid = p.saldoStatus === 'PAGADO';
+      const saldoAmount = Number(p.saldoAmount || 0);
+
+      // Calcular precio total de la reserva
+      let totalPrice = 0;
+      if (typeof p.booking?.pricing === 'object' && p.booking?.pricing !== null) {
+        totalPrice = Number((p.booking.pricing as any).totalPrice ?? (p.booking.pricing as any).basePrice);
+      } else if (typeof p.booking?.pricing === 'string') {
+        try {
+          const parsed = JSON.parse(p.booking.pricing);
+          totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
+        } catch {}
+      }
+      if (isNaN(totalPrice) || totalPrice <= 0) {
+        const courtPrice = Number(p.booking?.court?.priceDay || p.booking?.court?.priceNight || 0);
+        const dur = Number(p.booking?.duration || 1);
+        totalPrice = courtPrice * dur * 2;
+      }
+      if (isNaN(totalPrice) || totalPrice <= 0) {
+        totalPrice = amount;
+      }
+
+      // Si la reserva no está rechazada y el saldo NO está liquidado, sumar lo que falta a saldo por cobrar
+      if (!isRejected && !isSaldoPaid && (p.type === PaymentType.ADELANTO || totalPrice > amount)) {
+        saldoPendienteTotal += Math.max(0, totalPrice - amount);
+      }
 
       if (isConfirmed) {
         totalRecaudado += amount;
@@ -405,6 +433,17 @@ export class PaymentService {
         else if ((p.method as string) === 'TRANSFERENCIA') recaudadoTransfer += amount;
         else if ((p.method as string) === 'EFECTIVO') recaudadoEfectivo += amount;
         else recaudadoMercadoPago += amount;
+
+        // Si se cobró saldo restante adicional, sumarlo a recaudación y al método correspondiente
+        if (isSaldoPaid && saldoAmount > 0) {
+          totalRecaudado += saldoAmount;
+          const sMethod = (p.saldoMethod || 'EFECTIVO').toUpperCase();
+          if (sMethod.includes('YAPE')) recaudadoYape += saldoAmount;
+          else if (sMethod.includes('PLIN')) recaudadoPlin += saldoAmount;
+          else if (sMethod.includes('TRANSFER')) recaudadoTransfer += saldoAmount;
+          else if (sMethod.includes('EFECTIVO')) recaudadoEfectivo += saldoAmount;
+          else recaudadoMercadoPago += saldoAmount;
+        }
       } else if (isPending) {
         comprobantesPendientesCount++;
       } else if (isRejected) {
@@ -413,7 +452,6 @@ export class PaymentService {
     }
 
     const recaudadoManual = recaudadoYape + recaudadoPlin + recaudadoTransfer + recaudadoEfectivo;
-    const saldoPendienteTotal = bookings.reduce((sum, b) => sum + (Number((b as any).saldoPendiente) || 0), 0);
 
     return {
       clubId,
@@ -452,6 +490,7 @@ export class PaymentService {
       .leftJoinAndSelect('booking.user', 'customer')
       .leftJoinAndSelect('payment.user', 'payer')
       .leftJoinAndSelect('payment.confirmadoPor', 'confirmadoPor')
+      .leftJoinAndSelect('payment.saldoConfirmadoPor', 'saldoConfirmadoPor')
       .orderBy('payment.createdAt', 'DESC');
 
     if (clubId) {
@@ -567,58 +606,95 @@ export class PaymentService {
       safeMethod = PaymentMethod.YAPE;
     }
 
+    // Calcular monto seguro numérico a pagar
+    let safeAmount = Number(dto.amount ?? dto.monto);
+
+    // Calcular precio total de la reserva
+    let totalPrice = 0;
+    if (typeof booking.pricing === 'object' && booking.pricing !== null) {
+      totalPrice = Number((booking.pricing as any).totalPrice ?? (booking.pricing as any).basePrice);
+    } else if (typeof booking.pricing === 'string') {
+      try {
+        const parsed = JSON.parse(booking.pricing);
+        totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
+      } catch {}
+    }
+    if (isNaN(totalPrice) || totalPrice <= 0) {
+      const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
+      const dur = Number(booking.duration || 1);
+      totalPrice = courtPrice * dur * 2;
+    }
+
+    if (isNaN(safeAmount) || safeAmount <= 0) {
+      safeAmount = totalPrice > 0 ? totalPrice : 0;
+    }
+
     // Parse safe type
-    const rawType = (dto.type || dto.tipo || 'PAGO_COMPLETO').toString().toUpperCase();
+    const rawType = (dto.type || dto.tipo || '').toString().toUpperCase();
     let safeType: PaymentType = PaymentType.PAGO_COMPLETO;
-    if (rawType.includes('ADELANTO')) {
-      safeType = PaymentType.ADELANTO;
-    } else if (rawType.includes('SALDO')) {
+    if (rawType.includes('SALDO')) {
       safeType = PaymentType.SALDO;
+    } else if (rawType.includes('ADELANTO') || (totalPrice > 0 && safeAmount < totalPrice - 0.01)) {
+      safeType = PaymentType.ADELANTO;
     } else {
       safeType = PaymentType.PAGO_COMPLETO;
     }
 
-    // Calcular monto seguro numérico
-    let safeAmount = Number(dto.amount ?? dto.monto);
-    if (isNaN(safeAmount) || safeAmount <= 0) {
-      if (typeof booking.pricing === 'object' && booking.pricing !== null) {
-        safeAmount = Number(booking.pricing.totalPrice ?? booking.pricing.basePrice);
-      } else if (typeof booking.pricing === 'string') {
-        try {
-          const parsed = JSON.parse(booking.pricing);
-          safeAmount = Number(parsed?.totalPrice ?? parsed?.basePrice);
-        } catch {}
-      }
-      if (isNaN(safeAmount) || safeAmount <= 0) {
-        const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
-        const dur = Number(booking.duration || 1);
-        safeAmount = courtPrice * dur * 2;
-      }
-    }
-    if (isNaN(safeAmount) || safeAmount < 0) {
-      safeAmount = 0;
-    }
-
-    const payment = this.paymentRepo.create({
-      booking,
-      user,
-      amount: safeAmount,
-      currency: dto.currency || 'PEN',
-      method: safeMethod,
-      paymentMethod: safeMethod,
-      status: PaymentStatus.PENDING,
-      type: safeType,
-      comprobanteUrl: dto.comprobanteUrl,
-      pendingAudit: true,
-      autoConfirmed: false,
+    let savedPayment: Payment;
+    const existing = booking.payment || await this.paymentRepo.findOne({
+      where: { booking: { id: dto.bookingId } },
+      relations: ['booking', 'user'],
     });
 
-    const savedPayment = await this.paymentRepo.save(payment);
+    if (existing) {
+      // Si la reserva ya tiene un registro de pago asociado
+      if (safeType === PaymentType.SALDO || rawType.includes('SALDO')) {
+        // Es la cancelación o comprobante del saldo restante
+        existing.saldoAmount = safeAmount;
+        existing.saldoMethod = safeMethod;
+        existing.saldoComprobanteUrl = dto.comprobanteUrl;
+        existing.saldoStatus = 'PENDIENTE';
+        existing.saldoNotas = 'Comprobante de saldo enviado por el cliente';
+        existing.saldoFechaConfirmacion = new Date();
+      } else {
+        // Actualización de comprobante inicial
+        existing.amount = safeAmount;
+        existing.method = safeMethod;
+        existing.paymentMethod = safeMethod;
+        existing.status = PaymentStatus.PENDING;
+        existing.type = safeType;
+        existing.comprobanteUrl = dto.comprobanteUrl;
+        existing.pendingAudit = true;
+        existing.autoConfirmed = false;
+      }
+      savedPayment = await this.paymentRepo.save(existing);
+    } else {
+      // Crear nuevo pago
+      const payment = this.paymentRepo.create({
+        booking,
+        user,
+        amount: safeAmount,
+        currency: dto.currency || 'PEN',
+        method: safeMethod,
+        paymentMethod: safeMethod,
+        status: PaymentStatus.PENDING,
+        type: safeType,
+        comprobanteUrl: dto.comprobanteUrl,
+        pendingAudit: true,
+        autoConfirmed: false,
+      });
+      savedPayment = await this.paymentRepo.save(payment);
+    }
 
-    // Actualizar estado de la reserva a pendiente de verificación
+    // Actualizar estado de la reserva
     booking.payment = savedPayment;
     booking.paymentMethod = 'manual';
-    booking.paymentStatus = PaymentStatus.PENDING;
+    if (safeType !== PaymentType.SALDO) {
+      booking.paymentStatus = PaymentStatus.PENDING;
+    }
+    if (dto.comprobanteUrl) {
+      booking.proofOfPaymentUrl = dto.comprobanteUrl;
+    }
     await this.bookingRepo.save(booking);
 
     // Retener slots en calendario
@@ -636,7 +712,9 @@ export class PaymentService {
     }
 
     return {
-      message: 'Comprobante registrado exitosamente. El club validará tu pago.',
+      message: safeType === PaymentType.SALDO 
+        ? 'Comprobante de saldo restante enviado exitosamente. El club validará tu pago.'
+        : 'Comprobante registrado exitosamente. El club validará tu pago.',
       payment: savedPayment,
     };
   }
@@ -669,14 +747,29 @@ export class PaymentService {
 
     if (action === 'CONFIRMAR') {
       payment.status = PaymentStatus.PAID;
+      payment.pendingAudit = false;
       payment.fechaConfirmacion = new Date();
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = null;
 
+      if (payment.type === PaymentType.PAGO_COMPLETO) {
+        payment.saldoStatus = 'PAGADO';
+        payment.saldoAmount = 0;
+      } else if (payment.type === PaymentType.ADELANTO && !payment.saldoStatus) {
+        payment.saldoStatus = 'PENDIENTE';
+      }
+
       // Confirmar reserva asociada
       if (payment.booking) {
         payment.booking.status = BookingStatus.CONFIRMED;
-        payment.booking.paymentStatus = PaymentStatus.PAID;
+        payment.booking.pendingAudit = false;
+
+        if (payment.type === PaymentType.PAGO_COMPLETO || payment.saldoStatus === 'PAGADO') {
+          payment.booking.paymentStatus = PaymentStatus.PAID;
+        } else if (payment.type === PaymentType.ADELANTO && payment.saldoStatus !== 'PAGADO') {
+          payment.booking.paymentStatus = PaymentStatus.PENDING;
+        }
+
         await this.bookingRepo.save(payment.booking);
 
         if (payment.booking.court && payment.booking.date && payment.booking.startTime) {
@@ -694,12 +787,15 @@ export class PaymentService {
       }
     } else {
       payment.status = PaymentStatus.REJECTED;
+      payment.pendingAudit = false;
       payment.fechaConfirmacion = new Date();
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = motivoRechazo || null;
+      payment.saldoStatus = 'NO_APLICA';
 
       if (payment.booking) {
         payment.booking.paymentStatus = PaymentStatus.REJECTED;
+        payment.booking.pendingAudit = false;
         await this.bookingRepo.save(payment.booking);
       }
     }
@@ -709,6 +805,144 @@ export class PaymentService {
     return {
       status: saved.status,
       message: action === 'CONFIRMAR' ? 'Pago confirmado exitosamente' : 'Pago rechazado',
+      payment: saved,
+    };
+  }
+
+  /**
+   * Auditar el comprobante de saldo restante subido por el usuario.
+   * CONFIRMAR → saldoStatus = PAGADO, si el pago inicial también está confirmado → PAGO COMPLETO
+   * RECHAZAR → saldoStatus = RECHAZADO, el usuario deberá re-enviar
+   */
+  async auditSaldoComprobante(
+    paymentId: string,
+    action: 'CONFIRMAR' | 'RECHAZAR',
+    auditor: User,
+    motivoRechazo?: string,
+  ) {
+    const payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+    });
+    if (!payment) throw new BadRequestException('Pago no encontrado');
+
+    if (action === 'CONFIRMAR') {
+      payment.saldoStatus = 'PAGADO';
+      payment.saldoConfirmadoPor = auditor;
+      payment.saldoFechaConfirmacion = new Date();
+
+      // Si el comprobante inicial ya fue aprobado → pago completo
+      const initialConfirmed =
+        payment.status === PaymentStatus.PAID ||
+        String(payment.status).toUpperCase() === 'CONFIRMADO' ||
+        String(payment.status).toUpperCase() === 'CONFIRMED';
+
+      if (payment.booking) {
+        if (initialConfirmed) {
+          // Ambos pagos confirmados → PAGO COMPLETO
+          payment.booking.paymentStatus = PaymentStatus.PAID;
+          payment.booking.status = BookingStatus.CONFIRMED;
+        }
+        await this.bookingRepo.save(payment.booking);
+      }
+    } else {
+      // RECHAZAR
+      payment.saldoStatus = 'RECHAZADO';
+      payment.saldoNotas = motivoRechazo || 'Comprobante de saldo rechazado por el club';
+      payment.saldoFechaConfirmacion = new Date();
+      payment.saldoConfirmadoPor = auditor;
+    }
+
+    const saved = await this.paymentRepo.save(payment);
+
+    return {
+      status: saved.saldoStatus,
+      message: action === 'CONFIRMAR'
+        ? 'Comprobante de saldo confirmado exitosamente'
+        : 'Comprobante de saldo rechazado',
+      payment: saved,
+    };
+  }
+
+  /**
+   * Confirmar la liquidación / cobro del saldo restante de una reserva con adelanto
+   */
+  async settleManualSaldo(
+    paymentId: string,
+    dto: {
+      monto?: number;
+      metodo?: string;
+      comprobanteUrl?: string;
+      notas?: string;
+    },
+    auditor: User,
+  ) {
+    const payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+    });
+    if (!payment) throw new BadRequestException('Pago no encontrado');
+
+    // Calcular precio total de la reserva
+    let totalPrice = 0;
+    if (typeof payment.booking?.pricing === 'object' && payment.booking?.pricing !== null) {
+      totalPrice = Number((payment.booking.pricing as any).totalPrice ?? (payment.booking.pricing as any).basePrice);
+    } else if (typeof payment.booking?.pricing === 'string') {
+      try {
+        const parsed = JSON.parse(payment.booking.pricing);
+        totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
+      } catch {}
+    }
+    if (isNaN(totalPrice) || totalPrice <= 0) {
+      const courtPrice = Number(payment.booking?.court?.priceDay || payment.booking?.court?.priceNight || 0);
+      const dur = Number(payment.booking?.duration || 1);
+      totalPrice = courtPrice * dur * 2;
+    }
+    if (isNaN(totalPrice) || totalPrice <= 0) {
+      totalPrice = Number(payment.amount || 0);
+    }
+
+    const initialAmount = Number(payment.amount || 0);
+    const calculatedRemaining = Math.max(0, Number((totalPrice - initialAmount).toFixed(2)));
+    const settleAmount = Number(dto.monto != null ? dto.monto : calculatedRemaining);
+
+    // Si el comprobante inicial estaba pendiente, se auto-valida al momento de liquidar
+    if (payment.status === PaymentStatus.PENDING || (payment.status as string) === 'PENDIENTE') {
+      payment.status = PaymentStatus.PAID;
+      payment.fechaConfirmacion = new Date();
+      payment.confirmadoPor = auditor;
+    }
+
+    // Normalizar método de saldo
+    const rawMethod = (dto.metodo || 'EFECTIVO').toString().toUpperCase();
+    let safeMethod = 'EFECTIVO';
+    if (rawMethod.includes('YAPE')) safeMethod = 'YAPE';
+    else if (rawMethod.includes('PLIN')) safeMethod = 'PLIN';
+    else if (rawMethod.includes('TRANSFER')) safeMethod = 'TRANSFERENCIA';
+    else if (rawMethod.includes('CARD') || rawMethod.includes('POS') || rawMethod.includes('TARJETA')) safeMethod = 'CARD';
+    else if (rawMethod.includes('MERCADO')) safeMethod = 'MERCADOPAGO';
+    else safeMethod = 'EFECTIVO';
+
+    payment.saldoStatus = 'PAGADO';
+    payment.saldoAmount = settleAmount;
+    payment.saldoMethod = safeMethod;
+    payment.saldoComprobanteUrl = dto.comprobanteUrl || null;
+    payment.saldoNotas = dto.notas || null;
+    payment.saldoFechaConfirmacion = new Date();
+    payment.saldoConfirmadoPor = auditor;
+
+    // Actualizar estado de la reserva
+    if (payment.booking) {
+      payment.booking.status = BookingStatus.CONFIRMED;
+      payment.booking.paymentStatus = PaymentStatus.PAID;
+      await this.bookingRepo.save(payment.booking);
+    }
+
+    const saved = await this.paymentRepo.save(payment);
+
+    return {
+      status: 'PAGADO',
+      message: 'Saldo restante liquidado y registrado exitosamente',
       payment: saved,
     };
   }
