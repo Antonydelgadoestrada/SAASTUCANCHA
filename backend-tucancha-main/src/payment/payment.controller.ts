@@ -189,6 +189,30 @@ import { memoryStorage, File as MulterFile } from 'multer';
     }
 
     /**
+     * PATCH & PUT /payments/:id/confirm-saldo
+     * Auditar comprobante de saldo — Confirmar o Rechazar el comprobante de saldo subido por el usuario
+     */
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/confirm-saldo')
+    async auditSaldoPatch(
+      @Param('id') id: string,
+      @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
+      @GetUser() user: User,
+    ) {
+      return this.service.auditSaldoComprobante(id, dto.action, user, dto.motivoRechazo);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Put(':id/confirm-saldo')
+    async auditSaldoPut(
+      @Param('id') id: string,
+      @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
+      @GetUser() user: User,
+    ) {
+      return this.service.auditSaldoComprobante(id, dto.action, user, dto.motivoRechazo);
+    }
+
+    /**
      * POST /payments/upload-comprobante
      * Subida de imagen de comprobante de pago por el usuario a S3
      */

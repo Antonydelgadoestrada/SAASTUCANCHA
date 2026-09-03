@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Booking } from './booking.entity';
 import { Repository } from 'typeorm';
@@ -23,7 +23,7 @@ function generateTimeSlots(start: string, duration: number): string[] {
   const [hours, minutes] = start.split(':').map(Number);
   const startDate = new Date(0, 0, 0, hours, minutes);
 
-  const numberOfSlots = duration * 2; // porque 0.5h = 30min
+  const numberOfSlots = Math.round(duration * 2); // porque 0.5h = 30min
   const slots: string[] = [];
 
   for (let i = 0; i < numberOfSlots; i++) {
@@ -50,7 +50,7 @@ const getEndTime = (startTime: string, duration: number): string => {
 
 
 @Injectable()
-export class BookingService {
+export class BookingService implements OnModuleInit {
   
   constructor(
     @InjectRepository(Booking)
@@ -62,9 +62,29 @@ export class BookingService {
 
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
-
-
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.bookingRepo.query(`
+        DO $$ 
+        BEGIN 
+          BEGIN
+            ALTER TABLE "booking" ALTER COLUMN "duration" TYPE double precision USING "duration"::double precision;
+          EXCEPTION WHEN OTHERS THEN 
+            NULL;
+          END;
+          BEGIN
+            ALTER TABLE "payment" ALTER COLUMN "amount" TYPE double precision USING "amount"::double precision;
+          EXCEPTION WHEN OTHERS THEN 
+            NULL;
+          END;
+        END $$;
+      `);
+    } catch (e: any) {
+      console.warn('DB alter column warning:', e?.message);
+    }
+  }
 
   async checkAvailability(courtId: string, date: Date, startTime: string, duration:number) {
     const times = generateTimeSlots(startTime, duration); // ← Generamos bloques
@@ -116,78 +136,89 @@ export class BookingService {
       `public/bookings`)
   }
 
- async createObjectBooking(dto: any, user: User){
-  const { userEmail, duration, startTime, courtId, date, customerInfo } = dto;
-  const userReservation = await this.userService.findByEmail(userEmail);
-  if(!userReservation) throw new NotFoundException(`email: ${userEmail} no encontrado`)
-  const court: any = await this.courtService.findOne(courtId , ['club']);
-  const endTime = getEndTime(startTime, duration);
-  if (!court) throw new NotFoundException('Cancha no encontrada');
-  const price = isNight()
-  ? court.promoNight ?? court.priceNight
-  : court.promoDay ?? court.priceDay;
+  async createObjectBooking(dto: any, user: User){
+    const { userEmail, duration, startTime, courtId, date, customerInfo } = dto;
+    const userReservation = await this.userService.findByEmail(userEmail);
+    if(!userReservation) throw new NotFoundException(`email: ${userEmail} no encontrado`);
+    const court: any = await this.courtService.findOne(courtId , ['club']);
+    const parsedDuration = Number(duration) || 1;
+    const endTime = getEndTime(startTime, parsedDuration);
+    if (!court) throw new NotFoundException('Cancha no encontrada');
 
-  return {
-    user,
-    court,
-    club: court.club,
-    date: new Date(date),
-    startTime: startTime,
-    endTime: endTime,
-    duration: duration,
-    customerInfo:{
-      name: customerInfo?.name || dto.name || userReservation.name || user?.name || 'Cliente',
-      email: customerInfo?.email || dto.email || userReservation.email || user?.email,
-      phone: customerInfo?.phone || dto.phone || userReservation.phone || user?.phone || '',
-      notes: customerInfo?.notes || dto.notes || '',
-    },
-    pricing:{
-      basePrice: +price,
-      discounts: 0,
-      taxes: 0,
-      totalPrice: +price*duration*2
-    },
-    bookingReference: `REF-${Date.now()}`,
+    const isNightTime = isNight(startTime);
+    const regularSlotPrice = Number(isNightTime ? (court.priceNight ?? court.priceDay) : court.priceDay) || 0;
+    const promoSlotPrice = Number(isNightTime ? court.promoNight : court.promoDay);
+    const hasPromo = !isNaN(promoSlotPrice) && promoSlotPrice > 0 && promoSlotPrice < regularSlotPrice;
+    const unitSlotPrice = hasPromo ? promoSlotPrice : regularSlotPrice;
+
+    const slotCount = Math.round(parsedDuration * 2);
+    const regularTotalPrice = Number((regularSlotPrice * slotCount).toFixed(2));
+    const finalTotalPrice = Number((unitSlotPrice * slotCount).toFixed(2));
+    const discountAmount = Math.max(0, Number((regularTotalPrice - finalTotalPrice).toFixed(2)));
+
+    return {
+      user,
+      court,
+      club: court.club,
+      date: new Date(date),
+      startTime: startTime,
+      endTime: endTime,
+      duration: parsedDuration,
+      customerInfo:{
+        name: customerInfo?.name || dto.name || userReservation.name || user?.name || 'Cliente',
+        email: customerInfo?.email || dto.email || userReservation.email || user?.email,
+        phone: customerInfo?.phone || dto.phone || userReservation.phone || user?.phone || '',
+        notes: customerInfo?.notes || dto.notes || '',
+      },
+      pricing:{
+        basePrice: regularSlotPrice,
+        promoPrice: hasPromo ? promoSlotPrice : null,
+        discounts: discountAmount,
+        taxes: 0,
+        totalPrice: finalTotalPrice,
+      },
+      bookingReference: `REF-${Date.now()}`,
+    };
   }
- }
 
- async cancelBooking(dto:any){
-  const booking = await this.findOneComplete(dto.id)
-  booking.status = BookingStatus.CANCELLED;
-  booking.paymentStatus = PaymentStatus.REJECTED;
-  let slots = await this.getSlots(dto.court.id, dto.date, dto.startTime, dto.duration);
-  const data = await this.bookingRepo.create(booking);
-  const result =  await this.bookingRepo.save(data)
-  slots= slots.map((slot)=>(Object.assign(slot, { status: 'available' })))
-  await this.scheduleTemplateService.bulkUpdate(slots);
-  await this.mailerService.sendBookingCancelledEmail(result.customerInfo.email, result);
-  return booking;
- }
+  async cancelBooking(dto:any){
+   const booking = await this.findOneComplete(dto.id)
+   booking.status = BookingStatus.CANCELLED;
+   booking.paymentStatus = PaymentStatus.REJECTED;
+   let slots = await this.getSlots(dto.court.id, dto.date, dto.startTime, Number(dto.duration) || 1);
+   const data = await this.bookingRepo.create(booking);
+   const result =  await this.bookingRepo.save(data)
+   slots= slots.map((slot)=>(Object.assign(slot, { status: 'available' })))
+   await this.scheduleTemplateService.bulkUpdate(slots);
+   await this.mailerService.sendBookingCancelledEmail(result.customerInfo.email, result);
+   return booking;
+  }
 
- async paymentManualBooking(dto:any){
-  const booking = await this.findOneComplete(dto.id);
-  if(booking.paymentStatus ==PaymentStatus.PAID ) throw new BadRequestException('La reserva ya ha sido pagada')
-  booking.status = BookingStatus.CONFIRMED;
-  booking.paymentStatus = PaymentStatus.PAID;
-  booking.paymentMethod = 'manual';
-  let slots = await this.getSlots(dto.court.id, dto.date, dto.startTime, dto.duration);
-  const data = await this.bookingRepo.create(booking);
-  const result =  await this.bookingRepo.save(data)
-  slots= slots.map((slot)=>(Object.assign(slot, { status: 'occupied' })))
-  await this.scheduleTemplateService.bulkUpdate(slots);
-  await this.mailerService.sendBookingPaidNotifications(result);
-  return booking;
-}
+  async paymentManualBooking(dto:any){
+   const booking = await this.findOneComplete(dto.id);
+   if(booking.paymentStatus ==PaymentStatus.PAID ) throw new BadRequestException('La reserva ya ha sido pagada')
+   booking.status = BookingStatus.CONFIRMED;
+   booking.paymentStatus = PaymentStatus.PAID;
+   booking.paymentMethod = 'manual';
+   let slots = await this.getSlots(dto.court.id, dto.date, dto.startTime, Number(dto.duration) || 1);
+   const data = await this.bookingRepo.create(booking);
+   const result =  await this.bookingRepo.save(data)
+   slots= slots.map((slot)=>(Object.assign(slot, { status: 'occupied' })))
+   await this.scheduleTemplateService.bulkUpdate(slots);
+   await this.mailerService.sendBookingPaidNotifications(result);
+   return booking;
+ }
 
   async createOnlineBooking(dto: any, user: User) {
+    const parsedDuration = Number(dto.duration) || 1;
     const statusManual = {
       status: BookingStatus.PENDING,
       paymentMethod: dto.paymentMethod || 'online',
       paymentStatus: PaymentStatus.PENDING,
     }
-    let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, dto.duration);
+    let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, parsedDuration);
  
-    let booking = await this.createObjectBooking(dto, user);
+    let booking = await this.createObjectBooking({ ...dto, duration: parsedDuration }, user);
     booking = Object.assign(booking, statusManual);
     const saveBooking = await this.bookingRepo.create(booking);
     const result = await this.bookingRepo.save(saveBooking);
@@ -202,7 +233,8 @@ export class BookingService {
     const userReservation = await this.userService.findByEmail(dto.userEmail);
     const pricing = dto.pricing ? JSON.parse(dto.pricing) : null;
     if(!userReservation) throw new NotFoundException(`email: ${dto.userEmail} no encontrado`)
-    let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, dto.duration);
+    const parsedDuration = Number(dto.duration) || 1;
+    let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, parsedDuration);
     const court: any = await this.courtService.findOne(dto.courtId , ['club']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
     const booking = this.bookingRepo.create({
@@ -212,7 +244,7 @@ export class BookingService {
       date: new Date(dto.date),
       startTime: dto.startTime,
       endTime: dto.endTime,
-      duration: dto.duration,
+      duration: parsedDuration,
       customerInfo:{
         name: userReservation.name,
         email: userReservation.email,
@@ -291,7 +323,7 @@ export class BookingService {
   }
 
   findOneComplete(id: string) {
-    return this.bookingRepo.findOne({ where: { id }, relations: ['user', 'court', 'club']});
+    return this.bookingRepo.findOne({ where: { id }, relations: ['user', 'court', 'club', 'payment']});
   }
 
   findOneByClub(id: string) {

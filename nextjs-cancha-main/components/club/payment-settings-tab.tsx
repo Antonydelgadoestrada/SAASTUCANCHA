@@ -17,13 +17,15 @@ import {
   ExternalLinkIcon, SaveIcon, HelpCircleIcon, Loader2Icon,
   UploadCloudIcon, Trash2Icon, MessageCircleIcon, PencilIcon,
   XIcon, PhoneIcon, QrCodeIcon, ShieldCheckIcon, CopyIcon,
-  CheckIcon, SparklesIcon,
+  CheckIcon, SparklesIcon, DownloadIcon, Maximize2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
   getClubPaymentConfig, updateClubPaymentConfig, uploadClubQr,
   ClubPaymentConfig, getWhatsAppLink, formatWhatsAppNumber,
+  downloadImage,
 } from "@/lib/payments"
+import { QrPreviewModal } from "@/components/ui/qr-preview-modal"
 import api from "@/lib/axios"
 
 // ─── Componente reutilizable de uploader de QR ───────────────────────────────
@@ -36,10 +38,11 @@ interface QrUploaderProps {
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onClear: () => void
   accentColor: string
+  onOpenPreview?: () => void
 }
 
 function QrUploader({
-  walletType, qrUrl, isUploading, fileInputRef, onFileChange, onClear, accentColor,
+  walletType, qrUrl, isUploading, fileInputRef, onFileChange, onClear, accentColor, onOpenPreview,
 }: QrUploaderProps) {
   const label = walletType === "yape" ? "Yape" : "Plin"
   return (
@@ -57,14 +60,14 @@ function QrUploader({
       <Button
         type="button"
         variant="outline"
-        size="sm"
-        onClick={() => fileInputRef.current?.click()}
         disabled={isUploading}
-        className="w-full bg-white dark:bg-slate-950 border-dashed border-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs flex items-center justify-center gap-2 h-11"
+        onClick={() => fileInputRef.current?.click()}
+        className="w-full flex items-center justify-center gap-2 border-dashed border-2 h-12 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-900"
+        style={{ borderColor: `${accentColor}60` }}
       >
         {isUploading ? (
           <>
-            <Loader2Icon className="w-4 h-4 animate-spin" style={{ color: accentColor }} />
+            <Loader2Icon className="w-4 h-4 animate-spin text-slate-500" />
             <span>Subiendo imagen QR...</span>
           </>
         ) : (
@@ -81,7 +84,9 @@ function QrUploader({
             <img
               src={qrUrl}
               alt={`QR ${label}`}
-              className="w-24 h-24 object-contain border rounded-lg bg-white p-1 shadow-sm"
+              className="w-24 h-24 object-contain border rounded-lg bg-white p-1 shadow-sm cursor-pointer hover:opacity-95"
+              onClick={onOpenPreview}
+              title="Hacer clic para ampliar QR"
             />
           </div>
           <div className="space-y-1.5 text-center sm:text-left flex-1">
@@ -92,7 +97,29 @@ function QrUploader({
             <p className="text-[11px] text-slate-500">
               Tus clientes verán este código QR en pantalla al seleccionar {label} en el proceso de reserva.
             </p>
-            <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+              {onOpenPreview && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenPreview}
+                  className="text-xs h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                >
+                  <Maximize2Icon className="w-3 h-3 mr-1" />
+                  Ampliar QR
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadImage(qrUrl, `QR-${label}-club.png`)}
+                className="text-xs h-7 px-2 text-slate-700 hover:text-slate-900"
+              >
+                <DownloadIcon className="w-3 h-3 mr-1" />
+                Descargar
+              </Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -126,8 +153,10 @@ export function PaymentSettingsTab() {
   const [whatsapp, setWhatsapp] = useState("")
   const [yapeNumero, setYapeNumero] = useState("")
   const [yapeQrUrl, setYapeQrUrl] = useState("")
+  const [yapeTitular, setYapeTitular] = useState("")
   const [plinNumero, setPlinNumero] = useState("")
   const [plinQrUrl, setPlinQrUrl] = useState("")
+  const [plinTitular, setPlinTitular] = useState("")
   const [porcentajeAdelantoDefault, setPorcentajeAdelantoDefault] = useState(50)
   const [adelantoMinimo, setAdelantoMinimo] = useState("")
   const [isMPConnected, setIsMPConnected] = useState(false)
@@ -144,6 +173,14 @@ export function PaymentSettingsTab() {
   // Estado de guardado activo por sección (para spinners independientes)
   const [savingSection, setSavingSection] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [qrModalOpen, setQrModalOpen] = useState(false)
+  const [qrModalData, setQrModalData] = useState<{
+    qrUrl?: string | null
+    walletType?: "yape" | "plin"
+    titular?: string | null
+    phone?: string | null
+    amount?: number | null
+  }>({})
 
   // Cargar configuración del club
   const { data: config, isLoading } = useQuery({
@@ -193,15 +230,17 @@ export function PaymentSettingsTab() {
       setWhatsapp(config.whatsapp || "")
       setYapeNumero(config.yapeNumero || "")
       setYapeQrUrl(config.yapeQrUrl || "")
+      setYapeTitular(config.yapeTitular || "")
       setPlinNumero(config.plinNumero || "")
       setPlinQrUrl((config as any).plinQrUrl || "")
+      setPlinTitular(config.plinTitular || "")
       setPorcentajeAdelantoDefault(config.porcentajeAdelantoDefault ?? 50)
       setAdelantoMinimo(config.adelantoMinimo ? String(config.adelantoMinimo) : "")
 
       // Si una sección no tiene datos guardados, dejarla en modo edición por defecto para facilitar el llenado
       if (!config.whatsapp) setIsEditingWhatsapp(true)
-      if (!config.yapeNumero && !config.yapeQrUrl) setIsEditingYape(true)
-      if (!config.plinNumero && !(config as any).plinQrUrl) setIsEditingPlin(true)
+      if (!config.yapeNumero && !config.yapeQrUrl && !config.yapeTitular) setIsEditingYape(true)
+      if (!config.plinNumero && !(config as any).plinQrUrl && !config.plinTitular) setIsEditingPlin(true)
     }
   }, [config])
 
@@ -273,6 +312,7 @@ export function PaymentSettingsTab() {
     handleSaveSection("yape", {
       yapeNumero: yapeNumero.trim() || null,
       yapeQrUrl: yapeQrUrl.trim() || null,
+      yapeTitular: yapeTitular.trim() || null,
     })
   }
 
@@ -280,6 +320,7 @@ export function PaymentSettingsTab() {
     handleSaveSection("plin", {
       plinNumero: plinNumero.trim() || null,
       plinQrUrl: plinQrUrl.trim() || null,
+      plinTitular: plinTitular.trim() || null,
     })
   }
 
@@ -287,8 +328,10 @@ export function PaymentSettingsTab() {
     handleSaveSection("wallets", {
       yapeNumero: yapeNumero.trim() || null,
       yapeQrUrl: yapeQrUrl.trim() || null,
+      yapeTitular: yapeTitular.trim() || null,
       plinNumero: plinNumero.trim() || null,
       plinQrUrl: plinQrUrl.trim() || null,
+      plinTitular: plinTitular.trim() || null,
     })
   }
 
@@ -305,8 +348,10 @@ export function PaymentSettingsTab() {
       whatsapp: whatsapp.trim() || null,
       yapeNumero: yapeNumero.trim() || null,
       yapeQrUrl: yapeQrUrl.trim() || null,
+      yapeTitular: yapeTitular.trim() || null,
       plinNumero: plinNumero.trim() || null,
       plinQrUrl: plinQrUrl.trim() || null,
+      plinTitular: plinTitular.trim() || null,
       porcentajeAdelantoDefault: Number(porcentajeAdelantoDefault),
       adelantoMinimo: adelantoMinimo ? Number(adelantoMinimo) : null,
     })
@@ -322,12 +367,14 @@ export function PaymentSettingsTab() {
   const handleCancelYape = () => {
     setYapeNumero(config?.yapeNumero || "")
     setYapeQrUrl(config?.yapeQrUrl || "")
+    setYapeTitular(config?.yapeTitular || "")
     setIsEditingYape(false)
   }
 
   const handleCancelPlin = () => {
     setPlinNumero(config?.plinNumero || "")
     setPlinQrUrl((config as any)?.plinQrUrl || "")
+    setPlinTitular(config?.plinTitular || "")
     setIsEditingPlin(false)
   }
 
@@ -396,8 +443,8 @@ export function PaymentSettingsTab() {
     setTimeout(() => setCopiedField(null), 2000)
   }
 
-  const hasYapeConfigured = Boolean(yapeNumero || yapeQrUrl)
-  const hasPlinConfigured = Boolean(plinNumero || plinQrUrl)
+  const hasYapeConfigured = Boolean(yapeNumero || yapeQrUrl || yapeTitular)
+  const hasPlinConfigured = Boolean(plinNumero || plinQrUrl || plinTitular)
   const hasConfiguredWallets = hasYapeConfigured || hasPlinConfigured
   const testWhatsAppUrl = whatsapp ? getWhatsAppLink(whatsapp, "Hola! Este es un mensaje de prueba para TuCancha.") : ""
 
@@ -822,47 +869,98 @@ export function PaymentSettingsTab() {
                 {!isEditingYape && hasYapeConfigured ? (
                   /* Modo Lectura Yape */
                   <div className="space-y-4 pt-4">
-                    <div className="bg-purple-50/50 dark:bg-purple-950/20 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/40 space-y-1">
-                      <p className="text-xs text-slate-500 font-medium">Número para transferencias Yape:</p>
-                      <div className="flex items-center justify-between">
-                        <p className="text-base font-bold text-[#732282] dark:text-purple-300 font-mono">
-                          {yapeNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                    <div className="bg-purple-50/50 dark:bg-purple-950/20 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/40 space-y-2.5">
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-slate-500 font-medium">Nombre del Titular de la cuenta:</p>
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                          {yapeTitular || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
                         </p>
-                        {yapeNumero && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(yapeNumero, "yape")}
-                            className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
-                          >
-                            {copiedField === "yape" ? <CheckIcon className="w-3 h-3 text-purple-600" /> : <CopyIcon className="w-3 h-3" />}
-                          </Button>
-                        )}
+                      </div>
+
+                      <div className="border-t border-purple-100 dark:border-purple-900/40 pt-2 space-y-0.5">
+                        <p className="text-[11px] text-slate-500 font-medium">Número para transferencias Yape:</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-base font-bold text-[#732282] dark:text-purple-300 font-mono">
+                            {yapeNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                          </p>
+                          {yapeNumero && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyToClipboard(yapeNumero, "yape")}
+                              className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
+                            >
+                              {copiedField === "yape" ? <CheckIcon className="w-3 h-3 text-purple-600" /> : <CopyIcon className="w-3 h-3" />}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {yapeQrUrl ? (
-                      <div className="flex items-center gap-4 bg-white dark:bg-slate-950 p-3.5 rounded-xl border border-purple-100 dark:border-purple-950">
-                        <img
-                          src={yapeQrUrl}
-                          alt="QR Yape"
-                          className="w-20 h-20 object-contain border rounded-lg bg-white p-1 shadow-sm"
-                        />
-                        <div className="text-xs space-y-1">
+                      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-slate-950 p-3.5 rounded-xl border border-purple-100 dark:border-purple-950">
+                        <div className="relative group shrink-0">
+                          <img
+                            src={yapeQrUrl}
+                            alt="QR Yape"
+                            className="w-20 h-20 object-contain border rounded-lg bg-white p-1 shadow-sm cursor-pointer hover:opacity-95"
+                            onClick={() => {
+                              setQrModalData({
+                                qrUrl: yapeQrUrl,
+                                walletType: "yape",
+                                titular: yapeTitular,
+                                phone: yapeNumero,
+                              })
+                              setQrModalOpen(true)
+                            }}
+                            title="Hacer clic para ampliar QR"
+                          />
+                        </div>
+                        <div className="text-xs space-y-1.5 flex-1">
                           <p className="font-semibold text-emerald-600 flex items-center gap-1">
                             <CheckCircle2Icon className="w-3.5 h-3.5" /> QR de Yape Activo
                           </p>
                           <p className="text-slate-500 text-[11px]">Los usuarios pueden escanearlo desde la app.</p>
-                          <Button
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            onClick={() => setIsEditingYape(true)}
-                            className="text-[#732282] text-xs p-0 h-auto font-semibold"
-                          >
-                            Cambiar imagen de QR
-                          </Button>
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setQrModalData({
+                                  qrUrl: yapeQrUrl,
+                                  walletType: "yape",
+                                  titular: yapeTitular,
+                                  phone: yapeNumero,
+                                })
+                                setQrModalOpen(true)
+                              }}
+                              className="text-xs h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Maximize2Icon className="w-3 h-3 mr-1" />
+                              Ampliar QR
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => downloadImage(yapeQrUrl, `QR-Yape-${yapeNumero || "club"}.png`)}
+                              className="text-xs h-7 px-2 text-slate-700 hover:text-slate-900"
+                            >
+                              <DownloadIcon className="w-3 h-3 mr-1" />
+                              Descargar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              onClick={() => setIsEditingYape(true)}
+                              className="text-[#732282] text-xs p-0 h-auto font-semibold"
+                            >
+                              Cambiar imagen
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -876,7 +974,24 @@ export function PaymentSettingsTab() {
                   /* Modo Edición Yape */
                   <div className="space-y-4 pt-4">
                     <div className="space-y-2">
-                      <Label htmlFor="yape-numero" className="text-xs font-semibold">Número de Celular para Yape</Label>
+                      <Label htmlFor="yape-titular" className="text-xs font-semibold">
+                        Nombre del Titular de la Cuenta (Yape) *
+                      </Label>
+                      <Input
+                        id="yape-titular"
+                        placeholder="Ej. Juan Carlos Pérez o Club Deportivo TuCancha SAC"
+                        value={yapeTitular}
+                        onChange={(e) => setYapeTitular(e.target.value)}
+                        maxLength={80}
+                        className="bg-white dark:bg-slate-950 text-sm"
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        Los clientes verán este nombre antes de pagar para confirmar que transfieren a la persona/empresa correcta.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="yape-numero" className="text-xs font-semibold">Número de Celular para Yape *</Label>
                       <Input
                         id="yape-numero"
                         placeholder="Ej. 987654321"
@@ -896,6 +1011,15 @@ export function PaymentSettingsTab() {
                       onFileChange={(e) => handleQrUpload(e, "yape")}
                       onClear={() => setYapeQrUrl("")}
                       accentColor="#732282"
+                      onOpenPreview={() => {
+                        setQrModalData({
+                          qrUrl: yapeQrUrl,
+                          walletType: "yape",
+                          titular: yapeTitular,
+                          phone: yapeNumero,
+                        })
+                        setQrModalOpen(true)
+                      }}
                     />
                   </div>
                 )}
@@ -904,7 +1028,7 @@ export function PaymentSettingsTab() {
               {/* Botón Guardar / Cancelar Yape */}
               {isEditingYape && (
                 <div className="flex items-center justify-end gap-2 pt-3 border-t">
-                  {config?.yapeNumero && (
+                  {(config?.yapeNumero || config?.yapeTitular) && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -980,47 +1104,98 @@ export function PaymentSettingsTab() {
                 {!isEditingPlin && hasPlinConfigured ? (
                   /* Modo Lectura Plin */
                   <div className="space-y-4 pt-4">
-                    <div className="bg-teal-50/50 dark:bg-teal-950/20 p-3.5 rounded-xl border border-teal-100 dark:border-teal-900/40 space-y-1">
-                      <p className="text-xs text-slate-500 font-medium">Número para transferencias Plin:</p>
-                      <div className="flex items-center justify-between">
-                        <p className="text-base font-bold text-teal-700 dark:text-teal-300 font-mono">
-                          {plinNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                    <div className="bg-teal-50/50 dark:bg-teal-950/20 p-3.5 rounded-xl border border-teal-100 dark:border-teal-900/40 space-y-2.5">
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-slate-500 font-medium">Nombre del Titular de la cuenta:</p>
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                          {plinTitular || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
                         </p>
-                        {plinNumero && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(plinNumero, "plin")}
-                            className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
-                          >
-                            {copiedField === "plin" ? <CheckIcon className="w-3 h-3 text-teal-600" /> : <CopyIcon className="w-3 h-3" />}
-                          </Button>
-                        )}
+                      </div>
+
+                      <div className="border-t border-teal-100 dark:border-teal-900/40 pt-2 space-y-0.5">
+                        <p className="text-[11px] text-slate-500 font-medium">Número para transferencias Plin:</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-base font-bold text-teal-700 dark:text-teal-300 font-mono">
+                            {plinNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                          </p>
+                          {plinNumero && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyToClipboard(plinNumero, "plin")}
+                              className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
+                            >
+                              {copiedField === "plin" ? <CheckIcon className="w-3 h-3 text-teal-600" /> : <CopyIcon className="w-3 h-3" />}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {plinQrUrl ? (
-                      <div className="flex items-center gap-4 bg-white dark:bg-slate-950 p-3.5 rounded-xl border border-teal-100 dark:border-teal-950">
-                        <img
-                          src={plinQrUrl}
-                          alt="QR Plin"
-                          className="w-20 h-20 object-contain border rounded-lg bg-white p-1 shadow-sm"
-                        />
-                        <div className="text-xs space-y-1">
+                      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-slate-950 p-3.5 rounded-xl border border-teal-100 dark:border-teal-950">
+                        <div className="relative group shrink-0">
+                          <img
+                            src={plinQrUrl}
+                            alt="QR Plin"
+                            className="w-20 h-20 object-contain border rounded-lg bg-white p-1 shadow-sm cursor-pointer hover:opacity-95"
+                            onClick={() => {
+                              setQrModalData({
+                                qrUrl: plinQrUrl,
+                                walletType: "plin",
+                                titular: plinTitular,
+                                phone: plinNumero,
+                              })
+                              setQrModalOpen(true)
+                            }}
+                            title="Hacer clic para ampliar QR"
+                          />
+                        </div>
+                        <div className="text-xs space-y-1.5 flex-1">
                           <p className="font-semibold text-emerald-600 flex items-center gap-1">
                             <CheckCircle2Icon className="w-3.5 h-3.5" /> QR de Plin Activo
                           </p>
                           <p className="text-slate-500 text-[11px]">Los usuarios pueden escanearlo desde la app.</p>
-                          <Button
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            onClick={() => setIsEditingPlin(true)}
-                            className="text-teal-700 text-xs p-0 h-auto font-semibold"
-                          >
-                            Cambiar imagen de QR
-                          </Button>
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setQrModalData({
+                                  qrUrl: plinQrUrl,
+                                  walletType: "plin",
+                                  titular: plinTitular,
+                                  phone: plinNumero,
+                                })
+                                setQrModalOpen(true)
+                              }}
+                              className="text-xs h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Maximize2Icon className="w-3 h-3 mr-1" />
+                              Ampliar QR
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => downloadImage(plinQrUrl, `QR-Plin-${plinNumero || "club"}.png`)}
+                              className="text-xs h-7 px-2 text-slate-700 hover:text-slate-900"
+                            >
+                              <DownloadIcon className="w-3 h-3 mr-1" />
+                              Descargar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              onClick={() => setIsEditingPlin(true)}
+                              className="text-teal-700 text-xs p-0 h-auto font-semibold"
+                            >
+                              Cambiar imagen
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -1034,7 +1209,24 @@ export function PaymentSettingsTab() {
                   /* Modo Edición Plin */
                   <div className="space-y-4 pt-4">
                     <div className="space-y-2">
-                      <Label htmlFor="plin-numero" className="text-xs font-semibold">Número de Celular para Plin</Label>
+                      <Label htmlFor="plin-titular" className="text-xs font-semibold">
+                        Nombre del Titular de la Cuenta (Plin) *
+                      </Label>
+                      <Input
+                        id="plin-titular"
+                        placeholder="Ej. Juan Carlos Pérez o Club Deportivo TuCancha SAC"
+                        value={plinTitular}
+                        onChange={(e) => setPlinTitular(e.target.value)}
+                        maxLength={80}
+                        className="bg-white dark:bg-slate-950 text-sm"
+                      />
+                      <p className="text-[11px] text-slate-500">
+                        Los clientes verán este nombre antes de pagar para confirmar que transfieren a la persona/empresa correcta.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="plin-numero" className="text-xs font-semibold">Número de Celular para Plin *</Label>
                       <Input
                         id="plin-numero"
                         placeholder="Ej. 987654321"
@@ -1054,6 +1246,15 @@ export function PaymentSettingsTab() {
                       onFileChange={(e) => handleQrUpload(e, "plin")}
                       onClear={() => setPlinQrUrl("")}
                       accentColor="#00D4B2"
+                      onOpenPreview={() => {
+                        setQrModalData({
+                          qrUrl: plinQrUrl,
+                          walletType: "plin",
+                          titular: plinTitular,
+                          phone: plinNumero,
+                        })
+                        setQrModalOpen(true)
+                      }}
                     />
                   </div>
                 )}
@@ -1062,7 +1263,7 @@ export function PaymentSettingsTab() {
               {/* Botón Guardar / Cancelar Plin */}
               {isEditingPlin && (
                 <div className="flex items-center justify-end gap-2 pt-3 border-t">
-                  {config?.plinNumero && (
+                  {(config?.plinNumero || (config as any)?.plinTitular) && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -1255,6 +1456,15 @@ export function PaymentSettingsTab() {
           </div>
         </Card>
       </div>
+
+      <QrPreviewModal
+        open={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        qrUrl={qrModalData.qrUrl}
+        walletType={qrModalData.walletType}
+        titular={qrModalData.titular}
+        phone={qrModalData.phone}
+      />
 
     </div>
   )

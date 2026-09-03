@@ -572,4 +572,81 @@ export class MailerService {
       html,
     });
   }
+
+  /**
+   * Envía un recordatorio automático 30-60 minutos antes del turno programado
+   */
+  async sendBookingReminderEmail(to: string, booking: Booking) {
+    const { date, startTime, endTime, court, club, bookingReference, customerInfo } = booking;
+
+    const formattedDate = new Date(date).toLocaleDateString('es-PE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const clubAddress = (court as any)?.venue?.address || club?.address || '';
+    const clubPhone = club?.whatsapp || club?.phone || '';
+    const webUrl = process.env.WEB_SERVICES_URL || 'https://tucancha.com.pe';
+
+    const html = this.getEmailTemplate({
+      title: '⏰ ¡Tu partido comienza pronto!',
+      greeting: `Hola ${customerInfo?.name || 'Deportista'},`,
+      message: `Te recordamos que tienes una reserva programada en unos minutos. ¡Ve alistando tu equipamiento deportivo!`,
+      bookingDetailsHtml: `
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px; margin: 15px 0;">
+          <h3 style="margin-top: 0; color: #166534; font-size: 16px;">⚽ Detalles de tu Turno</h3>
+          <ul style="padding-left: 20px; line-height: 1.6; color: #1f2937; margin-bottom: 10px;">
+            <li><strong>Cancha:</strong> ${court?.name || 'Cancha'}</li>
+            <li><strong>Club / Complejo:</strong> ${club?.name || 'Club'}</li>
+            <li><strong>Fecha:</strong> ${formattedDate}</li>
+            <li><strong>Horario:</strong> <span style="font-size: 15px; font-weight: bold; color: #16a34a;">${startTime} - ${endTime}</span></li>
+            <li><strong>Código de Reserva:</strong> ${bookingReference}</li>
+            ${clubAddress ? `<li><strong>Dirección:</strong> ${clubAddress}</li>` : ''}
+          </ul>
+        </div>
+
+        <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px; margin-bottom: 20px;">
+          <p style="margin: 0; font-size: 13px; color: #92400e;">
+            💡 <strong>Recomendaciones:</strong><br/>
+            • Te sugerimos llegar <strong>10 a 15 minutos antes</strong> para realizar el calentamiento y confirmar tu ingreso.<br/>
+            • Recuerda llevar zapatillas adecuadas para el tipo de superficie y ropa cómoda.<br/>
+            • Si tienes algún contratiempo, comunícate directamente con el club.
+          </p>
+        </div>
+
+        <div style="text-align: center; margin-top: 20px;">
+          <a href="${webUrl}/user/bookings" style="background-color: #16A34A; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+            Ver Mi Reserva en TuCancha
+          </a>
+          ${
+            clubPhone
+              ? `<div style="margin-top: 10px;">
+                  <a href="https://wa.me/${clubPhone.replace(/\D/g, '')}?text=Hola,%20tengo%20la%20reserva%20${bookingReference}%20hoy%20a%20las%20${startTime}" style="color: #059669; font-size: 13px; text-decoration: underline;">
+                    Contactar al Club por WhatsApp
+                  </a>
+                </div>`
+              : ''
+          }
+        </div>
+      `,
+      footerNote: '¡Que tengas un excelente partido! Si ya no puedes asistir, por favor infórmalo al club.',
+    });
+
+    try {
+      if (process.env.RESEND_API_KEY) {
+        await this.resend.emails.send({
+          from: this.fromEmail,
+          to,
+          subject: `⏰ Recordatorio de turno hoy ${startTime} - ${court?.name || 'TuCancha'}`,
+          html,
+        });
+      } else {
+        console.log(`[EMAIL RECORDATORIO SIMULADO para ${to}] Reserva ${bookingReference} a las ${startTime}`);
+      }
+    } catch (err: any) {
+      console.warn(`⚠️ [MailerService] Error al enviar recordatorio a ${to}:`, err?.message || err);
+    }
+  }
 }

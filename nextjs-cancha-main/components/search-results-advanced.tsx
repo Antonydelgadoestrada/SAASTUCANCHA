@@ -22,7 +22,13 @@ import {
   QrCode,
   X,
   CreditCardIcon,
+  ShieldCheck,
+  Trophy,
+  Download,
+  Maximize2,
 } from "lucide-react";
+import { QrPreviewModal } from "@/components/ui/qr-preview-modal";
+import { downloadImage } from "@/lib/payments";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +64,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useSearchParams } from "next/navigation";
 import { getAllCourtsByQuery } from "@/lib/courts";
+import { getAllReservationByUser } from "@/lib/reservation";
 import { sportTypes } from "@/lib/sports";
 import { useRouter } from "next/navigation";
 import { createPreference, createReservation } from "@/lib/mercadopago";
@@ -116,6 +123,76 @@ const hasPromo = (price?: number, promo?: number) =>
 
 const discountPct = (price: number, promo: number) =>
   Math.round(((price - promo) / price) * 100);
+
+export const getEffectivePricing = (court: any, time?: string, durationHours: number | string = 1) => {
+  if (!court) {
+    return {
+      isNight: false,
+      slotPrice: 0,
+      regularSlotPrice: 0,
+      promoSlotPrice: null,
+      hasPromo: false,
+      regularTotal: 0,
+      totalPrice: 0,
+      discountAmount: 0,
+      advancePercent: 50,
+      advanceAmount: 0,
+      remainingAmount: 0,
+      discountPct: 0,
+      hourlyRegularPrice: 0,
+      hourlyEffectivePrice: 0,
+    };
+  }
+
+  const parsedDuration = Number(durationHours) || 1;
+  const slotCount = Math.round(parsedDuration * 2); // 30 min por bloque
+
+  // Determinar si el horario seleccionado corresponde a Tarifa Noche (>= 18:00)
+  const [h] = (time || "").split(":").map(Number);
+  const isNight = !isNaN(h) ? h >= 18 : false;
+
+  // Precio base regular por bloque (30 min)
+  const regularSlotPrice = Number(isNight ? (court.priceNight ?? court.price) : (court.priceDay ?? court.price)) || Number(court.price) || 0;
+
+  // Precio promocional por bloque (30 min)
+  const promoSlotPrice = Number(isNight ? (court.promoNight ?? court.promoPrice) : (court.promoDay ?? court.promoPrice));
+  const hasPromo = !isNaN(promoSlotPrice) && promoSlotPrice > 0 && promoSlotPrice < regularSlotPrice;
+
+  // Precio unitario efectivo
+  const effectiveSlotPrice = hasPromo ? promoSlotPrice : regularSlotPrice;
+
+  const regularTotal = Number((regularSlotPrice * slotCount).toFixed(2));
+  const totalPrice = Number((effectiveSlotPrice * slotCount).toFixed(2));
+  const discountAmount = Math.max(0, Number((regularTotal - totalPrice).toFixed(2)));
+  const discountPctVal = hasPromo && regularSlotPrice > 0 ? Math.round(((regularSlotPrice - promoSlotPrice) / regularSlotPrice) * 100) : 0;
+
+  // Porcentaje de adelanto configurado por el club
+  const advancePercent = Number(
+    court.clubData?.porcentajeAdelantoDefault ??
+    court.porcentajeAdelantoDefault ??
+    50
+  );
+
+  const advanceAmount = Math.max(1, Number(((totalPrice * advancePercent) / 100).toFixed(2)));
+  const remainingAmount = Math.max(0, Number((totalPrice - advanceAmount).toFixed(2)));
+
+  return {
+    isNight,
+    slotPrice: effectiveSlotPrice,
+    regularSlotPrice,
+    promoSlotPrice: hasPromo ? promoSlotPrice : null,
+    hasPromo,
+    regularTotal,
+    totalPrice,
+    discountAmount,
+    advancePercent,
+    advanceAmount,
+    remainingAmount,
+    discountPct: discountPctVal,
+    hourlyRegularPrice: Number((regularSlotPrice * 2).toFixed(2)),
+    hourlyEffectivePrice: Number((effectiveSlotPrice * 2).toFixed(2)),
+  };
+};
 
 const getValidStartTimes = (availableTimes: string[], selectedDuration: string, selectedDate?: Date) => {
   const requiredSlots = {
@@ -178,6 +255,7 @@ export function SearchResults({
   const urlSearchParams = useSearchParams();
 
   const [filteredCourts, setFilteredCourts] = useState<any[]>([]);
+  const [playedCourtIds, setPlayedCourtIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState("distance");
   const [selectedCourt, setSelectedCourt] = useState<any[0] | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -199,6 +277,14 @@ export function SearchResults({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrModalData, setQrModalData] = useState<{
+    qrUrl?: string | null;
+    walletType?: "yape" | "plin";
+    titular?: string | null;
+    phone?: string | null;
+    amount?: number | null;
+  }>({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successBookingData, setSuccessBookingData] = useState<{
     reference: string;
@@ -341,6 +427,30 @@ export function SearchResults({
     fetchCourts();
   }, [urlSearchParams]);
 
+  // Cargar historial de reservas del usuario para identificar canchas previas ("Ya jugaste aquí")
+  useEffect(() => {
+    const fetchUserHistory = async () => {
+      if (!user) {
+        setPlayedCourtIds(new Set());
+        return;
+      }
+      try {
+        const userBookings = await getAllReservationByUser();
+        if (Array.isArray(userBookings)) {
+          const ids = new Set<string>();
+          userBookings.forEach((b: any) => {
+            if (b.court?.id) ids.add(String(b.court.id));
+            if (b.courtId) ids.add(String(b.courtId));
+          });
+          setPlayedCourtIds(ids);
+        }
+      } catch (err) {
+        // Ignorar silenciosamente si no está logueado o falla la llamada
+      }
+    };
+    fetchUserHistory();
+  }, [user]);
+
   // Sincronizar el court seleccionado cuando se actualizan los resultados (ej. al cambiar la fecha)
   useEffect(() => {
     if (selectedCourt) {
@@ -441,7 +551,7 @@ export function SearchResults({
         courtId: selectedCourt.id,
         date: fecha,
         startTime: selectedTime,
-        duration,
+        duration: Number(duration) || 1,
         userEmail: bookingData.email,
         customerInfo: {
           name: bookingData.name,
@@ -496,13 +606,10 @@ export function SearchResults({
       return;
     }
 
-    const totalPrice = selectedCourt.price * (+duration * 2);
-    const advancePercent = Number(
-      selectedCourt.clubData?.porcentajeAdelantoDefault ??
-      selectedCourt.porcentajeAdelantoDefault ??
-      50
-    );
-    const advanceAmount = Math.max(1, Number(((totalPrice * advancePercent) / 100).toFixed(2)));
+    const pricing = getEffectivePricing(selectedCourt, selectedTime, duration);
+    const totalPrice = pricing.totalPrice;
+    const advanceAmount = pricing.advanceAmount;
+    const advancePercent = pricing.advancePercent;
     const payAmount = payOption === "advance" ? advanceAmount : totalPrice;
     const payType = payOption === "advance" ? "ADELANTO" : "PAGO_COMPLETO";
 
@@ -525,7 +632,7 @@ export function SearchResults({
           courtId: selectedCourt.id,
           date: fecha,
           startTime: selectedTime,
-          duration,
+          duration: Number(duration) || 1,
           userEmail: bookingData.email,
           paymentMethod: 'whatsapp',
           customerInfo: {
@@ -585,7 +692,7 @@ export function SearchResults({
           courtId: selectedCourt.id,
           date: format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es }),
           startTime: selectedTime,
-          duration,
+          duration: Number(duration) || 1,
           userEmail: bookingData.email,
         });
 
@@ -632,7 +739,7 @@ export function SearchResults({
           courtId: selectedCourt.id,
           date: fecha,
           startTime: selectedTime,
-          duration,
+          duration: Number(duration) || 1,
           userEmail: bookingData.email,
           customerInfo: {
             name: bookingData.name,
@@ -751,13 +858,44 @@ export function SearchResults({
   }, [user, pendingReservation, filteredCourts])
   
 
+  const displayedCourts = [...filteredCourts].sort((a, b) => {
+    const aPlayed = playedCourtIds.has(String(a.id));
+    const bPlayed = playedCourtIds.has(String(b.id));
+
+    // Si una cancha fue jugada previamente por el usuario, priorizarla al inicio
+    if (aPlayed && !bPlayed) return -1;
+    if (!aPlayed && bPlayed) return 1;
+
+    if (sortBy === "price_asc") {
+      const priceA = Number(a.promoPrice || a.price || 0);
+      const priceB = Number(b.promoPrice || b.price || 0);
+      return priceA - priceB;
+    }
+    if (sortBy === "price_desc") {
+      const priceA = Number(a.promoPrice || a.price || 0);
+      const priceB = Number(b.promoPrice || b.price || 0);
+      return priceB - priceA;
+    }
+    if (sortBy === "rating") {
+      const ratingA = Number(a.rating || 0);
+      const ratingB = Number(b.rating || 0);
+      return ratingB - ratingA;
+    }
+    if (sortBy === "distance") {
+      const distA = calculateDistance(a);
+      const distB = calculateDistance(b);
+      return distA - distB;
+    }
+    return 0;
+  });
+
   return (
     <div className="space-y-6">
       {/* Controles de ordenamiento */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {filteredCourts.length}{" "}
-          {filteredCourts.length === 1
+          {displayedCourts.length}{" "}
+          {displayedCourts.length === 1
             ? "resultado encontrado"
             : "resultados encontrados"}
           {selectedDate && (
@@ -767,10 +905,13 @@ export function SearchResults({
           )}
         </p>
         <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="Ordenar por" />
           </SelectTrigger>
           <SelectContent>
+            {playedCourtIds.size > 0 && (
+              <SelectItem value="played_first">⭐ Ya jugaste aquí primero</SelectItem>
+            )}
             <SelectItem value="distance">Distancia</SelectItem>
             <SelectItem value="rating">Mejor valorados</SelectItem>
             <SelectItem value="price_asc">Precio: menor a mayor</SelectItem>
@@ -780,7 +921,7 @@ export function SearchResults({
       </div>
 
       {/* Resultados */}
-      {filteredCourts.length === 0 ? (
+      {displayedCourts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">
@@ -794,18 +935,9 @@ export function SearchResults({
       ) : (
        
 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-  {filteredCourts.map((court) => {
-    // Ajusta el multiplicador si ese "* 2" representa 2 horas u otro cálculo
-    const hoursMultiplier = 2;
-
-    const baseUnit = Number(court.price);
-    const basePrice = Number.isFinite(baseUnit) ? baseUnit * hoursMultiplier : undefined;
-
-    const promoUnit = Number(court.promoPrice);
-    const promo = Number.isFinite(promoUnit) ? promoUnit * hoursMultiplier : undefined;
-
-    const showPromo = hasPromo(basePrice, promo);
-    const pct = showPromo && promo && basePrice ? discountPct(basePrice, promo) : 0;
+  {displayedCourts.map((court) => {
+    const cardPricing = getEffectivePricing(court, selectedTime, 1);
+    const hasPlayedHere = playedCourtIds.has(String(court.id));
 
     return (
       <Card key={court.id} className="overflow-hidden">
@@ -829,11 +961,26 @@ export function SearchResults({
             {calculateDistance(court).toFixed(1)} km
           </Badge>
 
+          {/* Insignia "Ya jugaste aquí" */}
+          {hasPlayedHere && (
+            <Badge className="absolute left-2 bottom-2 bg-emerald-600/95 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-md backdrop-blur-sm px-2.5 py-1 border border-emerald-400/30">
+              <Trophy className="h-3.5 w-3.5 fill-yellow-300 text-yellow-300" />
+              Ya jugaste aquí
+            </Badge>
+          )}
+
+          {/* Tarifa Noche badge */}
+          {cardPricing.isNight && (
+            <Badge className="absolute right-2 bottom-2 bg-slate-900/90 text-amber-300 border border-amber-400/30 text-[10px] font-semibold">
+              🌙 Noche
+            </Badge>
+          )}
+
           {/* cintillo de descuento */}
-          {showPromo && (
+          {cardPricing.hasPromo && (
             <div className="absolute -left-1 top-10 rotate-[-0deg]">
               <div className="bg-red-600 text-white px-6 py-1 text-xs font-semibold shadow-md">
-                - {pct}%
+                - {cardPricing.discountPct}% PROMO
               </div>
             </div>
           )}
@@ -842,13 +989,21 @@ export function SearchResults({
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <CardTitle className="line-clamp-1">{court.name}</CardTitle>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <CardTitle className="line-clamp-1">{court.name}</CardTitle>
+                {hasPlayedHere && (
+                  <span className="shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                    <Trophy className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    Cancha conocida
+                  </span>
+                )}
+              </div>
               <CardDescription className="line-clamp-1">{court.club}</CardDescription>
             </div>
 
-            {showPromo && (
+            {cardPricing.hasPromo && (
               <Badge variant="destructive" className="shrink-0">
-                Promo
+                Promo Activa
               </Badge>
             )}
           </div>
@@ -876,31 +1031,31 @@ export function SearchResults({
             <div className="flex items-center gap-1">
               <StarIcon className="h-4 w-4 fill-primary text-primary" />
               <span className="font-medium">5.0</span>
-              {/* <span className="font-medium">{court.rating}</span> */}
-              {/* <span className="text-sm text-muted-foreground">({court.reviews})</span> */}
             </div>
 
             {/* bloque de precio */}
             <div className="text-right">
-              {showPromo && promo !== undefined && basePrice !== undefined ? (
+              {cardPricing.hasPromo ? (
                 <div className="flex flex-col items-end">
-                  <span className="text-sm line-through text-muted-foreground">
-                    {formatSoles(basePrice)}
+                  <span className="text-xs line-through text-muted-foreground">
+                    S/ {cardPricing.hourlyRegularPrice}
                   </span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-semibold text-primary">
-                      {formatSoles(promo)}
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-bold text-base text-primary">
+                      S/ {cardPricing.hourlyEffectivePrice}
                     </span>
-                    {/* <Badge variant="outline" className="text-[10px]">
-                      Ahorra {formatSoles(basePrice - promo)}
-                    </Badge> */}
+                    <span className="text-xs text-muted-foreground">/ hora</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">por hora</span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                    {cardPricing.isNight ? "🌙 Tarifa Noche con promo" : "☀️ Tarifa Día con promo"}
+                  </span>
                 </div>
               ) : (
                 <div className="flex flex-col items-end">
-                  <span className="font-semibold">{formatSoles(basePrice)}</span>
-                  <span className="text-sm text-muted-foreground">por hora</span>
+                  <span className="font-bold text-base">S/ {cardPricing.hourlyRegularPrice}</span>
+                  <span className="text-xs text-muted-foreground">
+                    por hora {cardPricing.isNight ? "(🌙 Noche)" : "(☀️ Día)"}
+                  </span>
                 </div>
               )}
             </div>
@@ -1396,47 +1551,69 @@ export function SearchResults({
 
               <Separator />
 
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Cancha:</span>
-                  <span>{selectedCourt.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Fecha:</span>
-                  <span>
-                    {selectedDate
-                      ? format(selectedDate, "dd/MM/yyyy", { locale: es })
-                      : "Hoy"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Hora de Inicio:</span>
-                  <span>{selectedTime}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Horario:</span>
-                  <span>
-                    {selectedTime && duration
-                      ? `${selectedTime} a ${(() => {
-                          const [h, m] = selectedTime.split(":").map(Number);
-                          const d = new Date();
-                          d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
-                          const endH = d.getHours().toString().padStart(2, "0");
-                          const endM = d.getMinutes().toString().padStart(2, "0");
-                          return `${endH}:${endM}`;
-                        })()}`
-                      : selectedTime}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Duracion en horas:</span>
-                  <span>{duration}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Total:</span>
-                  <span>S/ {selectedCourt.price * (+duration*2) }</span>
-                </div>
-              </div>
+              {(() => {
+                const bookingPricing = getEffectivePricing(selectedCourt, selectedTime, duration);
+                return (
+                  <div className="space-y-2 p-3.5 bg-muted/60 rounded-xl text-sm border">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Cancha:</span>
+                      <span className="font-semibold">{selectedCourt.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Fecha:</span>
+                      <span className="font-medium">
+                        {selectedDate
+                          ? format(selectedDate, "dd/MM/yyyy", { locale: es })
+                          : "Hoy"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Horario:</span>
+                      <span className="font-medium">
+                        {selectedTime && duration
+                          ? `${selectedTime} a ${(() => {
+                              const [h, m] = selectedTime.split(":").map(Number);
+                              const d = new Date();
+                              d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
+                              const endH = d.getHours().toString().padStart(2, "0");
+                              const endM = d.getMinutes().toString().padStart(2, "0");
+                              return `${endH}:${endM}`;
+                            })()}`
+                          : selectedTime}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Duración y Tarifa:</span>
+                      <span className="font-medium">
+                        {duration} {duration === "1" ? "hora" : "horas"} ({bookingPricing.isNight ? "🌙 Tarifa Noche" : "☀️ Tarifa Día"})
+                      </span>
+                    </div>
+
+                    {bookingPricing.hasPromo && (
+                      <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 text-xs bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
+                        <span className="flex items-center gap-1 font-semibold">
+                          🎉 Descuento Promo ({bookingPricing.discountPct}% OFF):
+                        </span>
+                        <span className="font-bold">- S/ {bookingPricing.discountAmount}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center pt-2 border-t font-semibold">
+                      <span className="text-base">Total a pagar:</span>
+                      <div className="text-right">
+                        {bookingPricing.hasPromo && (
+                          <span className="text-xs line-through text-muted-foreground mr-2">
+                            S/ {bookingPricing.regularTotal}
+                          </span>
+                        )}
+                        <span className="text-lg font-bold text-primary">
+                          S/ {bookingPricing.totalPrice}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <Alert className="border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200">
                 <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -1460,7 +1637,7 @@ export function SearchResults({
 
       {/* Modal de Pago */}
       <Dialog open={showPayment} onOpenChange={setShowPayment}>
-        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[550px] max-h-[90vh] overflow-y-auto overflow-x-hidden p-5 sm:p-6 rounded-2xl">
           <DialogHeader>
             <DialogTitle>Pagar o Regularizar Reserva</DialogTitle>
             <DialogDescription>
@@ -1512,14 +1689,11 @@ export function SearchResults({
 
               {/* Política de Adelanto del Club */}
               {(() => {
-                const totalPrice = selectedCourt.price * (+duration * 2);
-                const advancePercent = Number(
-                  selectedCourt.clubData?.porcentajeAdelantoDefault ??
-                  selectedCourt.porcentajeAdelantoDefault ??
-                  50
-                );
-                const advanceAmount = Math.max(1, Number(((totalPrice * advancePercent) / 100).toFixed(2)));
-                const remainingAmount = Math.max(0, Number((totalPrice - advanceAmount).toFixed(2)));
+                const payPricing = getEffectivePricing(selectedCourt, selectedTime, duration);
+                const advancePercent = payPricing.advancePercent;
+                const advanceAmount = payPricing.advanceAmount;
+                const remainingAmount = payPricing.remainingAmount;
+                const totalPrice = payPricing.totalPrice;
 
                 return (
                   <div className="space-y-2 p-3.5 rounded-xl border bg-amber-500/10 border-amber-500/20 text-xs">
@@ -1527,12 +1701,24 @@ export function SearchResults({
                       <span className="font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
                         <span>📋</span> Política de Reserva del Club
                       </span>
-                      <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 font-bold">
-                        Adelanto {advancePercent}%
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        {payPricing.hasPromo && (
+                          <Badge variant="destructive" className="text-[10px] py-0 px-1.5 font-bold">
+                            Promo -{payPricing.discountPct}%
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 font-bold">
+                          Adelanto {advancePercent}%
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-muted-foreground text-[11px]">
                       El club requiere como mínimo el <strong>{advancePercent}% (S/ {advanceAmount})</strong> para separar tu cancha. Puedes abonar el adelanto ahora y cancelar el saldo restante al ingresar al complejo, o pagar el total.
+                      {payPricing.hasPromo && (
+                        <span className="block text-emerald-700 dark:text-emerald-300 font-semibold mt-0.5">
+                          ✓ Aplicando precio promocional ({payPricing.isNight ? "Tarifa Noche" : "Tarifa Día"}).
+                        </span>
+                      )}
                     </p>
 
                     <div className="grid grid-cols-2 gap-2 pt-1">
@@ -1571,7 +1757,7 @@ export function SearchResults({
                         <p className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                           S/ {totalPrice}
                         </p>
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400">100% Cancelado</span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400">100% Pagado</span>
                       </button>
                     </div>
                   </div>
@@ -1661,7 +1847,7 @@ export function SearchResults({
 
               {/* Detalle si es YAPE o PLIN */}
               {(payMethod === "yape" || payMethod === "plin") && (
-                <div className="space-y-3 p-4 rounded-xl border bg-card">
+                <div className="space-y-3.5 p-4 rounded-xl border bg-card">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold">
                       Pago con {payMethod === "yape" ? "Yape" : "Plin"}
@@ -1669,73 +1855,158 @@ export function SearchResults({
                     <Badge variant="outline" className="text-xs font-semibold text-emerald-500 border-emerald-500/40">
                       Monto a transferir: S/ {
                         (() => {
-                          const totalPrice = selectedCourt.price * (+duration * 2);
-                          const advancePercent = Number(
-                            selectedCourt.clubData?.porcentajeAdelantoDefault ??
-                            selectedCourt.porcentajeAdelantoDefault ??
-                            50
-                          );
-                          const advanceAmount = Math.max(1, Number(((totalPrice * advancePercent) / 100).toFixed(2)));
-                          return payOption === "advance" ? advanceAmount : totalPrice;
+                          const payPricing = getEffectivePricing(selectedCourt, selectedTime, duration);
+                          return payOption === "advance" ? payPricing.advanceAmount : payPricing.totalPrice;
                         })()
                       }
                     </Badge>
                   </div>
 
-                  {/* Número y QR del Club */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* Número */}
-                    {(() => {
-                      const phone =
-                        (payMethod === "yape"
-                          ? selectedCourt.clubData?.yapeNumero || selectedCourt.yapeNumero
-                          : selectedCourt.clubData?.plinNumero || selectedCourt.plinNumero) ||
-                        selectedCourt.whatsapp ||
-                        selectedCourt.phone ||
-                        "987654321";
-                      return (
-                        <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
-                          <span className="text-[11px] text-muted-foreground">
-                            Número de {payMethod === "yape" ? "Yape" : "Plin"}:
-                          </span>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-mono font-bold">{phone}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => handleCopyPhone(phone)}
-                            >
-                              {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                              <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
-                            </Button>
+                  {/* Titular de la cuenta, Número y QR del Club */}
+                  {(() => {
+                    const titular =
+                      payMethod === "yape"
+                        ? selectedCourt.clubData?.yapeTitular || (selectedCourt as any).yapeTitular
+                        : selectedCourt.clubData?.plinTitular || (selectedCourt as any).plinTitular;
+                    const phone =
+                      (payMethod === "yape"
+                        ? selectedCourt.clubData?.yapeNumero || selectedCourt.yapeNumero
+                        : selectedCourt.clubData?.plinNumero || selectedCourt.plinNumero) ||
+                      selectedCourt.whatsapp ||
+                      selectedCourt.phone ||
+                      "987654321";
+                    const qrUrl =
+                      payMethod === "yape"
+                        ? selectedCourt.clubData?.yapeQrUrl || selectedCourt.yapeQrUrl
+                        : selectedCourt.clubData?.plinQrUrl || selectedCourt.plinQrUrl;
+
+                    return (
+                      <div className="space-y-2.5 pt-1">
+                        {/* Titular de la cuenta */}
+                        <div className="p-3 bg-purple-500/5 dark:bg-purple-950/20 rounded-xl border border-purple-200/50 dark:border-purple-900/40 flex items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                              <ShieldCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                              Titular de la cuenta ({payMethod === "yape" ? "Yape" : "Plin"}):
+                            </span>
+                            <p className="text-xs sm:text-sm font-bold text-foreground">
+                              {titular || selectedCourt.club || selectedCourt.clubData?.name || "Complejo Deportivo"}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] bg-background text-purple-700 dark:text-purple-300 border-purple-200 shrink-0">
+                            Verificar nombre
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Número */}
+                          <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
+                            <span className="text-[11px] text-muted-foreground">
+                              Número de {payMethod === "yape" ? "Yape" : "Plin"}:
+                            </span>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-mono font-bold">{phone}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => handleCopyPhone(phone)}
+                              >
+                                {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                                <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* QR */}
+                          <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
+                            <span className="text-[11px] text-muted-foreground">Código QR Oficial:</span>
+                            {qrUrl ? (
+                              <div className="flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  className="relative group h-12 w-12 rounded-lg border overflow-hidden bg-white p-0.5 shrink-0 shadow-sm"
+                                  onClick={() => {
+                                    setQrModalData({
+                                      qrUrl,
+                                      walletType: payMethod === "plin" ? "plin" : "yape",
+                                      titular,
+                                      phone,
+                                      amount: payOption === "advance"
+                                        ? getEffectivePricing(selectedCourt, selectedTime, duration).advanceAmount
+                                        : getEffectivePricing(selectedCourt, selectedTime, duration).totalPrice,
+                                    });
+                                    setQrModalOpen(true);
+                                  }}
+                                  title="Hacer clic para ampliar QR para escaneo"
+                                >
+                                  <img src={qrUrl} alt="QR" className="h-full w-full object-contain group-hover:scale-110 transition-transform" />
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                    <Maximize2 className="h-3.5 w-3.5 text-white" />
+                                  </div>
+                                </button>
+                                <div className="flex flex-col gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 justify-start"
+                                    onClick={() => {
+                                      setQrModalData({
+                                        qrUrl,
+                                        walletType: payMethod === "plin" ? "plin" : "yape",
+                                        titular,
+                                        phone,
+                                        amount: payOption === "advance"
+                                          ? getEffectivePricing(selectedCourt, selectedTime, duration).advanceAmount
+                                          : getEffectivePricing(selectedCourt, selectedTime, duration).totalPrice,
+                                      });
+                                      setQrModalOpen(true);
+                                    }}
+                                  >
+                                    <Maximize2 className="h-2.5 w-2.5 mr-1" />
+                                    Ampliar QR
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-slate-700 hover:text-slate-900 justify-start"
+                                    onClick={() =>
+                                      downloadImage(
+                                        qrUrl,
+                                        `QR-${payMethod}-${phone || "cancha"}.png`
+                                      )
+                                    }
+                                  >
+                                    <Download className="h-2.5 w-2.5 mr-1" />
+                                    Descargar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-muted-foreground text-xs opacity-50 py-1">
+                                <QrCode className="h-6 w-6" />
+                                <span>Sin QR cargado</span>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      );
-                    })()}
+                      </div>
+                    );
+                  })()}
 
-                    {/* QR */}
-                    {(() => {
-                      const qrUrl =
-                        payMethod === "yape"
-                          ? selectedCourt.clubData?.yapeQrUrl || selectedCourt.yapeQrUrl
-                          : selectedCourt.clubData?.plinQrUrl || selectedCourt.plinQrUrl;
-                      return (
-                        <div className="p-3 bg-muted/40 rounded-xl border flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-muted-foreground">Código QR Oficial</span>
-                          {qrUrl ? (
-                            <img src={qrUrl} alt="QR" className="h-10 w-10 object-contain rounded border bg-white p-0.5" />
-                          ) : (
-                            <QrCode className="h-6 w-6 text-muted-foreground opacity-40" />
-                          )}
-                        </div>
-                      );
-                    })()}
+                  {/* Aviso de tiempo límite de 15 minutos */}
+                  <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
+                    <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
+                    <p className="leading-snug">
+                      ⏳ <strong>Tienes 15 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
+                    </p>
                   </div>
 
                   {/* Subida de Comprobante */}
-                  <div className="space-y-1.5 pt-2">
+                  <div className="space-y-1.5 pt-1">
                     <label className="text-xs font-semibold flex items-center gap-1">
                       <Upload className="h-3.5 w-3.5 text-primary" />
                       Captura del Comprobante *
@@ -1847,7 +2118,7 @@ export function SearchResults({
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Confirmación Post-Reserva con Estado de Pago y Alerta de 15 Minutos / 2 Horas */}
+      {/* Modal de Éxito / Confirmación con Bloqueo y Advertencias */}
       <Dialog open={showSuccessModal} onOpenChange={(open) => {
         if (!open) {
           setShowSuccessModal(false);
@@ -1859,48 +2130,48 @@ export function SearchResults({
           router.push("/user/bookings");
         }
       }}>
-        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] sm:max-w-[540px] max-h-[90vh] overflow-y-auto overflow-x-hidden p-5 sm:p-6 rounded-2xl">
+          <DialogHeader className="space-y-1">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-6 w-6" />
-              <DialogTitle className="text-xl">¡Reserva Registrada!</DialogTitle>
+              <CheckCircle2 className="h-6 w-6 shrink-0" />
+              <DialogTitle className="text-xl font-bold">¡Reserva Registrada!</DialogTitle>
             </div>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
               Tu reserva ha sido procesada. Revisa el estado de tu pago y los detalles a continuación.
             </DialogDescription>
           </DialogHeader>
 
           {successBookingData && (
-            <div className="space-y-4 py-2 text-sm">
+            <div className="space-y-4 py-1 text-sm">
               {/* Tarjeta de Resumen */}
-              <div className="rounded-xl border bg-muted/40 p-4 space-y-2.5">
-                <div className="flex items-center justify-between">
+              <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código de Reserva</span>
-                  <Badge variant="outline" className="font-mono font-bold text-xs bg-background">
+                  <Badge variant="outline" className="font-mono font-bold text-xs bg-background shrink-0">
                     {successBookingData.reference}
                   </Badge>
                 </div>
 
-                <div className="pt-1">
-                  <h4 className="font-bold text-base text-foreground">{successBookingData.courtName}</h4>
-                  <p className="text-xs text-muted-foreground">{successBookingData.clubName}</p>
+                <div className="pt-0.5">
+                  <h4 className="font-bold text-base text-foreground break-words">{successBookingData.courtName}</h4>
+                  <p className="text-xs text-muted-foreground break-words">{successBookingData.clubName}</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t">
+                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
                   <div>
-                    <span className="text-muted-foreground block">Fecha:</span>
-                    <span className="font-medium">{successBookingData.date}</span>
+                    <span className="text-muted-foreground block text-[11px]">Fecha:</span>
+                    <span className="font-semibold text-foreground">{successBookingData.date}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground block">Horario:</span>
-                    <span className="font-medium">{successBookingData.timeRange}</span>
+                    <span className="text-muted-foreground block text-[11px]">Horario:</span>
+                    <span className="font-semibold text-foreground">{successBookingData.timeRange}</span>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t flex items-center justify-between text-xs">
+                <div className="pt-2 border-t flex items-center justify-between text-xs flex-wrap gap-1">
                   <span className="text-muted-foreground">Teléfono registrado:</span>
                   <span className="font-semibold text-foreground flex items-center gap-1">
-                    <Smartphone className="h-3.5 w-3.5 text-primary" />
+                    <Smartphone className="h-3.5 w-3.5 text-primary shrink-0" />
                     {successBookingData.customerPhone || "No ingresado"}
                   </span>
                 </div>
@@ -1909,12 +2180,12 @@ export function SearchResults({
               {/* Estado de Pago y Advertencias */}
               {successBookingData.paymentStatus === "WHATSAPP_COORDINACION" ? (
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 p-4 space-y-2 text-emerald-900 dark:text-emerald-200">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
-                      <MessageCircle className="h-4 w-4 fill-emerald-600 text-white" />
+                      <MessageCircle className="h-4 w-4 fill-emerald-600 text-white shrink-0" />
                       Estado: EN COORDINACIÓN POR WHATSAPP
                     </span>
-                    <Badge variant="outline" className="text-[10px] font-bold border-emerald-500 text-emerald-700 dark:text-emerald-300">
+                    <Badge variant="outline" className="text-[10px] font-bold border-emerald-500 text-emerald-700 dark:text-emerald-300 shrink-0">
                       Bloqueado 2 Horas
                     </Badge>
                   </div>
@@ -1927,11 +2198,11 @@ export function SearchResults({
                 </div>
               ) : successBookingData.paymentStatus === "PENDIENTE" ? (
                 <div className="rounded-xl border border-red-500/30 bg-red-50/80 dark:bg-red-950/30 p-4 space-y-2 text-red-900 dark:text-red-200">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 text-red-700 dark:text-red-400">
                       <span>⚠️</span> Estado de Pago: PENDIENTE
                     </span>
-                    <Badge variant="destructive" className="text-[10px] font-bold">
+                    <Badge variant="destructive" className="text-[10px] font-bold shrink-0">
                       Tolerancia 15 min
                     </Badge>
                   </div>
@@ -1943,37 +2214,37 @@ export function SearchResults({
                   </p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 p-4 space-y-1.5 text-emerald-900 dark:text-emerald-200">
-                  <div className="flex items-center justify-between">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 p-3.5 space-y-1.5 text-emerald-900 dark:text-emerald-200">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
                       <span>✅</span> Estado de Pago: COMPROBANTE REGISTRADO
                     </span>
-                    <Badge variant="outline" className="text-[10px] font-bold border-emerald-500 text-emerald-700 dark:text-emerald-300">
+                    <Badge variant="outline" className="text-[10px] font-bold border-emerald-500 text-emerald-700 dark:text-emerald-300 shrink-0">
                       En Revisión
                     </Badge>
                   </div>
-                  <p className="text-xs">
+                  <p className="text-xs leading-relaxed">
                     Tu comprobante ha sido enviado con éxito. Tu turno está protegido y asegurado.
                   </p>
                 </div>
               )}
 
               {/* Acceso Directo de Comunicación Desbloqueado */}
-              <div className="rounded-xl border bg-emerald-500/5 border-emerald-500/20 p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
+              <div className="rounded-xl border bg-emerald-500/5 border-emerald-500/20 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                    <MessageCircle className="h-4 w-4 fill-emerald-600 text-white" />
+                    <MessageCircle className="h-4 w-4 fill-emerald-600 text-white shrink-0" />
                     Acceso de Comunicación Directa Activado
                   </span>
-                  <Badge variant="outline" className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300">
+                  <Badge variant="outline" className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 shrink-0">
                     Habilitado
                   </Badge>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Al haber reservado, ahora dispones del contacto directo con el Club para coordinar o enviar tu confirmación.
                 </p>
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <div className="flex flex-col gap-2 pt-1">
                   {(successBookingData.clubWhatsApp || successBookingData.clubPhone) && (
                     <a
                       href={getWhatsAppLink(
@@ -1982,14 +2253,14 @@ export function SearchResults({
                       )}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1"
+                      className="w-full"
                     >
                       <Button
                         type="button"
-                        className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-semibold text-xs gap-1.5 h-9"
+                        className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-semibold text-xs gap-1.5 h-10 py-2 whitespace-normal leading-tight"
                       >
-                        <MessageCircle className="h-4 w-4 fill-white text-[#25D366]" />
-                        Enviar Confirmación al Club por WhatsApp
+                        <MessageCircle className="h-4 w-4 fill-white text-[#25D366] shrink-0" />
+                        <span>Enviar Confirmación al Club por WhatsApp</span>
                       </Button>
                     </a>
                   )}
@@ -2002,15 +2273,15 @@ export function SearchResults({
                       )}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1"
+                      className="w-full"
                     >
                       <Button
                         type="button"
                         variant="outline"
-                        className="w-full border-emerald-600/30 text-emerald-700 dark:text-emerald-400 font-semibold text-xs gap-1.5 h-9"
+                        className="w-full border-emerald-600/30 text-emerald-700 dark:text-emerald-400 font-semibold text-xs gap-1.5 h-10 py-2 whitespace-normal leading-tight"
                       >
-                        <Smartphone className="h-4 w-4 text-emerald-600" />
-                        Abrir en mi WhatsApp ({successBookingData.customerPhone})
+                        <Smartphone className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span>Abrir en mi WhatsApp ({successBookingData.customerPhone})</span>
                       </Button>
                     </a>
                   )}
@@ -2018,10 +2289,10 @@ export function SearchResults({
               </div>
 
               {/* Botón de cierre e ir a Mis Reservas */}
-              <div className="pt-2">
+              <div className="pt-1">
                 <Button
                   type="button"
-                  className="w-full"
+                  className="w-full h-10 font-semibold text-xs sm:text-sm"
                   onClick={() => {
                     setShowSuccessModal(false);
                     setSelectedCourt(null);
@@ -2039,6 +2310,17 @@ export function SearchResults({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal para Ampliar y Descargar Código QR */}
+      <QrPreviewModal
+        open={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        qrUrl={qrModalData.qrUrl}
+        walletType={qrModalData.walletType}
+        titular={qrModalData.titular}
+        phone={qrModalData.phone}
+        amount={qrModalData.amount}
+      />
     </div>
   );
 }

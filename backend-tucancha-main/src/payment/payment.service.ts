@@ -641,10 +641,13 @@ export class PaymentService {
     }
 
     let savedPayment: Payment;
+    const existing = booking.payment || await this.paymentRepo.findOne({
+      where: { booking: { id: dto.bookingId } },
+      relations: ['booking', 'user'],
+    });
 
-    if (booking.payment) {
+    if (existing) {
       // Si la reserva ya tiene un registro de pago asociado
-      const existing = booking.payment;
       if (safeType === PaymentType.SALDO || rawType.includes('SALDO')) {
         // Es la cancelación o comprobante del saldo restante
         existing.saldoAmount = safeAmount;
@@ -759,8 +762,14 @@ export class PaymentService {
       // Confirmar reserva asociada
       if (payment.booking) {
         payment.booking.status = BookingStatus.CONFIRMED;
-        payment.booking.paymentStatus = PaymentStatus.PAID;
         payment.booking.pendingAudit = false;
+
+        if (payment.type === PaymentType.PAGO_COMPLETO || payment.saldoStatus === 'PAGADO') {
+          payment.booking.paymentStatus = PaymentStatus.PAID;
+        } else if (payment.type === PaymentType.ADELANTO && payment.saldoStatus !== 'PAGADO') {
+          payment.booking.paymentStatus = PaymentStatus.PENDING;
+        }
+
         await this.bookingRepo.save(payment.booking);
 
         if (payment.booking.court && payment.booking.date && payment.booking.startTime) {
@@ -796,6 +805,61 @@ export class PaymentService {
     return {
       status: saved.status,
       message: action === 'CONFIRMAR' ? 'Pago confirmado exitosamente' : 'Pago rechazado',
+      payment: saved,
+    };
+  }
+
+  /**
+   * Auditar el comprobante de saldo restante subido por el usuario.
+   * CONFIRMAR → saldoStatus = PAGADO, si el pago inicial también está confirmado → PAGO COMPLETO
+   * RECHAZAR → saldoStatus = RECHAZADO, el usuario deberá re-enviar
+   */
+  async auditSaldoComprobante(
+    paymentId: string,
+    action: 'CONFIRMAR' | 'RECHAZAR',
+    auditor: User,
+    motivoRechazo?: string,
+  ) {
+    const payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+    });
+    if (!payment) throw new BadRequestException('Pago no encontrado');
+
+    if (action === 'CONFIRMAR') {
+      payment.saldoStatus = 'PAGADO';
+      payment.saldoConfirmadoPor = auditor;
+      payment.saldoFechaConfirmacion = new Date();
+
+      // Si el comprobante inicial ya fue aprobado → pago completo
+      const initialConfirmed =
+        payment.status === PaymentStatus.PAID ||
+        String(payment.status).toUpperCase() === 'CONFIRMADO' ||
+        String(payment.status).toUpperCase() === 'CONFIRMED';
+
+      if (payment.booking) {
+        if (initialConfirmed) {
+          // Ambos pagos confirmados → PAGO COMPLETO
+          payment.booking.paymentStatus = PaymentStatus.PAID;
+          payment.booking.status = BookingStatus.CONFIRMED;
+        }
+        await this.bookingRepo.save(payment.booking);
+      }
+    } else {
+      // RECHAZAR
+      payment.saldoStatus = 'RECHAZADO';
+      payment.saldoNotas = motivoRechazo || 'Comprobante de saldo rechazado por el club';
+      payment.saldoFechaConfirmacion = new Date();
+      payment.saldoConfirmadoPor = auditor;
+    }
+
+    const saved = await this.paymentRepo.save(payment);
+
+    return {
+      status: saved.saldoStatus,
+      message: action === 'CONFIRMAR'
+        ? 'Comprobante de saldo confirmado exitosamente'
+        : 'Comprobante de saldo rechazado',
       payment: saved,
     };
   }

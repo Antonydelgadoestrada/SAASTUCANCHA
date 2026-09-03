@@ -17,8 +17,11 @@ import {
   Check,
   QrCode,
   X,
-  Banknote,
   AlertCircle,
+  ShieldCheck,
+  Download,
+  Maximize2,
+  Banknote,
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -39,7 +42,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getAllReservationByUser } from "@/lib/reservation"
 import { confirmPayment } from "@/lib/mercadopago"
 import { parseSafeDate, formatSafeDate, getBookingTotalPrice } from "@/lib/utils"
-import { getWhatsAppLink, uploadPaymentReceipt, createBookingPayment } from "@/lib/payments"
+import { getWhatsAppLink, uploadPaymentReceipt, createBookingPayment, downloadImage } from "@/lib/payments"
+import { BookingStatusBadge } from "@/components/ui/booking-status-badge"
+import { BookingExpirationTimer } from "@/components/booking/booking-expiration-timer"
+import { QrPreviewModal } from "@/components/ui/qr-preview-modal"
 
 const getBookingTimeRange = (startTime: string, duration: number) => {
   if (!startTime) return ""
@@ -110,6 +116,14 @@ export function UserBookingsContent() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
   const [copiedPhone, setCopiedPhone] = useState(false)
+  const [qrModalOpen, setQrModalOpen] = useState(false)
+  const [qrModalData, setQrModalData] = useState<{
+    qrUrl?: string | null
+    walletType?: "yape" | "plin"
+    titular?: string | null
+    phone?: string | null
+    amount?: number | null
+  }>({})
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -291,38 +305,7 @@ export function UserBookingsContent() {
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "confirmed":
-        return (
-          <Badge variant="outline" className="flex items-center gap-1 border-green-500 text-green-600 bg-green-500/10">
-            <CheckCircleIcon className="h-3 w-3" />
-            Confirmada
-          </Badge>
-        )
-      case "pending":
-        return (
-          <Badge variant="outline" className="flex items-center gap-1 border-amber-500 text-amber-600 bg-amber-500/10">
-            <ClockIcon className="h-3 w-3" />
-            Pendiente de pago
-          </Badge>
-        )
-      case "cancelled":
-        return (
-          <Badge variant="outline" className="flex items-center gap-1 border-destructive text-destructive bg-destructive/10">
-            <XCircleIcon className="h-3 w-3" />
-            Cancelada
-          </Badge>
-        )
-      case "completed":
-        return (
-          <Badge variant="outline" className="flex items-center gap-1 border-blue-500 text-blue-600 bg-blue-500/10">
-            <CheckCircleIcon className="h-3 w-3" />
-            Completada
-          </Badge>
-        )
-      default:
-        return null
-    }
+    return <BookingStatusBadge status={status} />
   }
 
   return (
@@ -542,10 +525,17 @@ export function UserBookingsContent() {
                             <CardTitle className="text-lg">{courtName}</CardTitle>
                             <CardDescription>{venueName}</CardDescription>
                           </div>
-                          {getStatusBadge(booking.status)}
+                          <div className="flex flex-col items-end gap-1">
+                            {getStatusBadge(booking.status)}
+                            <BookingExpirationTimer
+                              compact
+                              createdAt={booking.createdAt}
+                              paymentMethod={booking.paymentMethod || booking.payment?.method || booking.payment?.metodo}
+                            />
+                          </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-2 text-sm">
+                      <CardContent className="space-y-3 text-sm">
                         <div className="flex items-center text-xs">
                           <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
                           <span>
@@ -561,6 +551,12 @@ export function UserBookingsContent() {
                           </span>
                         </div>
                         <div className="font-semibold text-sm">Precio Total: S/ {totalPrice}</div>
+
+                        {/* Temporizador destacado de tiempo restante antes de liberar la cancha */}
+                        <BookingExpirationTimer
+                          createdAt={booking.createdAt}
+                          paymentMethod={booking.paymentMethod || booking.payment?.method || booking.payment?.metodo}
+                        />
 
                         {booking.paymentMethod?.toLowerCase() === "whatsapp" || booking.payment?.metodo?.toLowerCase() === "whatsapp" || booking.payment?.method?.toLowerCase() === "whatsapp" ? (
                           <div className="p-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300">
@@ -706,7 +702,7 @@ export function UserBookingsContent() {
       {/* DIÁLOGO DE DETALLES DE LA RESERVA */}
       {selectedBooking && (
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto overflow-x-hidden p-5 sm:p-6 rounded-2xl">
             <DialogHeader>
               <DialogTitle>Detalles de la Reserva</DialogTitle>
               <DialogDescription>
@@ -734,6 +730,13 @@ export function UserBookingsContent() {
                   <h4 className="font-medium">Estado</h4>
                   {getStatusBadge(selectedBooking.status)}
                 </div>
+
+                {selectedBooking.status === "pending" && (
+                  <BookingExpirationTimer
+                    createdAt={selectedBooking.createdAt}
+                    paymentMethod={selectedBooking.paymentMethod || selectedBooking.payment?.method || selectedBooking.payment?.metodo}
+                  />
+                )}
 
                 <div>
                   <h4 className="font-medium">Fecha y hora</h4>
@@ -873,7 +876,7 @@ export function UserBookingsContent() {
       {/* DIÁLOGO DE PAGO O CANCELACIÓN DE SALDO RESTANTE */}
       {selectedBooking && (
         <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-          <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="w-[95vw] sm:max-w-[550px] max-h-[90vh] overflow-y-auto overflow-x-hidden p-5 sm:p-6 rounded-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {paymentMode === "SALDO" ? (
@@ -1001,7 +1004,7 @@ export function UserBookingsContent() {
                         <p className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                           S/ {totalPrice}
                         </p>
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400">100% Cancelado</span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400">100% Pagado</span>
                       </button>
                     </div>
                   </div>
@@ -1072,7 +1075,7 @@ export function UserBookingsContent() {
 
               {/* Detalle si es YAPE o PLIN */}
               {(payMethod === "yape" || payMethod === "plin") && (
-                <div className="space-y-3 p-4 rounded-xl border bg-card">
+                <div className="space-y-3.5 p-4 rounded-xl border bg-card">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold">
                       Pago con {payMethod === "yape" ? "Yape" : "Plin"}
@@ -1093,52 +1096,147 @@ export function UserBookingsContent() {
                     </Badge>
                   </div>
 
-                  {/* Número y QR del Club */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* Número */}
-                    {(() => {
-                      const club = selectedBooking.court?.venue?.club || selectedBooking.court?.club || selectedBooking.club
-                      const venue = selectedBooking.court?.venue
-                      const phone = (payMethod === "yape" ? club?.yapeNumero : club?.plinNumero) || club?.whatsapp || venue?.phone || club?.phone || "987654321"
-                      return (
-                        <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
-                          <span className="text-[11px] text-muted-foreground">Número de {payMethod === "yape" ? "Yape" : "Plin"}:</span>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-mono font-bold">{phone}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => handleCopyPhone(phone)}
-                            >
-                              {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                              <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
-                            </Button>
+                  {/* Titular de la cuenta, Número y QR del Club */}
+                  {(() => {
+                    const club = selectedBooking.court?.venue?.club || selectedBooking.court?.club || selectedBooking.club
+                    const venue = selectedBooking.court?.venue
+                    const titular = payMethod === "yape" ? club?.yapeTitular : club?.plinTitular
+                    const phone = (payMethod === "yape" ? club?.yapeNumero : club?.plinNumero) || club?.whatsapp || venue?.phone || club?.phone || "987654321"
+                    const qrUrl = payMethod === "yape" ? club?.yapeQrUrl : club?.plinQrUrl
+
+                    return (
+                      <div className="space-y-2.5 pt-1">
+                        {/* Titular de la cuenta */}
+                        <div className="p-3 bg-purple-500/5 dark:bg-purple-950/20 rounded-xl border border-purple-200/50 dark:border-purple-900/40 flex items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                              <ShieldCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                              Titular de la cuenta ({payMethod === "yape" ? "Yape" : "Plin"}):
+                            </span>
+                            <p className="text-xs sm:text-sm font-bold text-foreground">
+                              {titular || club?.name || venue?.name || "Complejo Deportivo"}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] bg-background text-purple-700 dark:text-purple-300 border-purple-200 shrink-0">
+                            Verificar nombre
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Número */}
+                          <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
+                            <span className="text-[11px] text-muted-foreground">Número de {payMethod === "yape" ? "Yape" : "Plin"}:</span>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-mono font-bold">{phone}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => handleCopyPhone(phone)}
+                              >
+                                {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                                <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* QR */}
+                          <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
+                            <span className="text-[11px] text-muted-foreground">Código QR Oficial:</span>
+                            {qrUrl ? (
+                              <div className="flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  className="relative group h-12 w-12 rounded-lg border overflow-hidden bg-white p-0.5 shrink-0 shadow-sm"
+                                  onClick={() => {
+                                    const fin = getBookingPaymentDetails(selectedBooking)
+                                    const amountVal = paymentMode === "SALDO"
+                                      ? fin.saldoRemaining
+                                      : payOption === "advance"
+                                      ? Math.max(1, Number(((fin.totalPrice * Number(club?.porcentajeAdelantoDefault ?? 50)) / 100).toFixed(2)))
+                                      : fin.totalPrice
+                                    setQrModalData({
+                                      qrUrl,
+                                      walletType: payMethod === "plin" ? "plin" : "yape",
+                                      titular,
+                                      phone,
+                                      amount: amountVal,
+                                    })
+                                    setQrModalOpen(true)
+                                  }}
+                                  title="Hacer clic para ampliar QR para escaneo"
+                                >
+                                  <img src={qrUrl} alt="QR" className="h-full w-full object-contain group-hover:scale-110 transition-transform" />
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                    <Maximize2 className="h-3.5 w-3.5 text-white" />
+                                  </div>
+                                </button>
+                                <div className="flex flex-col gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 justify-start"
+                                    onClick={() => {
+                                      const fin = getBookingPaymentDetails(selectedBooking)
+                                      const amountVal = paymentMode === "SALDO"
+                                        ? fin.saldoRemaining
+                                        : payOption === "advance"
+                                        ? Math.max(1, Number(((fin.totalPrice * Number(club?.porcentajeAdelantoDefault ?? 50)) / 100).toFixed(2)))
+                                        : fin.totalPrice
+                                      setQrModalData({
+                                        qrUrl,
+                                        walletType: payMethod === "plin" ? "plin" : "yape",
+                                        titular,
+                                        phone,
+                                        amount: amountVal,
+                                      })
+                                      setQrModalOpen(true)
+                                    }}
+                                  >
+                                    <Maximize2 className="h-2.5 w-2.5 mr-1" />
+                                    Ampliar QR
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-slate-700 hover:text-slate-900 justify-start"
+                                    onClick={() =>
+                                      downloadImage(
+                                        qrUrl,
+                                        `QR-${payMethod}-${phone || "reserva"}.png`
+                                      )
+                                    }
+                                  >
+                                    <Download className="h-2.5 w-2.5 mr-1" />
+                                    Descargar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-muted-foreground text-xs opacity-50 py-1">
+                                <QrCode className="h-6 w-6" />
+                                <span>Sin QR cargado</span>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )
-                    })()}
+                      </div>
+                    )
+                  })()}
 
-                    {/* QR */}
-                    {(() => {
-                      const club = selectedBooking.court?.venue?.club || selectedBooking.court?.club || selectedBooking.club
-                      const qrUrl = payMethod === "yape" ? club?.yapeQrUrl : club?.plinQrUrl
-                      return (
-                        <div className="p-3 bg-muted/40 rounded-xl border flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-muted-foreground">Código QR Oficial</span>
-                          {qrUrl ? (
-                            <img src={qrUrl} alt="QR" className="h-10 w-10 object-contain rounded border bg-white p-0.5" />
-                          ) : (
-                            <QrCode className="h-6 w-6 text-muted-foreground opacity-40" />
-                          )}
-                        </div>
-                      )
-                    })()}
+                  {/* Aviso de tiempo límite de 15 minutos */}
+                  <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
+                    <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
+                    <p className="leading-snug">
+                      ⏳ <strong>Tienes 15 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
+                    </p>
                   </div>
 
                   {/* Subida de Comprobante */}
-                  <div className="space-y-1.5 pt-2">
+                  <div className="space-y-1.5 pt-1">
                     <label className="text-xs font-semibold flex items-center gap-1">
                       <Upload className="h-3.5 w-3.5 text-primary" />
                       Captura del Comprobante {paymentMode === "SALDO" ? "del Saldo" : ""} *
@@ -1256,6 +1354,17 @@ export function UserBookingsContent() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Modal para Ampliar y Descargar Código QR */}
+      <QrPreviewModal
+        open={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        qrUrl={qrModalData.qrUrl}
+        walletType={qrModalData.walletType}
+        titular={qrModalData.titular}
+        phone={qrModalData.phone}
+        amount={qrModalData.amount}
+      />
     </div>
   )
 }

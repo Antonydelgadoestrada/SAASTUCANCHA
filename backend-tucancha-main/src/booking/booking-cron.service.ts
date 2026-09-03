@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
-import { subHours, subMinutes, addMinutes, format } from 'date-fns';
+import { Repository, LessThan, MoreThanOrEqual } from 'typeorm';
+import { subHours, subMinutes, addMinutes, format, startOfDay } from 'date-fns';
 import { Booking } from './booking.entity';
 import { BookingStatus } from './booking-status.enum';
 import { Payment } from '../payment/payment.entity';
@@ -45,13 +45,15 @@ export class BookingCronService {
    * 1. Sin comprobante (Yape/Plin regular) -> Se auto-cancela a los 15 minutos y se liberan las canchas.
    * 2. "Solo WhatsApp" (en coordinación) -> Se auto-cancela a las 2 horas si el admin no confirma manualmente en el panel.
    * 3. Con comprobante subido -> Se auto-confirma a las 2 horas si el club no responde (cancha 100% asegurada).
+   * 4. Recordatorio automático 30-60 minutos antes del turno para reducir inasistencias.
    */
   @Cron('*/2 * * * *')
   async handleBookingLifecycle() {
-    this.logger.log('⏰ Ejecutando ciclo de reservas (Yape/Plin sin voucher > 15m, WhatsApp sin confirmar > 2h, Con voucher > 2h)...');
+    this.logger.log('⏰ Ejecutando ciclo de reservas (Yape/Plin sin voucher > 15m, WhatsApp sin confirmar > 2h, Con voucher > 2h, Recordatorios 30-60m)...');
     await this.handleUnpaidBookingsAutoCancellation();
     await this.handleWhatsAppUnconfirmedBookingsAutoCancellation();
     await this.handleVoucherUploadedAutoConfirmation();
+    await this.handleUpcomingBookingsReminders();
   }
 
   /**
@@ -269,6 +271,77 @@ export class BookingCronService {
       }
     } catch (err) {
       this.logger.error('Error al procesar auto-confirmación de reservas con comprobante:', err?.message || err);
+    }
+  }
+
+  /**
+   * 4) Recordatorio automático 30-60 min antes del turno programado:
+   * Busca reservas confirmadas para hoy cuyo partido inicie entre 15 y 65 minutos adelante,
+   * envía el correo de recordatorio y marca reminderSent = true.
+   */
+  async handleUpcomingBookingsReminders() {
+    try {
+      const todayStart = startOfDay(new Date());
+
+      const upcomingBookings = await this.bookingRepo.find({
+        where: {
+          status: BookingStatus.CONFIRMED,
+          autoCancelled: false,
+          reminderSent: false,
+          date: MoreThanOrEqual(todayStart),
+        },
+        relations: ['court', 'club', 'user'],
+      });
+
+      const now = new Date();
+
+      for (const booking of upcomingBookings) {
+        if (!booking.startTime || !booking.date) {
+          continue;
+        }
+
+        const dateObj = new Date(booking.date);
+        const [hours, minutes] = (booking.startTime || '').split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes)) {
+          continue;
+        }
+
+        // Construir fecha y hora del turno
+        const matchStartTime = new Date(
+          dateObj.getFullYear(),
+          dateObj.getMonth(),
+          dateObj.getDate(),
+          hours,
+          minutes,
+          0,
+          0,
+        );
+
+        const diffMinutes = Math.round(
+          (matchStartTime.getTime() - now.getTime()) / (1000 * 60),
+        );
+
+        // Ventana de recordatorio: entre 15 y 65 minutos antes del turno (ventana ideal de 30-60 min)
+        if (diffMinutes >= 15 && diffMinutes <= 65) {
+          const email = booking.customerInfo?.email || booking.user?.email;
+          if (email) {
+            this.logger.log(
+              `🔔 Enviando recordatorio de partido a ${email} (Reserva: ${booking.bookingReference}, Inicio: ${booking.startTime}, en ${diffMinutes} min)`,
+            );
+            await this.mailerService.sendBookingReminderEmail(email, booking);
+          }
+
+          booking.reminderSent = true;
+          booking.reminderSentAt = new Date();
+          booking.notifiedAt = new Date();
+          await this.bookingRepo.save(booking);
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        'Error al procesar recordatorios automáticos de partidos:',
+        err?.message || err,
+      );
     }
   }
 }

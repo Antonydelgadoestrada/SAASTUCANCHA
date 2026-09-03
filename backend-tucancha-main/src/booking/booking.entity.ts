@@ -39,7 +39,7 @@
     @Column()
     endTime: string;
   
-    @Column()
+    @Column({ type: 'float', default: 1 })
     duration: number;
   
     @Column('jsonb')
@@ -117,6 +117,12 @@
 
     @Column({ default: false })
     autoCancelled: boolean;
+
+    @Column({ default: false })
+    reminderSent: boolean;
+
+    @Column({ type: 'timestamp', nullable: true })
+    reminderSentAt?: Date;
   }
 
   

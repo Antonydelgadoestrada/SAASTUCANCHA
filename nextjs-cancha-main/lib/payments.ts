@@ -22,8 +22,10 @@ export interface ClubPaymentConfig {
   whatsapp?: string | null
   yapeNumero?: string | null
   yapeQrUrl?: string | null
+  yapeTitular?: string | null
   plinNumero?: string | null
   plinQrUrl?: string | null
+  plinTitular?: string | null
   porcentajeAdelantoDefault: number
   adelantoMinimo?: number | null
 }
@@ -143,6 +145,20 @@ export const confirmManualPayment = async (
   return res.data
 }
 
+// ─── AUDITAR COMPROBANTE DE SALDO ─────────────────────────────────────────────
+
+export const confirmSaldoPayment = async (
+  paymentId: string,
+  action: "CONFIRMAR" | "RECHAZAR",
+  motivoRechazo?: string
+): Promise<{ status: string; message: string; payment: PaymentItem }> => {
+  const res = await api.patch(`/payments/${paymentId}/confirm-saldo`, {
+    action,
+    motivoRechazo,
+  })
+  return res.data
+}
+
 // ─── LIQUIDAR / COBRAR SALDO RESTANTE ────────────────────────────────────────
 
 export const settlePaymentSaldo = async (
@@ -239,4 +255,32 @@ export const uploadPaymentReceipt = async (
     headers: { "Content-Type": "multipart/form-data" },
   })
   return res.data
+}
+
+// ─── HELPER PARA DESCARGAR IMÁGENES (QR / COMPROBANTES) ──────────────────────
+
+export async function downloadImage(url: string, defaultFilename: string = "descarga.png") {
+  if (!url) return
+  try {
+    const response = await fetch(url, { mode: "cors" })
+    if (!response.ok) throw new Error("Error en red")
+    const blob = await response.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = blobUrl
+    link.download = defaultFilename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err) {
+    // Fallback directo por si hay restricciones de CORS
+    const link = document.createElement("a")
+    link.href = url
+    link.target = "_blank"
+    link.download = defaultFilename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 }

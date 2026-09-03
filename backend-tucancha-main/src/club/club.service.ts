@@ -121,8 +121,10 @@ export class ClubService {
       whatsapp: club.whatsapp || null,
       yapeNumero: club.yapeNumero,
       yapeQrUrl: club.yapeQrUrl,
+      yapeTitular: club.yapeTitular || null,
       plinNumero: club.plinNumero,
       plinQrUrl: club.plinQrUrl,
+      plinTitular: club.plinTitular || null,
       porcentajeAdelantoDefault: club.porcentajeAdelantoDefault ?? 50,
       adelantoMinimo: club.adelantoMinimo ? Number(club.adelantoMinimo) : null,
     };
@@ -142,8 +144,10 @@ export class ClubService {
     if (dto.aceptaMercadopago !== undefined) club.aceptaMercadopago = Boolean(dto.aceptaMercadopago);
     if (dto.yapeNumero !== undefined) club.yapeNumero = dto.yapeNumero?.trim() || null;
     if (dto.yapeQrUrl !== undefined) club.yapeQrUrl = dto.yapeQrUrl?.trim() || null;
+    if (dto.yapeTitular !== undefined) club.yapeTitular = dto.yapeTitular?.trim() || null;
     if (dto.plinNumero !== undefined) club.plinNumero = dto.plinNumero?.trim() || null;
     if (dto.plinQrUrl !== undefined) club.plinQrUrl = dto.plinQrUrl?.trim() || null;
+    if (dto.plinTitular !== undefined) club.plinTitular = dto.plinTitular?.trim() || null;
     if (dto.porcentajeAdelantoDefault !== undefined) {
       club.porcentajeAdelantoDefault = Number(dto.porcentajeAdelantoDefault) >= 0 ? Number(dto.porcentajeAdelantoDefault) : 50;
     }
@@ -159,8 +163,10 @@ export class ClubService {
       whatsapp: saved.whatsapp || null,
       yapeNumero: saved.yapeNumero || null,
       yapeQrUrl: saved.yapeQrUrl || null,
+      yapeTitular: saved.yapeTitular || null,
       plinNumero: saved.plinNumero || null,
       plinQrUrl: saved.plinQrUrl || null,
+      plinTitular: saved.plinTitular || null,
       porcentajeAdelantoDefault: saved.porcentajeAdelantoDefault ?? 50,
       adelantoMinimo: saved.adelantoMinimo ? Number(saved.adelantoMinimo) : null,
     };

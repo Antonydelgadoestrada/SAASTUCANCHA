@@ -23,12 +23,22 @@ export class UpdateClubPaymentConfigDto {
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsString()
+  yapeTitular?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
   plinNumero?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsString()
   plinQrUrl?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsString()
+  plinTitular?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined)

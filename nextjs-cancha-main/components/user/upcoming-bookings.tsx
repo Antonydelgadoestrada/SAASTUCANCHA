@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { parseSafeDate, formatSafeDate } from "@/lib/utils"
+import { BookingStatusBadge } from "@/components/ui/booking-status-badge"
+import { BookingExpirationTimer } from "@/components/booking/booking-expiration-timer"
 
 interface UserUpcomingBookingsProps {
   bookings: any[]
@@ -52,14 +54,23 @@ export function UserUpcomingBookings({ bookings }: UserUpcomingBookingsProps) {
           <Card key={booking.id} className="shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
-                <CardTitle className="text-lg font-bold">{booking.court?.name || "Cancha Deportiva"}</CardTitle>
-                <Badge variant={booking.status === "confirmed" ? "default" : "outline"} className={booking.status === "confirmed" ? "bg-primary text-primary-foreground" : "text-amber-600 border-amber-300 bg-amber-50"}>
-                  {booking.status === "confirmed" ? "Confirmada" : "Pendiente"}
-                </Badge>
+                <div>
+                  <CardTitle className="text-lg font-bold">{booking.court?.name || "Cancha Deportiva"}</CardTitle>
+                  <CardDescription className="font-semibold text-muted-foreground">
+                    {booking.court?.venue?.name || "Complejo Deportivo"}
+                  </CardDescription>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <BookingStatusBadge status={booking.status} />
+                  {booking.status === "pending" && (
+                    <BookingExpirationTimer
+                      compact
+                      createdAt={booking.createdAt}
+                      paymentMethod={booking.paymentMethod || booking.payment?.method}
+                    />
+                  )}
+                </div>
               </div>
-              <CardDescription className="font-semibold text-muted-foreground">
-                {booking.court?.venue?.name || "Complejo Deportivo"}
-              </CardDescription>
             </CardHeader>
             <CardContent className="pb-2">
               <div className="space-y-2 text-sm text-muted-foreground font-medium">

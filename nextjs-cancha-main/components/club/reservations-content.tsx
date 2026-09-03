@@ -36,13 +36,7 @@ import { toast } from "sonner"
 import { getAllCourtsByClub } from "@/lib/courts"
 import { cancelBooking, createReservationManual, getAllReservation, paymemtManual } from "@/lib/reservation"
 import { Skeleton } from "../ui/skeleton"
-
-const statusColors = {
-  confirmed: "bg-green-100 text-green-800 hover:bg-green-200",
-  pending: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
-  cancelled: "bg-red-100 text-red-800 hover:bg-red-200",
-  completed: "bg-blue-100 text-blue-800 hover:bg-blue-200",
-}
+import { BookingStatusBadge } from "@/components/ui/booking-status-badge"
 
 const paymentStatusColors = {
   paid: "bg-emerald-100 text-emerald-800",
@@ -168,14 +162,7 @@ export function ReservationsContent() {
   }
 
   const getStatusBadge = (status: string) => {
-    const statusLabels: Record<string, string> = {
-      confirmed: "Confirmada",
-      pending: "Pendiente",
-      cancelled: "Cancelada",
-      completed: "Completada",
-    }
-
-    return <Badge className={statusColors[status as keyof typeof statusColors]}>{statusLabels[status] || status}</Badge>
+    return <BookingStatusBadge status={status} />
   }
 
   const getPaymentStatusBadge = (status: string) => {
