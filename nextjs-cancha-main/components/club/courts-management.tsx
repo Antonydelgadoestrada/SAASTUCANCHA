@@ -217,7 +217,7 @@ export function CourtsManagement() {
                   <span className="text-sm">{court.surface}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Precio día:</span>
+                  <span className="text-sm text-muted-foreground">Precio día (30 min):</span>
                   <div>
                     {court.promoDay ? (
                       <div className="flex items-center gap-2">
@@ -230,7 +230,7 @@ export function CourtsManagement() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Precio noche:</span>
+                  <span className="text-sm text-muted-foreground">Precio noche (30 min):</span>
                   <div>
                     {court.promoNight ? (
                       <div className="flex items-center gap-2">

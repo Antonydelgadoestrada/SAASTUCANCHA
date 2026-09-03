@@ -1124,6 +1124,7 @@ function MetricsAuditTab() {
   }
 
   const openSettle = (p: PaymentItem) => {
+    setDetailOpen(false) // Close the nested modal to prevent scroll issues
     setSettleTargetPayment(p)
     setSettleOpen(true)
   }
