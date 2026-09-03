@@ -129,8 +129,8 @@ function comprobanteBadge(status: string, autoConfirmed?: boolean, pendingAudit?
     APROBADO:   { label: "Aprobado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
     RECHAZADO:  { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
     REJECTED:   { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
-    CANCELADO:  { label: "Cancelado", className: "bg-slate-100 text-slate-600 border-slate-300" },
-    CANCELLED:  { label: "Cancelado", className: "bg-slate-100 text-slate-600 border-slate-300" },
+    CANCELADO:  { label: "Cancelado", className: "bg-muted/50 text-slate-600 border-slate-300" },
+    CANCELLED:  { label: "Cancelado", className: "bg-muted/50 text-slate-600 border-slate-300" },
   }
   const v = map[normalized] || { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" }
   return <Badge variant="outline" className={`${v.className} font-medium text-xs`}>{v.label}</Badge>
@@ -153,7 +153,7 @@ function saldoBadge(
   saldoComprobanteUrl?: string | null
 ) {
   if (isRejected) {
-    return <Badge variant="outline" className="bg-slate-100 text-slate-500 border-slate-300 text-xs">Cancelado</Badge>
+    return <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-slate-300 text-xs">Cancelado</Badge>
   }
   if (!isAdvance) {
     return (
@@ -208,23 +208,23 @@ function methodBadge(method: string) {
     DEBIT_CARD:    { label: "Tarjeta de Débito", color: "text-blue-700" },
     WHATSAPP:      { label: "WhatsApp", color: "text-emerald-600" },
   }
-  const v = map[normalized] || { label: normalized || "Otro", color: "text-slate-500" }
+  const v = map[normalized] || { label: normalized || "Otro", color: "text-muted-foreground" }
   return <span className={`text-xs font-semibold ${v.color}`}>{v.label}</span>
 }
 
 // ─── Tarjetas de Métricas ─────────────────────────────────────────────────────
 
 function MetricCard({
-  title, value, sub, icon: Icon, iconClass, valueClass = "text-slate-900 dark:text-white", loading,
+  title, value, sub, icon: Icon, iconClass, valueClass = "text-foreground", loading,
 }: {
   title: string; value: string; sub: string
   icon: any; iconClass: string; valueClass?: string; loading?: boolean
 }) {
   return (
-    <Card className="border-slate-200 dark:border-border shadow-sm">
+    <Card className="border-border shadow-sm">
       <CardContent className="p-5">
         <div className="flex items-start justify-between mb-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{title}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{title}</p>
           <div className={`p-2 rounded-lg ${iconClass}`}><Icon className="w-4 h-4" /></div>
         </div>
         {loading ? (
@@ -232,7 +232,7 @@ function MetricCard({
         ) : (
           <p className={`text-2xl font-bold tracking-tight ${valueClass}`}>{value}</p>
         )}
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{sub}</p>
+        <p className="text-xs text-muted-foreground mt-1">{sub}</p>
       </CardContent>
     </Card>
   )
@@ -332,9 +332,9 @@ function SettleSaldoModal({
           <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <p className="text-xs font-semibold text-slate-500">Cliente & Reserva</p>
-                <p className="font-bold text-slate-900 dark:text-white">{customerName}</p>
-                <p className="text-xs text-slate-500">{courtName} {payment.booking?.bookingReference ? `• Ref: ${payment.booking.bookingReference}` : ""}</p>
+                <p className="text-xs font-semibold text-muted-foreground">Cliente & Reserva</p>
+                <p className="font-bold text-foreground">{customerName}</p>
+                <p className="text-xs text-muted-foreground">{courtName} {payment.booking?.bookingReference ? `• Ref: ${payment.booking.bookingReference}` : ""}</p>
               </div>
               <Badge className="bg-emerald-600 text-white font-bold">
                 Total: {fmt(details?.totalBookingPrice || 0)}
@@ -343,8 +343,8 @@ function SettleSaldoModal({
 
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 mt-2 text-xs">
               <div>
-                <span className="text-slate-500">Abono inicial recibido:</span>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{fmt(details?.paidInitial || 0)}</p>
+                <span className="text-muted-foreground">Abono inicial recibido:</span>
+                <p className="font-semibold text-foreground">{fmt(details?.paidInitial || 0)}</p>
               </div>
               <div>
                 <span className="text-amber-700 dark:text-amber-400 font-semibold">Monto faltante a cobrar:</span>
@@ -364,7 +364,7 @@ function SettleSaldoModal({
               onChange={(e) => setMontoCustom(e.target.value)}
               className="font-bold text-base"
             />
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-muted-foreground/80">
               Valor sugerido correspondiente al saldo pendiente exacto.
             </p>
           </div>
@@ -387,7 +387,7 @@ function SettleSaldoModal({
                   className={`p-2.5 rounded-lg border text-xs font-medium text-left transition-all ${
                     selectedMethod === m.id
                       ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-500"
-                      : "border-slate-200 dark:border-border hover:bg-slate-50 dark:hover: text-slate-700 dark:text-slate-300"
+                      : "border-border hover:bg-slate-50 dark:hover: text-foreground"
                   }`}
                 >
                   {m.label}
@@ -413,7 +413,7 @@ function SettleSaldoModal({
                 className="text-xs file:text-xs"
               />
               {uploadingReceipt && (
-                <span className="animate-spin text-xs text-slate-500">⏳</span>
+                <span className="animate-spin text-xs text-muted-foreground">⏳</span>
               )}
             </div>
           </div>
@@ -581,29 +581,29 @@ function PaymentDetailModal({
           )}
 
           {/* Info de Reserva y Cliente */}
-          <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark: rounded-xl border">
+          <div className="grid grid-cols-2 gap-3 p-4 bg-muted/30 rounded-xl border">
             <div>
-              <p className="text-xs text-slate-500 mb-0.5">Cliente</p>
-              <p className="font-semibold text-slate-900 dark:text-white">{customer?.name || payment.user?.name || "—"}</p>
-              <p className="text-xs text-slate-500">{customer?.email || payment.user?.email || ""}</p>
-              {customer?.phone && <p className="text-xs text-slate-500">Tel: {customer.phone}</p>}
+              <p className="text-xs text-muted-foreground mb-0.5">Cliente</p>
+              <p className="font-semibold text-foreground">{customer?.name || payment.user?.name || "—"}</p>
+              <p className="text-xs text-muted-foreground">{customer?.email || payment.user?.email || ""}</p>
+              {customer?.phone && <p className="text-xs text-muted-foreground">Tel: {customer.phone}</p>}
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-0.5">Cancha & Horario</p>
-              <p className="font-semibold text-slate-900 dark:text-white">{booking?.court?.name || "—"}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">Cancha & Horario</p>
+              <p className="font-semibold text-foreground">{booking?.court?.name || "—"}</p>
               {booking?.date && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   {format(new Date(booking.date), "dd/MM/yyyy")} {booking.startTime?.slice(0,5)} - {booking.endTime?.slice(0,5)}
                 </p>
               )}
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-0.5">Código de reserva</p>
-              <p className="font-mono text-xs text-slate-700 dark:text-slate-300 font-bold">{booking?.bookingReference || "—"}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">Código de reserva</p>
+              <p className="font-mono text-xs text-foreground font-bold">{booking?.bookingReference || "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-0.5">Fecha de registro</p>
-              <p className="text-xs text-slate-700 dark:text-slate-300">
+              <p className="text-xs text-muted-foreground mb-0.5">Fecha de registro</p>
+              <p className="text-xs text-foreground">
                 {format(new Date(payment.createdAt), "dd/MM/yyyy HH:mm", { locale: es })}
               </p>
             </div>
@@ -612,40 +612,40 @@ function PaymentDetailModal({
           {/* ══════════════════════════════════════════════════════════════════
               CAMPO 1: PRIMER PAGO (ADELANTO / ABONO INICIAL)
           ══════════════════════════════════════════════════════════════════ */}
-          <div className="p-4 rounded-xl border-2 border-slate-200 dark:border-border bg-white dark:bg-background space-y-3.5 shadow-sm">
+          <div className="p-4 rounded-xl border-2 border-border bg-background space-y-3.5 shadow-sm">
             <div className="flex items-center justify-between border-b pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0"></span>
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
                     Campo 1: Primer Pago (Abono Inicial / Adelanto)
                   </h4>
-                  <p className="text-[11px] text-slate-400">Comprobante y detalles del pago inicial registrado</p>
+                  <p className="text-[11px] text-muted-foreground/80">Comprobante y detalles del pago inicial registrado</p>
                 </div>
               </div>
               {comprobanteBadge(payment.status, payment.autoConfirmed, payment.pendingAudit)}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50 dark: rounded-lg text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-muted/30 rounded-lg text-xs">
               <div>
-                <p className="text-slate-500">Monto Abonado</p>
+                <p className="text-muted-foreground">Monto Abonado</p>
                 <p className="text-lg font-bold text-emerald-600">{fmt(payment.amount)}</p>
               </div>
               <div>
-                <p className="text-slate-500">Método de Pago</p>
+                <p className="text-muted-foreground">Método de Pago</p>
                 <div className="mt-0.5">{methodBadge(payment.method)}</div>
               </div>
               <div>
-                <p className="text-slate-500">Tipo de Pago</p>
-                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{typeLabel(payment.type)}</p>
+                <p className="text-muted-foreground">Tipo de Pago</p>
+                <p className="font-semibold text-foreground mt-0.5">{typeLabel(payment.type)}</p>
               </div>
             </div>
 
             {/* Visualizador de Comprobante 1 */}
             {payment.comprobanteUrl ? (
-              <div className="space-y-2 p-3 bg-slate-50/70 dark:/70 rounded-xl border">
+              <div className="space-y-2 p-3 bg-muted/30/70 rounded-xl border">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <FileTextIcon className="w-3.5 h-3.5 text-emerald-600" />
                     Comprobante del 1er Pago
                   </span>
@@ -686,7 +686,7 @@ function PaymentDetailModal({
                 </div>
 
                 <div
-                  className="border rounded-xl overflow-hidden bg-white dark: max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
+                  className="border rounded-xl overflow-hidden bg-card text-card-foreground max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
                   onClick={() =>
                     onOpenLightbox(
                       payment.comprobanteUrl!,
@@ -704,13 +704,13 @@ function PaymentDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="p-3 bg-slate-50 dark: rounded-lg text-xs text-slate-500 text-center">
+              <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground text-center">
                 Pago procesado automáticamente o sin imagen de comprobante adjunta.
               </div>
             )}
 
             {payment.confirmadoPor && (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-foreground/80">
                 Auditado por <strong>{payment.confirmadoPor.name}</strong> el {payment.fechaConfirmacion ? format(new Date(payment.fechaConfirmacion), "dd/MM/yyyy HH:mm") : ""}
               </p>
             )}
@@ -723,7 +723,7 @@ function PaymentDetailModal({
 
             {/* Acciones dedicadas del 1er Pago */}
             <div className="pt-2 border-t flex flex-col gap-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                 Acciones del 1er Pago
               </span>
 
@@ -760,7 +760,7 @@ function PaymentDetailModal({
                       value={motivoRechazo1}
                       onChange={(e) => setMotivoRechazo1(e.target.value)}
                       rows={2}
-                      className="text-xs bg-white"
+                      className="text-xs bg-card text-card-foreground"
                     />
                     <div className="flex justify-end gap-2 pt-1">
                       <Button variant="outline" size="sm" onClick={() => setShowRejectInput1(false)} disabled={mutation1.isPending}>
@@ -815,7 +815,7 @@ function PaymentDetailModal({
           {/* ══════════════════════════════════════════════════════════════════
               CAMPO 2: SEGUNDO PAGO (SALDO RESTANTE Y LIQUIDACIÓN)
           ══════════════════════════════════════════════════════════════════ */}
-          <div className="p-4 rounded-xl border-2 border-slate-200 dark:border-border bg-white dark:bg-background space-y-3.5 shadow-sm">
+          <div className="p-4 rounded-xl border-2 border-border bg-background space-y-3.5 shadow-sm">
             <div className="flex items-center justify-between border-b pb-2.5">
               <div className="flex items-center gap-2">
                 <span
@@ -824,10 +824,10 @@ function PaymentDetailModal({
                   }`}
                 ></span>
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
                     Campo 2: Segundo Pago (Saldo Restante y Liquidación)
                   </h4>
-                  <p className="text-[11px] text-slate-400">Comprobante y cancelación del saldo pendiente</p>
+                  <p className="text-[11px] text-muted-foreground/80">Comprobante y cancelación del saldo pendiente</p>
                 </div>
               </div>
               {saldoBadge(
@@ -842,28 +842,28 @@ function PaymentDetailModal({
             </div>
 
             {!details.isAdvance ? (
-              <div className="p-4 bg-slate-50 dark: rounded-xl text-center text-xs text-slate-500">
-                <p className="font-semibold text-slate-700 dark:text-slate-300">No aplica saldo pendiente</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">La reserva fue pagada al 100% en el primer pago inicial.</p>
+              <div className="p-4 bg-muted/30 rounded-xl text-center text-xs text-muted-foreground">
+                <p className="font-semibold text-foreground">No aplica saldo pendiente</p>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">La reserva fue pagada al 100% en el primer pago inicial.</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50 dark: rounded-lg text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-muted/30 rounded-lg text-xs">
                   <div>
-                    <p className="text-slate-500">Monto del Saldo</p>
+                    <p className="text-muted-foreground">Monto del Saldo</p>
                     <p className={`text-lg font-bold ${details.isSaldoPaid ? "text-emerald-600" : "text-amber-600"}`}>
                       {details.isSaldoPaid ? fmt(details.saldoSettledAmount) : fmt(details.saldoFaltante)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Método de Saldo</p>
-                    <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                    <p className="text-muted-foreground">Método de Saldo</p>
+                    <p className="font-semibold text-foreground mt-0.5">
                       {payment.saldoMethod || (details.isSaldoPaid ? "Efectivo" : "Pendiente")}
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Estado Liquidación</p>
-                    <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                    <p className="text-muted-foreground">Estado Liquidación</p>
+                    <p className="font-semibold text-foreground mt-0.5">
                       {details.isSaldoPaid ? "Liquidado" : isSaldoPending ? "Comprobante Recibido" : "Pendiente"}
                     </p>
                   </div>
@@ -871,9 +871,9 @@ function PaymentDetailModal({
 
                 {/* Visualizador de Comprobante de Saldo (2do pago) */}
                 {payment.saldoComprobanteUrl ? (
-                  <div className="space-y-2 p-3 bg-slate-50/70 dark:/70 rounded-xl border">
+                  <div className="space-y-2 p-3 bg-muted/30/70 rounded-xl border">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                         <FileTextIcon className="w-3.5 h-3.5 text-amber-600" />
                         Comprobante del 2do Pago (Saldo)
                       </span>
@@ -914,7 +914,7 @@ function PaymentDetailModal({
                     </div>
 
                     <div
-                      className="border rounded-xl overflow-hidden bg-white dark: max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
+                      className="border rounded-xl overflow-hidden bg-card text-card-foreground max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
                       onClick={() =>
                         onOpenLightbox(
                           payment.saldoComprobanteUrl!,
@@ -932,7 +932,7 @@ function PaymentDetailModal({
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3 bg-slate-50 dark: rounded-lg text-xs text-slate-500 text-center">
+                  <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground text-center">
                     {details.isSaldoPaid
                       ? "Saldo liquidado directamente en efectivo/caja sin comprobante digital."
                       : "Aún no se ha adjuntado comprobante de saldo restante."}
@@ -940,21 +940,21 @@ function PaymentDetailModal({
                 )}
 
                 {payment.saldoConfirmadoPor && (
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-muted-foreground/80">
                     Liquidado / Auditado por <strong>{payment.saldoConfirmadoPor.name}</strong>{" "}
                     {payment.saldoFechaConfirmacion ? format(new Date(payment.saldoFechaConfirmacion), "dd/MM/yyyy HH:mm") : ""}
                   </p>
                 )}
 
                 {payment.saldoNotas && (
-                  <div className="p-2.5 bg-slate-50 dark: rounded-lg text-xs text-slate-600 dark:text-slate-400">
+                  <div className="p-2.5 bg-muted/30 rounded-lg text-xs text-slate-600 dark:text-muted-foreground/80">
                     <strong>Notas de saldo:</strong> {payment.saldoNotas}
                   </div>
                 )}
 
                 {/* Acciones dedicadas del 2do Pago */}
                 <div className="pt-2 border-t flex flex-col gap-2">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                     Acciones del 2do Pago (Saldo)
                   </span>
 
@@ -1003,7 +1003,7 @@ function PaymentDetailModal({
                           value={motivoRechazo2}
                           onChange={(e) => setMotivoRechazo2(e.target.value)}
                           rows={2}
-                          className="text-xs bg-white"
+                          className="text-xs bg-card text-card-foreground"
                         />
                         <div className="flex justify-end gap-2 pt-1">
                           <Button variant="outline" size="sm" onClick={() => setShowRejectInput2(false)} disabled={mutationSaldo.isPending}>
@@ -1172,7 +1172,7 @@ function MetricsAuditTab() {
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/80" />
           <Input
             placeholder="Buscar cliente, cancha o código de reserva..."
             value={search}
@@ -1218,13 +1218,13 @@ function MetricsAuditTab() {
       </div>
 
       {/* Bandeja de Transacciones y Comprobantes */}
-      <div className="rounded-xl border overflow-hidden bg-white dark:bg-background shadow-sm">
-        <div className="p-4 border-b bg-slate-50 dark: flex items-center justify-between">
+      <div className="rounded-xl border overflow-hidden bg-background shadow-sm">
+        <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+            <h3 className="font-bold text-sm text-foreground">
               Bandeja de Transacciones y Auditoría de Comprobantes
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Audita el 1er y 2do comprobante de forma independiente y confirma la liquidación de saldos en tiempo real.
             </p>
           </div>
@@ -1238,7 +1238,7 @@ function MetricsAuditTab() {
             {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
         ) : payments.length === 0 ? (
-          <div className="p-12 flex flex-col items-center gap-3 text-slate-400">
+          <div className="p-12 flex flex-col items-center gap-3 text-muted-foreground/80">
             <DollarSignIcon className="w-12 h-12 opacity-25" />
             <p className="font-semibold text-sm">No se encontraron pagos con los filtros aplicados</p>
             <p className="text-xs">Intenta cambiar los filtros de búsqueda.</p>
@@ -1246,7 +1246,7 @@ function MetricsAuditTab() {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 dark: text-xs font-bold text-slate-500 uppercase tracking-wide border-b">
+              <thead className="bg-muted/30 text-xs font-bold text-muted-foreground uppercase tracking-wide border-b">
                 <tr>
                   <th className="px-4 py-3 text-left">Cliente & Reserva</th>
                   <th className="px-4 py-3 text-left">1er Pago (Inicial / Adelanto)</th>
@@ -1274,19 +1274,19 @@ function MetricsAuditTab() {
                     >
                       {/* Cliente & Cancha */}
                       <td className="px-4 py-3">
-                        <p className="font-medium text-slate-800 dark:text-slate-200">
+                        <p className="font-medium text-foreground">
                           {customerName}
                         </p>
                         <p className="font-semibold text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                           {p.booking?.court?.name || "—"}
                         </p>
                         {p.booking?.date && (
-                          <p className="text-[11px] text-slate-500">
+                          <p className="text-[11px] text-muted-foreground">
                             {format(new Date(p.booking.date), "dd/MM")} • {p.booking.startTime?.slice(0,5)} - {p.booking.endTime?.slice(0,5)}
                           </p>
                         )}
                         {p.booking?.bookingReference && (
-                          <p className="font-mono text-[10px] text-slate-400">Ref: {p.booking.bookingReference}</p>
+                          <p className="font-mono text-[10px] text-muted-foreground/80">Ref: {p.booking.bookingReference}</p>
                         )}
                       </td>
 
@@ -1307,7 +1307,7 @@ function MetricsAuditTab() {
                             <div className="flex items-center gap-2 pt-0.5">
                               <button
                                 type="button"
-                                className="relative group w-12 h-12 rounded-lg border overflow-hidden bg-white shrink-0 shadow-sm"
+                                className="relative group w-12 h-12 rounded-lg border overflow-hidden bg-card text-card-foreground shrink-0 shadow-sm"
                                 onClick={() =>
                                   handleOpenLightbox(
                                     p.comprobanteUrl!,
@@ -1364,7 +1364,7 @@ function MetricsAuditTab() {
                               </div>
                             </div>
                           ) : (
-                            <span className="text-[11px] text-slate-400">Sin archivo adjunto</span>
+                            <span className="text-[11px] text-muted-foreground/80">Sin archivo adjunto</span>
                           )}
 
                           {isAuditRequired1 && (
@@ -1389,7 +1389,7 @@ function MetricsAuditTab() {
                               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 font-medium text-xs">
                                 100% Pagado
                               </Badge>
-                              <p className="text-[10px] text-slate-400">No aplica saldo</p>
+                              <p className="text-[10px] text-muted-foreground/80">No aplica saldo</p>
                             </div>
                           ) : (
                             <>
@@ -1398,7 +1398,7 @@ function MetricsAuditTab() {
                                   {details.isSaldoPaid ? fmt(details.saldoSettledAmount) : fmt(details.saldoFaltante)}
                                 </span>
                                 {p.saldoMethod && (
-                                  <span className="text-[11px] text-slate-500 font-medium">({p.saldoMethod})</span>
+                                  <span className="text-[11px] text-muted-foreground font-medium">({p.saldoMethod})</span>
                                 )}
                               </div>
 
@@ -1419,7 +1419,7 @@ function MetricsAuditTab() {
                                 <div className="flex items-center gap-2 pt-0.5">
                                   <button
                                     type="button"
-                                    className="relative group w-12 h-12 rounded-lg border overflow-hidden bg-white shrink-0 shadow-sm"
+                                    className="relative group w-12 h-12 rounded-lg border overflow-hidden bg-card text-card-foreground shrink-0 shadow-sm"
                                     onClick={() =>
                                       handleOpenLightbox(
                                         p.saldoComprobanteUrl!,
@@ -1476,7 +1476,7 @@ function MetricsAuditTab() {
                                   </div>
                                 </div>
                               ) : details.isSaldoPaid ? (
-                                <span className="text-[10px] text-slate-400">Liquidado en caja</span>
+                                <span className="text-[10px] text-muted-foreground/80">Liquidado en caja</span>
                               ) : null}
 
                               {/* Botones de acción para Saldo */}
@@ -1509,17 +1509,17 @@ function MetricsAuditTab() {
                       {/* Total Reserva */}
                       <td className="px-4 py-3">
                         <div className="space-y-0.5">
-                          <p className="font-bold text-slate-900 dark:text-white">
+                          <p className="font-bold text-foreground">
                             {fmt(details.totalBookingPrice)}
                           </p>
-                          <p className="text-[10px] text-slate-400">
+                          <p className="text-[10px] text-muted-foreground/80">
                             Recibido: {fmt(details.totalRecibido)}
                           </p>
                         </div>
                       </td>
 
                       {/* Fecha */}
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
                         {format(new Date(p.createdAt), "dd/MM HH:mm")}
                       </td>
 
@@ -1591,10 +1591,10 @@ export function ReservationsContent() {
       {/* Cabecera */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Gestión de Reservas y Auditoría
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Audita comprobantes, monitorea ingresos y gestiona la liquidación de saldos en tiempo real.
           </p>
         </div>

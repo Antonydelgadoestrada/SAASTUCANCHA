@@ -8,10 +8,10 @@ export function PaymentsContent() {
       {/* Cabecera */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Medios de Pago
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Configura tus cuentas, billeteras digitales y métodos de cobro presencial.
           </p>
         </div>

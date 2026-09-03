@@ -67,7 +67,7 @@ function QrUploader({
       >
         {isUploading ? (
           <>
-            <Loader2Icon className="w-4 h-4 animate-spin text-slate-500" />
+            <Loader2Icon className="w-4 h-4 animate-spin text-muted-foreground" />
             <span>Subiendo imagen QR...</span>
           </>
         ) : (
@@ -79,12 +79,12 @@ function QrUploader({
       </Button>
 
       {qrUrl && (
-        <div className="mt-3 p-3 bg-white dark:bg-background rounded-xl border flex flex-col sm:flex-row items-center gap-4">
+        <div className="mt-3 p-3 bg-background rounded-xl border flex flex-col sm:flex-row items-center gap-4">
           <div className="relative group shrink-0">
             <img
               src={qrUrl}
               alt={`QR ${label}`}
-              className="w-24 h-24 object-contain border rounded-lg bg-white p-1 shadow-sm cursor-pointer hover:opacity-95"
+              className="w-24 h-24 object-contain border rounded-lg bg-card text-card-foreground p-1 shadow-sm cursor-pointer hover:opacity-95"
               onClick={onOpenPreview}
               title="Hacer clic para ampliar QR"
             />
@@ -94,7 +94,7 @@ function QrUploader({
               <CheckCircle2Icon className="w-3.5 h-3.5" />
               Código QR de {label} cargado y listo
             </p>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-muted-foreground">
               Tus clientes verán este código QR en pantalla al seleccionar {label} en el proceso de reserva.
             </p>
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
@@ -467,7 +467,7 @@ export function PaymentSettingsTab() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[350px] gap-3">
         <Loader2Icon className="w-8 h-8 animate-spin text-emerald-600" />
-        <p className="text-sm text-slate-500">Cargando configuración de cobros y billeteras...</p>
+        <p className="text-sm text-muted-foreground">Cargando configuración de cobros y billeteras...</p>
       </div>
     )
   }
@@ -478,8 +478,8 @@ export function PaymentSettingsTab() {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* ── 1. SECCIÓN: WHATSAPP Y COMUNICACIÓN DIRECTA ───────────────────────── */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Card className="border-slate-200 dark:dark:border-border shadow-sm border-l-4 border-l-emerald-500 overflow-hidden">
-        <CardHeader className="pb-4 bg-slate-50/50 dark:/30">
+      <Card className="border-border shadow-sm border-l-4 border-l-emerald-500 overflow-hidden">
+        <CardHeader className="pb-4 bg-muted/30/50">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/50 rounded-xl text-emerald-600">
@@ -501,7 +501,7 @@ export function PaymentSettingsTab() {
                 variant={whatsapp ? "default" : "outline"}
                 className={whatsapp
                   ? "bg-emerald-600 text-white font-medium px-3 py-1 gap-1"
-                  : "border-slate-300 text-slate-500 font-medium px-3 py-1"}
+                  : "border-slate-300 text-muted-foreground font-medium px-3 py-1"}
               >
                 {whatsapp ? (
                   <>
@@ -532,34 +532,34 @@ export function PaymentSettingsTab() {
             /* Vista de Resumen / Modo Lectura */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 rounded-xl border border-emerald-100 dark:border-emerald-950 bg-emerald-50/30 dark:bg-emerald-950/10 space-y-3">
-                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Número de Contacto Oficial</p>
-                <div className="flex items-center justify-between bg-white dark:bg-background p-3 rounded-lg border">
+                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Número de Contacto Oficial</p>
+                <div className="flex items-center justify-between bg-background p-3 rounded-lg border">
                   <div className="flex items-center gap-2">
                     <PhoneIcon className="w-4 h-4 text-emerald-600" />
-                    <span className="text-base font-bold font-mono text-slate-800 dark:text-slate-100">{whatsapp}</span>
+                    <span className="text-base font-bold font-mono text-foreground">{whatsapp}</span>
                   </div>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => copyToClipboard(whatsapp, "whatsapp")}
-                    className="h-8 px-2 text-xs text-slate-500 hover:text-slate-800"
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-slate-800"
                   >
                     {copiedField === "whatsapp" ? <CheckIcon className="w-3.5 h-3.5 text-emerald-600" /> : <CopyIcon className="w-3.5 h-3.5" />}
                   </Button>
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-muted-foreground">
                   Formato internacional para enlace: <strong className="text-emerald-700 font-mono">+{formatWhatsAppNumber(whatsapp)}</strong>
                 </p>
               </div>
 
-              <div className="flex flex-col justify-between p-4 rounded-xl border bg-slate-50 dark:/60 space-y-3">
+              <div className="flex flex-col justify-between p-4 rounded-xl border bg-muted/30 space-y-3">
                 <div>
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <ShieldCheckIcon className="w-4 h-4 text-emerald-600" />
                     Prueba del Botón de Contacto
                   </p>
-                  <p className="text-[11px] text-slate-500 mt-1">
+                  <p className="text-[11px] text-muted-foreground mt-1">
                     Verifica cómo los clientes abrirán la conversación en WhatsApp Web o en su teléfono.
                   </p>
                 </div>
@@ -585,7 +585,7 @@ export function PaymentSettingsTab() {
           ) : (
             /* Modo Edición */
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50 dark:">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50">
                 <div className="space-y-2">
                   <Label htmlFor="whatsapp-input" className="text-xs font-semibold flex items-center gap-1.5">
                     <PhoneIcon className="w-3.5 h-3.5 text-emerald-600" />
@@ -598,21 +598,21 @@ export function PaymentSettingsTab() {
                       value={whatsapp}
                       onChange={(e) => setWhatsapp(e.target.value)}
                       maxLength={20}
-                      className="bg-white dark:bg-background font-medium text-sm"
+                      className="bg-background font-medium text-sm"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-muted-foreground">
                     Ingresa el número con o sin prefijo de país (+51). Los usuarios abrirán el chat automáticamente.
                   </p>
                 </div>
 
-                <div className="flex flex-col justify-between p-3.5 bg-white dark:bg-background rounded-lg border border-emerald-100 dark:border-emerald-950 space-y-2">
+                <div className="flex flex-col justify-between p-3.5 bg-background rounded-lg border border-emerald-100 dark:border-emerald-950 space-y-2">
                   <div>
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <ShieldCheckIcon className="w-4 h-4 text-emerald-600" />
                       Prueba de Enlace en Vivo
                     </p>
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    <p className="text-[11px] text-muted-foreground mt-1">
                       {whatsapp
                         ? `Número formateado: ${formatWhatsAppNumber(whatsapp)}`
                         : "Ingresa tu número para generar el enlace de prueba."}
@@ -660,7 +660,7 @@ export function PaymentSettingsTab() {
                     size="sm"
                     onClick={handleCancelWhatsApp}
                     disabled={savingSection === "whatsapp"}
-                    className="text-xs text-slate-500 hover:text-slate-700 h-9"
+                    className="text-xs text-muted-foreground hover:text-slate-700 h-9"
                   >
                     <XIcon className="w-3.5 h-3.5 mr-1" />
                     Cancelar
@@ -695,8 +695,8 @@ export function PaymentSettingsTab() {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* ── 2. SECCIÓN: PASARELA DE PAGO: MERCADO PAGO ────────────────────────── */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Card className="border-slate-200 dark:dark:border-border shadow-sm border-l-4 border-l-blue-500 overflow-hidden">
-        <CardHeader className="pb-4 bg-slate-50/50 dark:/30">
+      <Card className="border-border shadow-sm border-l-4 border-l-blue-500 overflow-hidden">
+        <CardHeader className="pb-4 bg-muted/30/50">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-blue-50 dark:bg-blue-950/50 rounded-xl text-blue-600">
@@ -744,12 +744,12 @@ export function PaymentSettingsTab() {
         </CardHeader>
 
         <CardContent className="space-y-4 p-6">
-          <div className="flex items-center justify-between p-4 rounded-xl border bg-slate-50 dark:">
+          <div className="flex items-center justify-between p-4 rounded-xl border bg-slate-50">
             <div className="space-y-0.5">
               <Label htmlFor="toggle-mp" className="text-sm font-semibold cursor-pointer">
                 Aceptar pagos por Mercado Pago en las reservas
               </Label>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Si está activo, los usuarios podrán elegir Mercado Pago como medio de pago online en el checkout.
               </p>
             </div>
@@ -764,12 +764,12 @@ export function PaymentSettingsTab() {
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl border border-blue-100 bg-blue-50/50 dark:bg-blue-950/20">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              <p className="text-sm font-semibold text-foreground">
                 {isMPConnected
                   ? "Tu cuenta de Mercado Pago está conectada y lista para recibir cobros."
                   : "Conecta tu cuenta de Mercado Pago para recaudar directamente a tu cuenta bancaria."}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 El dinero de cada reserva confirmada entra directamente a tu cuenta de Mercado Pago.
               </p>
             </div>
@@ -790,8 +790,8 @@ export function PaymentSettingsTab() {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* ── 3. SECCIÓN: BILLETERAS DIGITALES (YAPE & PLIN) ────────────────────── */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Card className="border-slate-200 dark:dark:border-border shadow-sm border-l-4 border-l-purple-500 overflow-hidden">
-        <CardHeader className="pb-4 bg-slate-50/50 dark:/30">
+      <Card className="border-border shadow-sm border-l-4 border-l-purple-500 overflow-hidden">
+        <CardHeader className="pb-4 bg-muted/30/50">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-purple-50 dark:bg-purple-950/50 rounded-xl text-purple-600">
@@ -846,13 +846,13 @@ export function PaymentSettingsTab() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* ── SUB-TARJETA: CONFIGURACIÓN YAPE ────────────────────────────── */}
-            <div className="rounded-xl border border-purple-200/70 dark:border-purple-200 dark:border-purple-800 bg-white dark:/80 p-5 space-y-4 shadow-sm flex flex-col justify-between">
+            <div className="rounded-xl border border-purple-200/70 dark:border-purple-800 bg-card text-card-foreground p-5 space-y-4 shadow-sm flex flex-col justify-between">
               <div>
                 {/* Cabecera Yape */}
                 <div className="flex items-center justify-between pb-3 border-b border-purple-100 dark:border-purple-950">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full bg-[#732282] shrink-0" />
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-100">Configuración Yape</span>
+                    <span className="font-bold text-sm text-foreground">Configuración Yape</span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -860,7 +860,7 @@ export function PaymentSettingsTab() {
                       variant="outline"
                       className={hasYapeConfigured
                         ? "bg-purple-50 text-[#732282] border-purple-200 text-[11px] font-semibold"
-                        : "bg-slate-50 text-slate-500 border-slate-200 text-[11px]"}
+                        : "bg-muted/30 text-muted-foreground border-border text-[11px]"}
                     >
                       {hasYapeConfigured ? "Activo" : "Sin Configurar"}
                     </Badge>
@@ -884,19 +884,19 @@ export function PaymentSettingsTab() {
                 {!isEditingYape && hasYapeConfigured ? (
                   /* Modo Lectura Yape */
                   <div className="space-y-4 pt-4">
-                    <div className="bg-purple-50/50 dark:bg-purple-50 dark:bg-purple-950/10 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/40 space-y-2.5">
+                    <div className="bg-purple-950/10 dark:bg-purple-950/20 p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/40 space-y-2.5">
                       <div className="space-y-0.5">
-                        <p className="text-[11px] text-slate-500 font-medium">Nombre del Titular de la cuenta:</p>
-                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                          {yapeTitular || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                        <p className="text-[11px] text-muted-foreground font-medium">Nombre del Titular de la cuenta:</p>
+                        <p className="text-sm font-bold text-foreground">
+                          {yapeTitular || <span className="text-muted-foreground/80 italic text-xs font-normal">No especificado</span>}
                         </p>
                       </div>
 
                       <div className="border-t border-purple-100 dark:border-purple-900/40 pt-2 space-y-0.5">
-                        <p className="text-[11px] text-slate-500 font-medium">Número para transferencias Yape:</p>
+                        <p className="text-[11px] text-muted-foreground font-medium">Número para transferencias Yape:</p>
                         <div className="flex items-center justify-between">
                           <p className="text-base font-bold text-[#732282] dark:text-purple-300 font-mono">
-                            {yapeNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                            {yapeNumero || <span className="text-muted-foreground/80 italic text-xs font-normal">No especificado</span>}
                           </p>
                           {yapeNumero && (
                             <Button
@@ -904,7 +904,7 @@ export function PaymentSettingsTab() {
                               variant="ghost"
                               size="sm"
                               onClick={() => copyToClipboard(yapeNumero, "yape")}
-                              className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-slate-800"
                             >
                               {copiedField === "yape" ? <CheckIcon className="w-3 h-3 text-purple-600" /> : <CopyIcon className="w-3 h-3" />}
                             </Button>
@@ -914,12 +914,12 @@ export function PaymentSettingsTab() {
                     </div>
 
                     {yapeQrUrl ? (
-                      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-background p-3.5 rounded-xl border border-purple-100 dark:border-purple-950">
+                      <div className="flex flex-col sm:flex-row items-center gap-4 bg-background p-3.5 rounded-xl border border-purple-100 dark:border-purple-950">
                         <div className="relative group shrink-0">
                           <img
                             src={yapeQrUrl}
                             alt="QR Yape"
-                            className="w-20 h-20 object-contain border rounded-lg bg-white p-1 shadow-sm cursor-pointer hover:opacity-95"
+                            className="w-20 h-20 object-contain border rounded-lg bg-card text-card-foreground p-1 shadow-sm cursor-pointer hover:opacity-95"
                             onClick={() => {
                               setQrModalData({
                                 qrUrl: yapeQrUrl,
@@ -936,7 +936,7 @@ export function PaymentSettingsTab() {
                           <p className="font-semibold text-emerald-600 flex items-center gap-1">
                             <CheckCircle2Icon className="w-3.5 h-3.5" /> QR de Yape Activo
                           </p>
-                          <p className="text-slate-500 text-[11px]">Los usuarios pueden escanearlo desde la app.</p>
+                          <p className="text-muted-foreground text-[11px]">Los usuarios pueden escanearlo desde la app.</p>
                           <div className="flex flex-wrap items-center gap-2 pt-1">
                             <Button
                               type="button"
@@ -979,7 +979,7 @@ export function PaymentSettingsTab() {
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 bg-slate-50 dark:bg-background rounded-xl border text-center text-xs text-slate-400">
+                      <div className="p-4 bg-slate-50 dark:bg-background rounded-xl border text-center text-xs text-muted-foreground/80">
                         <QrCodeIcon className="w-6 h-6 mx-auto mb-1 opacity-40" />
                         Sin imagen QR cargada para Yape
                       </div>
@@ -998,9 +998,9 @@ export function PaymentSettingsTab() {
                         value={yapeTitular}
                         onChange={(e) => setYapeTitular(e.target.value)}
                         maxLength={80}
-                        className="bg-white dark:bg-background text-sm"
+                        className="bg-background text-sm"
                       />
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-muted-foreground">
                         Los clientes verán este nombre antes de pagar para confirmar que transfieren a la persona/empresa correcta.
                       </p>
                     </div>
@@ -1013,9 +1013,9 @@ export function PaymentSettingsTab() {
                         value={yapeNumero}
                         onChange={(e) => setYapeNumero(e.target.value)}
                         maxLength={15}
-                        className="bg-white dark:bg-background font-mono text-sm"
+                        className="bg-background font-mono text-sm"
                       />
-                      <p className="text-[11px] text-slate-500">Puedes cambiar este número cuando tu club lo requiera.</p>
+                      <p className="text-[11px] text-muted-foreground">Puedes cambiar este número cuando tu club lo requiera.</p>
                     </div>
 
                     <QrUploader
@@ -1050,7 +1050,7 @@ export function PaymentSettingsTab() {
                       size="sm"
                       onClick={handleCancelYape}
                       disabled={savingSection === "yape"}
-                      className="text-xs text-slate-500 hover:text-slate-700 h-8"
+                      className="text-xs text-muted-foreground hover:text-slate-700 h-8"
                     >
                       <XIcon className="w-3.5 h-3.5 mr-1" />
                       Cancelar
@@ -1081,13 +1081,13 @@ export function PaymentSettingsTab() {
 
 
             {/* ── SUB-TARJETA: CONFIGURACIÓN PLIN ────────────────────────────── */}
-            <div className="rounded-xl border border-teal-200/70 dark:border-teal-200 dark:border-teal-800 bg-white dark:/80 p-5 space-y-4 shadow-sm flex flex-col justify-between">
+            <div className="rounded-xl border border-teal-200/70 dark:border-teal-800 bg-card text-card-foreground p-5 space-y-4 shadow-sm flex flex-col justify-between">
               <div>
                 {/* Cabecera Plin */}
                 <div className="flex items-center justify-between pb-3 border-b border-teal-100 dark:border-teal-950">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full bg-[#00D4B2] shrink-0" />
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-100">Configuración Plin</span>
+                    <span className="font-bold text-sm text-foreground">Configuración Plin</span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1095,7 +1095,7 @@ export function PaymentSettingsTab() {
                       variant="outline"
                       className={hasPlinConfigured
                         ? "bg-teal-50 text-teal-700 border-teal-200 text-[11px] font-semibold"
-                        : "bg-slate-50 text-slate-500 border-slate-200 text-[11px]"}
+                        : "bg-muted/30 text-muted-foreground border-border text-[11px]"}
                     >
                       {hasPlinConfigured ? "Activo" : "Sin Configurar"}
                     </Badge>
@@ -1119,19 +1119,19 @@ export function PaymentSettingsTab() {
                 {!isEditingPlin && hasPlinConfigured ? (
                   /* Modo Lectura Plin */
                   <div className="space-y-4 pt-4">
-                    <div className="bg-teal-50/50 dark:bg-teal-50 dark:bg-teal-950/10 p-3.5 rounded-xl border border-teal-100 dark:border-teal-900/40 space-y-2.5">
+                    <div className="bg-teal-950/10 dark:bg-teal-950/20 p-3.5 rounded-xl border border-teal-100 dark:border-teal-900/40 space-y-2.5">
                       <div className="space-y-0.5">
-                        <p className="text-[11px] text-slate-500 font-medium">Nombre del Titular de la cuenta:</p>
-                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                          {plinTitular || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                        <p className="text-[11px] text-muted-foreground font-medium">Nombre del Titular de la cuenta:</p>
+                        <p className="text-sm font-bold text-foreground">
+                          {plinTitular || <span className="text-muted-foreground/80 italic text-xs font-normal">No especificado</span>}
                         </p>
                       </div>
 
                       <div className="border-t border-teal-100 dark:border-teal-900/40 pt-2 space-y-0.5">
-                        <p className="text-[11px] text-slate-500 font-medium">Número para transferencias Plin:</p>
+                        <p className="text-[11px] text-muted-foreground font-medium">Número para transferencias Plin:</p>
                         <div className="flex items-center justify-between">
                           <p className="text-base font-bold text-teal-700 dark:text-teal-300 font-mono">
-                            {plinNumero || <span className="text-slate-400 italic text-xs font-normal">No especificado</span>}
+                            {plinNumero || <span className="text-muted-foreground/80 italic text-xs font-normal">No especificado</span>}
                           </p>
                           {plinNumero && (
                             <Button
@@ -1139,7 +1139,7 @@ export function PaymentSettingsTab() {
                               variant="ghost"
                               size="sm"
                               onClick={() => copyToClipboard(plinNumero, "plin")}
-                              className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-slate-800"
                             >
                               {copiedField === "plin" ? <CheckIcon className="w-3 h-3 text-teal-600" /> : <CopyIcon className="w-3 h-3" />}
                             </Button>
@@ -1149,12 +1149,12 @@ export function PaymentSettingsTab() {
                     </div>
 
                     {plinQrUrl ? (
-                      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-background p-3.5 rounded-xl border border-teal-100 dark:border-teal-950">
+                      <div className="flex flex-col sm:flex-row items-center gap-4 bg-background p-3.5 rounded-xl border border-teal-100 dark:border-teal-950">
                         <div className="relative group shrink-0">
                           <img
                             src={plinQrUrl}
                             alt="QR Plin"
-                            className="w-20 h-20 object-contain border rounded-lg bg-white p-1 shadow-sm cursor-pointer hover:opacity-95"
+                            className="w-20 h-20 object-contain border rounded-lg bg-card text-card-foreground p-1 shadow-sm cursor-pointer hover:opacity-95"
                             onClick={() => {
                               setQrModalData({
                                 qrUrl: plinQrUrl,
@@ -1171,7 +1171,7 @@ export function PaymentSettingsTab() {
                           <p className="font-semibold text-emerald-600 flex items-center gap-1">
                             <CheckCircle2Icon className="w-3.5 h-3.5" /> QR de Plin Activo
                           </p>
-                          <p className="text-slate-500 text-[11px]">Los usuarios pueden escanearlo desde la app.</p>
+                          <p className="text-muted-foreground text-[11px]">Los usuarios pueden escanearlo desde la app.</p>
                           <div className="flex flex-wrap items-center gap-2 pt-1">
                             <Button
                               type="button"
@@ -1214,7 +1214,7 @@ export function PaymentSettingsTab() {
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 bg-slate-50 dark:bg-background rounded-xl border text-center text-xs text-slate-400">
+                      <div className="p-4 bg-slate-50 dark:bg-background rounded-xl border text-center text-xs text-muted-foreground/80">
                         <QrCodeIcon className="w-6 h-6 mx-auto mb-1 opacity-40" />
                         Sin imagen QR cargada para Plin
                       </div>
@@ -1233,9 +1233,9 @@ export function PaymentSettingsTab() {
                         value={plinTitular}
                         onChange={(e) => setPlinTitular(e.target.value)}
                         maxLength={80}
-                        className="bg-white dark:bg-background text-sm"
+                        className="bg-background text-sm"
                       />
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-muted-foreground">
                         Los clientes verán este nombre antes de pagar para confirmar que transfieren a la persona/empresa correcta.
                       </p>
                     </div>
@@ -1248,9 +1248,9 @@ export function PaymentSettingsTab() {
                         value={plinNumero}
                         onChange={(e) => setPlinNumero(e.target.value)}
                         maxLength={15}
-                        className="bg-white dark:bg-background font-mono text-sm"
+                        className="bg-background font-mono text-sm"
                       />
-                      <p className="text-[11px] text-slate-500">Puedes cambiar este número cuando tu club lo requiera.</p>
+                      <p className="text-[11px] text-muted-foreground">Puedes cambiar este número cuando tu club lo requiera.</p>
                     </div>
 
                     <QrUploader
@@ -1285,7 +1285,7 @@ export function PaymentSettingsTab() {
                       size="sm"
                       onClick={handleCancelPlin}
                       disabled={savingSection === "plin"}
-                      className="text-xs text-slate-500 hover:text-slate-700 h-8"
+                      className="text-xs text-muted-foreground hover:text-slate-700 h-8"
                     >
                       <XIcon className="w-3.5 h-3.5 mr-1" />
                       Cancelar
@@ -1317,8 +1317,8 @@ export function PaymentSettingsTab() {
           </div>
 
           {/* Información explicativa para el dueño */}
-          <div className="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1.5">
-            <p className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+          <div className="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-muted-foreground/80 space-y-1.5">
+            <p className="font-semibold text-foreground flex items-center gap-1.5">
               <HelpCircleIcon className="w-4 h-4 text-purple-600" />
               ¿Cómo funciona el flujo de pago con Yape y Plin para el usuario?
             </p>
@@ -1333,8 +1333,8 @@ export function PaymentSettingsTab() {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* ── 4. SECCIÓN: POLÍTICA DE ADELANTOS Y PAGOS PARCIALES ───────────────── */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Card className="border-slate-200 dark:dark:border-border shadow-sm border-l-4 border-l-emerald-600 overflow-hidden">
-        <CardHeader className="pb-4 bg-slate-50/50 dark:/30">
+      <Card className="border-border shadow-sm border-l-4 border-l-emerald-600 overflow-hidden">
+        <CardHeader className="pb-4 bg-muted/30/50">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/50 rounded-xl text-emerald-600">
@@ -1385,7 +1385,7 @@ export function PaymentSettingsTab() {
                 onValueChange={(val) => setPorcentajeAdelantoDefault(val[0])}
                 min={0} max={100} step={5} className="py-2"
               />
-              <div className="flex justify-between text-xs text-slate-400">
+              <div className="flex justify-between text-xs text-muted-foreground/80">
                 <span>0% (Opcional)</span>
                 <span>50% (Recomendado)</span>
                 <span>100% (Total)</span>
@@ -1405,17 +1405,17 @@ export function PaymentSettingsTab() {
                 min={0}
                 className="font-mono text-sm"
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Si se especifica, el adelanto nunca podrá ser menor a este valor en soles.
               </p>
             </div>
           </div>
 
-          <div className="p-4 rounded-xl border bg-emerald-50/50 dark:bg-emerald-50 dark:bg-emerald-950/10 border-emerald-200 dark:border-emerald-900 text-sm">
+          <div className="p-4 rounded-xl border bg-emerald-950/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-sm">
             <p className="font-semibold text-emerald-800 dark:text-emerald-300 mb-1">
               📊 Simulación de Reserva con tu política actual:
             </p>
-            <p className="text-slate-700 dark:text-slate-300 text-xs leading-relaxed">
+            <p className="text-foreground text-xs leading-relaxed">
               Para una cancha de <strong>S/ 100.00</strong>, el cliente deberá transferir al menos{" "}
               <strong className="text-emerald-600 text-sm">
                 S/ {Math.max(Number(adelantoMinimo) || 0, (100 * porcentajeAdelantoDefault) / 100).toFixed(2)}
@@ -1437,7 +1437,7 @@ export function PaymentSettingsTab() {
       {hasUnsavedChanges && (
       <div className="sticky bottom-4 z-20">
         
-        <Card className="border-2 border-emerald-500  text-white shadow-2xl rounded-2xl overflow-hidden backdrop-blur-md">
+        <Card className="border-2 border-emerald-500 text-white shadow-2xl rounded-2xl overflow-hidden backdrop-blur-md">
           <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl">
