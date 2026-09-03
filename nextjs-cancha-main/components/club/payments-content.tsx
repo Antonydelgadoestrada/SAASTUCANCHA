@@ -337,14 +337,14 @@ function SettleSaldoModal({
                 <p className="text-xs text-slate-500">{courtName} {payment.booking?.bookingReference ? `• Ref: ${payment.booking.bookingReference}` : ""}</p>
               </div>
               <Badge className="bg-emerald-600 text-white font-bold">
-                Total: {fmt(details.totalBookingPrice)}
+                Total: {fmt(details?.totalBookingPrice || 0)}
               </Badge>
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 mt-2 text-xs">
               <div>
                 <span className="text-slate-500">Abono inicial recibido:</span>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{fmt(details.paidInitial)}</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{fmt(details?.paidInitial || 0)}</p>
               </div>
               <div>
                 <span className="text-amber-700 dark:text-amber-400 font-semibold">Monto faltante a cobrar:</span>
