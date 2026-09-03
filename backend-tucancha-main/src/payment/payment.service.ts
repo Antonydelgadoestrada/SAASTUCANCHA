@@ -475,17 +475,18 @@ export class PaymentService {
 
       // Calcular precio total de la reserva
       let totalPrice = 0;
-      if (typeof p.booking?.pricing === 'object' && p.booking?.pricing !== null) {
-        totalPrice = Number((p.booking.pricing as any).totalPrice ?? (p.booking.pricing as any).basePrice);
-      } else if (typeof p.booking?.pricing === 'string') {
+      const firstBooking = p.bookings?.[0];
+      if (firstBooking && typeof firstBooking.pricing === 'object' && firstBooking.pricing !== null) {
+        totalPrice = Number((firstBooking.pricing as any).totalPrice ?? (firstBooking.pricing as any).basePrice);
+      } else if (firstBooking && typeof firstBooking.pricing === 'string') {
         try {
-          const parsed = JSON.parse(p.booking.pricing);
+          const parsed = JSON.parse(firstBooking.pricing);
           totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
         } catch {}
       }
       if (isNaN(totalPrice) || totalPrice <= 0) {
-        const courtPrice = Number(p.booking?.court?.priceDay || p.booking?.court?.priceNight || 0);
-        const dur = Number(p.booking?.duration || 1);
+        const courtPrice = Number(firstBooking?.court?.priceDay || firstBooking?.court?.priceNight || 0);
+        const dur = Number(firstBooking?.duration || 1);
         totalPrice = courtPrice * dur * 2;
       }
       if (isNaN(totalPrice) || totalPrice <= 0) {
@@ -718,46 +719,16 @@ export class PaymentService {
       relations: ['bookings', 'user'],
     });
 
-    if (existing && existing.status !== PaymentStatus.REJECTED && existing.status !== PaymentStatus.CANCELLED) {
+    if (existing && existing.status !== PaymentStatus.REJECTED) {
       if (existing.status === PaymentStatus.PAID) {
         throw new BadRequestException('Esta reserva ya tiene un pago aprobado.');
       }
       return existing;
     }
 
-    let safeAmount = Number(dto.amount ?? dto.monto);
-    if (isNaN(safeAmount) || safeAmount <= 0) {
-      if (typeof booking.pricing === 'object' && booking.pricing !== null) {
-        safeAmount = Number(booking.pricing.totalPrice ?? booking.pricing.basePrice);
-      } else if (typeof booking.pricing === 'string') {
-        try {
-          const parsed = JSON.parse(booking.pricing);
-          safeAmount = Number(parsed?.totalPrice ?? parsed?.basePrice);
-        } catch {}
-      }
-      if (isNaN(safeAmount) || safeAmount <= 0) {
-        const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
-        const dur = Number(booking.duration || 1);
-        safeAmount = courtPrice * dur * 2;
-      }
-    }
     if (isNaN(safeAmount) || safeAmount < 0) {
       safeAmount = 0;
     }
-
-    const payment = this.paymentRepo.create({
-      bookings: [booking],
-      user,
-      amount: safeAmount,
-      currency: dto.currency || 'PEN',
-      method: safeMethod,
-      paymentMethod: safeMethod,
-      status: PaymentStatus.PENDING,
-      type: safeType,
-      comprobanteUrl: dto.comprobanteUrl,
-      pendingAudit: true,
-      autoConfirmed: false,
-    });
 
     if (existing) {
       // Si la reserva ya tiene un registro de pago asociado
@@ -784,7 +755,7 @@ export class PaymentService {
     } else {
       // Crear nuevo pago
       const payment = this.paymentRepo.create({
-        booking,
+        bookings: [booking],
         user,
         amount: safeAmount,
         currency: dto.currency || 'PEN',
@@ -884,15 +855,14 @@ export class PaymentService {
             b.paymentStatus = PaymentStatus.PENDING;
           }
           await this.bookingRepo.save(b);
-        }
 
-          if (booking.court && booking.date && booking.startTime) {
+          if (b.court && b.date && b.startTime) {
             try {
               await this.generateSlotOccupied(
-                booking.court.id,
-                booking.date,
-                booking.startTime,
-                Number(booking.duration) || 1,
+                b.court.id,
+                b.date,
+                b.startTime,
+                Number(b.duration) || 1,
               );
             } catch (e) {
               console.warn('Error al ocupar slots:', e);
@@ -939,7 +909,7 @@ export class PaymentService {
   ) {
     const payment = await this.paymentRepo.findOne({
       where: { id: paymentId },
-      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
     });
     if (!payment) throw new BadRequestException('Pago no encontrado');
 
@@ -954,13 +924,17 @@ export class PaymentService {
         String(payment.status).toUpperCase() === 'CONFIRMADO' ||
         String(payment.status).toUpperCase() === 'CONFIRMED';
 
-      if (payment.booking) {
+      if (payment.bookings && payment.bookings.length > 0) {
         if (initialConfirmed) {
           // Ambos pagos confirmados → PAGO COMPLETO
-          payment.booking.paymentStatus = PaymentStatus.PAID;
-          payment.booking.status = BookingStatus.CONFIRMED;
+          for (let b of payment.bookings) {
+            b.paymentStatus = PaymentStatus.PAID;
+            if (b.status !== BookingStatus.CONFIRMED) {
+              b.status = BookingStatus.CONFIRMED;
+            }
+            await this.bookingRepo.save(b);
+          }
         }
-        await this.bookingRepo.save(payment.booking);
       }
     } else {
       // RECHAZAR
@@ -996,23 +970,25 @@ export class PaymentService {
   ) {
     const payment = await this.paymentRepo.findOne({
       where: { id: paymentId },
-      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
     });
     if (!payment) throw new BadRequestException('Pago no encontrado');
 
+    const firstBooking = payment.bookings?.[0];
+
     // Calcular precio total de la reserva
     let totalPrice = 0;
-    if (typeof payment.booking?.pricing === 'object' && payment.booking?.pricing !== null) {
-      totalPrice = Number((payment.booking.pricing as any).totalPrice ?? (payment.booking.pricing as any).basePrice);
-    } else if (typeof payment.booking?.pricing === 'string') {
+    if (firstBooking && typeof firstBooking.pricing === 'object' && firstBooking.pricing !== null) {
+      totalPrice = Number((firstBooking.pricing as any).totalPrice ?? (firstBooking.pricing as any).basePrice);
+    } else if (firstBooking && typeof firstBooking.pricing === 'string') {
       try {
-        const parsed = JSON.parse(payment.booking.pricing);
+        const parsed = JSON.parse(firstBooking.pricing);
         totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
       } catch {}
     }
     if (isNaN(totalPrice) || totalPrice <= 0) {
-      const courtPrice = Number(payment.booking?.court?.priceDay || payment.booking?.court?.priceNight || 0);
-      const dur = Number(payment.booking?.duration || 1);
+      const courtPrice = Number(firstBooking?.court?.priceDay || firstBooking?.court?.priceNight || 0);
+      const dur = Number(firstBooking?.duration || 1);
       totalPrice = courtPrice * dur * 2;
     }
     if (isNaN(totalPrice) || totalPrice <= 0) {
@@ -1049,10 +1025,12 @@ export class PaymentService {
     payment.saldoConfirmadoPor = auditor;
 
     // Actualizar estado de la reserva
-    if (payment.booking) {
-      payment.booking.status = BookingStatus.CONFIRMED;
-      payment.booking.paymentStatus = PaymentStatus.PAID;
-      await this.bookingRepo.save(payment.booking);
+    if (payment.bookings && payment.bookings.length > 0) {
+      for (let b of payment.bookings) {
+        b.status = BookingStatus.CONFIRMED;
+        b.paymentStatus = PaymentStatus.PAID;
+        await this.bookingRepo.save(b);
+      }
     }
 
     const saved = await this.paymentRepo.save(payment);
