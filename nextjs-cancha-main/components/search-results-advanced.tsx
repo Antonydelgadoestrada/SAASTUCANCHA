@@ -1644,6 +1644,7 @@ export function SearchResults({
 
               {(() => {
                 const bookingPricing = getEffectivePricing(selectedCourt, selectedTime, duration);
+                const multiplier = isRecurring ? Number(recurrenceWeeks) : 1;
                 return (
                   <div className="space-y-2 p-3.5 bg-muted/60 rounded-xl text-sm border">
                     <div className="flex justify-between">
@@ -1680,39 +1681,6 @@ export function SearchResults({
                       </span>
                     </div>
 
-                    {bookingPricing.hasPromo && (
-                      <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 text-xs bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
-                        <span className="flex items-center gap-1 font-semibold">
-                          🎉 Descuento Promo ({bookingPricing.discountPct}% OFF):
-                        </span>
-                        <span className="font-bold">- S/ {bookingPricing.discountAmount}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-center pt-2 border-t font-semibold">
-                      <span className="text-base">Total a pagar:</span>
-                      <div className="text-right">
-                        {bookingPricing.hasPromo && (
-                          <span className="text-xs line-through text-muted-foreground mr-2">
-                            S/ {bookingPricing.regularTotal}
-                          </span>
-                        )}
-                        <span className="text-lg font-bold text-primary">
-                          S/ {bookingPricing.totalPrice}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Duración y Tarifa:</span>
-                      <span className="font-medium">
-                        {duration} {duration === "1" ? "hora" : "horas"} ({bookingPricing.isNight ? "🌙 Tarifa Noche" : "☀️ Tarifa Día"})
-                      </span>
-                    </div>
-
                     {isRecurring && (
                       <div className="flex justify-between text-primary">
                         <span className="text-muted-foreground">Fechas totales (Recurrente):</span>
@@ -1725,20 +1693,20 @@ export function SearchResults({
                         <span className="flex items-center gap-1 font-semibold">
                           🎉 Descuento Promo ({bookingPricing.discountPct}% OFF):
                         </span>
-                        <span className="font-bold">- S/ {bookingPricing.discountAmount * (isRecurring ? Number(recurrenceWeeks) : 1)}</span>
+                        <span className="font-bold">- S/ {bookingPricing.discountAmount * multiplier}</span>
                       </div>
                     )}
 
                     <div className="flex justify-between items-center pt-2 border-t font-semibold">
-                      <span className="text-base">Total a pagar:</span>
+                      <span className="text-base">{isRecurring ? "Total a pagar (Todas las fechas):" : "Total a pagar:"}</span>
                       <div className="text-right">
                         {bookingPricing.hasPromo && (
                           <span className="text-xs line-through text-muted-foreground mr-2">
-                            S/ {bookingPricing.regularTotal * (isRecurring ? Number(recurrenceWeeks) : 1)}
+                            S/ {bookingPricing.regularTotal * multiplier}
                           </span>
                         )}
                         <span className="text-lg font-bold text-primary">
-                          S/ {bookingPricing.totalPrice * (isRecurring ? Number(recurrenceWeeks) : 1)}
+                          S/ {bookingPricing.totalPrice * multiplier}
                         </span>
                       </div>
                     </div>
@@ -1785,9 +1753,6 @@ export function SearchResults({
                   <span className="text-emerald-500 font-bold text-base">
                     S/ {selectedCourt.price * (+duration * 2)}
                   </span>
-                </div>
-
-
                 </div>
               </div>
 
