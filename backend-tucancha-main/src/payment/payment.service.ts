@@ -17,6 +17,8 @@ import { ScheduleTemplateService } from '../schedule/schedule-template.service';
 import { MailerService } from '../mailer/mailer.service';
 import { Booking } from '../booking/booking.entity';
 import { S3Service } from '../aws/s3.service';
+import { CourtService } from '../court/court.service';
+import { BookingStatus } from '../booking/booking-status.enum';
 
 @Injectable()
 export class PaymentService {
@@ -881,8 +883,24 @@ export class PaymentService {
       if (payment.bookings && payment.bookings.length > 0) {
         for (let b of payment.bookings) {
           b.paymentStatus = PaymentStatus.REJECTED;
+          b.status = BookingStatus.CANCELLED;
           b.pendingAudit = false;
           await this.bookingRepo.save(b);
+
+          // Liberar los slots ocupados
+          try {
+            const dateStr = typeof b.date === 'string' ? b.date.substring(0, 10) : new Date(b.date).toISOString().substring(0, 10);
+            const times = this.generateTimeSlots(b.startTime, Number(b.duration) || 1);
+            const payload = times.map((t) => ({
+              courtId: b.court.id,
+              date: dateStr,
+              time: t,
+              status: 'available',
+            }));
+            await this.scheduleTemplateService.bulkUpdate(payload as any);
+          } catch (e) {
+            console.warn('Error al liberar slots:', e);
+          }
         }
       }
     }

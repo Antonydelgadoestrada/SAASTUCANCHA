@@ -183,13 +183,23 @@ export class BookingService implements OnModuleInit {
 
   async cancelBooking(dto:any){
    const booking = await this.findOneComplete(dto.id)
+   if (!booking) throw new NotFoundException('Reserva no encontrada')
    booking.status = BookingStatus.CANCELLED;
    booking.paymentStatus = PaymentStatus.REJECTED;
-   let slots = await this.getSlots(dto.court.id, dto.date, dto.startTime, Number(dto.duration) || 1);
    const data = await this.bookingRepo.create(booking);
    const result =  await this.bookingRepo.save(data)
-   slots= slots.map((slot)=>(Object.assign(slot, { status: 'available' })))
-   await this.scheduleTemplateService.bulkUpdate(slots);
+
+   // Construir slots a liberar directamente para evitar bugs de zona horaria
+   const dateStr = typeof dto.date === 'string' ? dto.date.substring(0, 10) : new Date(dto.date).toISOString().substring(0, 10);
+   const times = generateTimeSlots(dto.startTime, Number(dto.duration) || 1);
+   const payload = times.map((t) => ({
+      courtId: dto.court.id,
+      date: dateStr,
+      time: t,
+      status: 'available',
+   }));
+   await this.scheduleTemplateService.bulkUpdate(payload as any);
+
    await this.mailerService.sendBookingCancelledEmail(result.customerInfo.email, result);
    return booking;
   }
