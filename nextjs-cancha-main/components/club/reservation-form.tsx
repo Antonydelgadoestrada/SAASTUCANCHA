@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon, ClockIcon } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { DialogFooter } from "@/components/ui/dialog"
 import { getByCourt } from "@/lib/schedule"
@@ -24,7 +25,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 export const reservationSchema = z.object({
 
   courtId: z.string().min(1, { message: "Selecciona una cancha." }),
-  date: z.date({ required_error: "Selecciona una fecha válida." }),
+  date: z.date({ invalid_type_error: "Selecciona una fecha válida." }),
   duration: z.string().min(1, { message: "Selecciona duración." }),
   startTime: z.string().min(1, { message: "Selecciona una hora." }),
   userEmail: z.string().email({ message: "Correo no válido." }),
@@ -110,10 +111,15 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
   const [selectedDate, setSelectedDate] = useState<Date>()
   const [startTime, setStartTime] = useState<string>("")
   const [duration, setDuration] = useState<string>("")
-  const [userEmail, setUserEmail] = useState<string>("")
-  const [price, setPrice] = useState<string>("0")
+  const [userEmail, setUserEmail] = useState("")
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceWeeks, setRecurrenceWeeks] = useState("1");
+
+  const [price, setPrice] = useState("0")
   const [timeOptions, setTimeOptions] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
 
   // Filtrar canchas según la sede seleccionada
   const filteredCourts = courts
@@ -183,17 +189,50 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    setIsLoading(true)
     e.preventDefault()
-    await onSubmit({
+    
+    if (!selectedCourt || !selectedDate || !startTime || !duration || !userEmail) {
+      toast.error("Por favor completa todos los campos requeridos (cancha, fecha, hora, duración y email)");
+      return;
+    }
 
+    setIsLoading(true)
+
+    let dates = [];
+    if (isRecurring && recurrenceWeeks) {
+      const weeks = parseInt(recurrenceWeeks, 10);
+      let currentDate = new Date(selectedDate || new Date());
+      currentDate.setHours(12, 0, 0, 0); // Normalizar a mediodía para evitar problemas de zona horaria
+      for (let i = 0; i < weeks; i++) {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dates.push(`${year}-${month}-${day}`);
+        let nextDate = new Date(currentDate);
+        nextDate.setDate(nextDate.getDate() + 7);
+        currentDate = nextDate;
+      }
+    } else {
+      // También normalizar la fecha individual
+      const d = new Date(selectedDate || new Date());
+      d.setHours(12, 0, 0, 0);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      dates = [`${year}-${month}-${day}`];
+    }
+
+    const priceNum = isRecurring ? (Number(price) * parseInt(recurrenceWeeks, 10)).toString() : price;
+
+    await onSubmit({
       courtId:selectedCourt,
       date:selectedDate?.toISOString() || "",
+      dates: dates,
       startTime,
       duration: parseFloat(duration) || 1,
       userEmail,
       "endTime":calculateEndTime(),
-      pricing:{"taxes": 0, "basePrice": price, "discounts": 0, "totalPrice": price},
+      pricing:{"taxes": 0, "basePrice": priceNum, "discounts": 0, "totalPrice": priceNum},
       image:proofFile
     })
     setIsLoading(false)
@@ -225,7 +264,7 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Fecha</Label>
-            <Popover>
+            <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -239,7 +278,10 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
                 <Calendar
                   mode="single"
                   selected={selectedDate}
-                  onSelect={setSelectedDate}
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    setIsCalendarOpen(false);
+                  }}
                   initialFocus
                   disabled={(date) => {
                     const today = new Date();
@@ -302,6 +344,37 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
          
         </div>
 
+        <div className="space-y-4">
+           <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm">Reserva Recurrente</h3>
+                <p className="text-xs text-muted-foreground">Repetir automáticamente esta reserva</p>
+              </div>
+              <Switch
+                checked={isRecurring}
+                onCheckedChange={setIsRecurring}
+              />
+            </div>
+            {isRecurring && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="recurrence">Repetir por</Label>
+                  <Select value={recurrenceWeeks} onValueChange={setRecurrenceWeeks}>
+                    <SelectTrigger id="recurrence">
+                      <SelectValue placeholder="Seleccionar periodo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 semanas</SelectItem>
+                      <SelectItem value="3">3 semanas</SelectItem>
+                      <SelectItem value="4">1 mes (4 semanas)</SelectItem>
+                      <SelectItem value="8">2 meses (8 semanas)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+        </div>
+
         <div className="space-y-2">
           <div className="flex justify-between">
             <Label>Horario</Label>
@@ -325,16 +398,22 @@ export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationF
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="price">Precio (S/)</Label>
-            <Input
-              id="price"
-              type="number"
-              min="0"
-              step="0.01"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
-            />
+              <Label htmlFor="price">Precio Total (S/)</Label>
+              <Input
+                id="price"
+                type="number"
+                value={isRecurring ? Number(price) * parseInt(recurrenceWeeks, 10) : price}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (isRecurring) {
+                    setPrice((Number(val) / parseInt(recurrenceWeeks, 10)).toString());
+                  } else {
+                    setPrice(val);
+                  }
+                }}
+                min="0"
+                step="0.1"
+              />
           </div>
         </div>
         <div className="space-y-2">

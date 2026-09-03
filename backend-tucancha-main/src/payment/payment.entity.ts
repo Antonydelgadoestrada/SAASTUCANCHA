@@ -7,6 +7,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
   Index,
 } from 'typeorm';
 import { Booking } from '../booking/booking.entity';
@@ -31,9 +32,8 @@ export class Payment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToOne(() => Booking, (booking) => booking.payment, { onDelete: 'CASCADE' })
-  @JoinColumn()
-  booking: Booking;
+  @OneToMany(() => Booking, (booking) => booking.payment, { onDelete: 'CASCADE' })
+  bookings: Booking[];
 
   @ManyToOne(() => User, (user) => user.payments, { onDelete: 'CASCADE' })
   @JoinColumn()

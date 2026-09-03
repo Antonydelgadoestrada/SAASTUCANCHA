@@ -138,8 +138,14 @@ export class PaymentService {
   }
   async createPreference(dto: CreateManualBookingDto, user: User){
     try{
-      const booking = await this.bookingService.createOnlineBooking(dto,user);
-      return await this.confirmPreference(booking)
+      const bookings = await this.bookingService.createOnlineBooking(dto, user);
+      if (Array.isArray(bookings)) {
+        if (bookings.length === 1) {
+          return await this.confirmPreference(bookings[0]);
+        }
+        return await this.confirmPreferenceMulti(bookings);
+      }
+      return await this.confirmPreference(bookings as any);
     }
     catch(error){
       throw new Error(`Error in createPreference, detail: ${error.message}`)
@@ -202,6 +208,55 @@ export class PaymentService {
     });
   
     // 4. Retornar el enlace
+    return { init_point };
+  }
+  
+  async confirmPreferenceMulti(bookings: Booking[]) {
+    if (!bookings.length) throw new BadRequestException('No hay reservas creadas');
+    const firstBooking = bookings[0];
+    if (!firstBooking.club || !firstBooking.club.mpAccessToken) {
+      throw new BadRequestException('El club no tiene Mercado Pago conectado');
+    }
+    
+    const mpAccessToken = firstBooking.club.mpAccessToken;
+    const email = firstBooking.user.email;
+    const bookingIds = bookings.map(b => b.id).join(',');
+    
+    const client = new MercadoPagoConfig({
+      accessToken: mpAccessToken,
+    });
+    const preferenceClient = new Preference(client);
+    
+    // Generar un item por cada reserva
+    const items = bookings.map(b => ({
+      id: b.court.id,
+      title: `Reserva en ${b.court.name}`,
+      description: `Club: ${b.club.name} | fecha: ${b.date} | Superficie: ${b.court.surface} | Duracion: ${b.startTime}-${b.endTime}`,
+      quantity: 1,
+      category_id: 'services',
+      currency_id: 'PEN',
+      unit_price: b.pricing.totalPrice,
+    }));
+    
+    const { init_point } = await preferenceClient.create({
+      body: {
+        items: items,
+        payer: {
+          email: email,
+        },
+        metadata: {
+          email
+        },
+        back_urls: {
+          success: `${process.env.WEB_SERVICES_URL}/user/payments/success`,
+          failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
+          pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
+        },
+        external_reference: bookingIds, // Pasamos la lista de IDs separados por coma
+        marketplace_fee: 5,
+      },
+    });
+  
     return { init_point };
   }
   
@@ -280,26 +335,23 @@ export class PaymentService {
       }
 
       // 4. Ejecución atómica en transacción
-      const updatedBooking = await this.paymentRepo.manager.transaction(async (trxManager) => {
-        const booking = await this.bookingService.findOneComplete(externalRef);
-        if (!booking) {
+      const updatedBookings = await this.paymentRepo.manager.transaction(async (trxManager) => {
+        const bookingIds = externalRef.split(',');
+        const bookings = await trxManager.find(Booking, {
+          where: { id: In(bookingIds) },
+          relations: ['user', 'court', 'club']
+        });
+        
+        if (!bookings.length) {
           console.warn(`Reserva no encontrada para referencia externa: ${externalRef}`);
           return null;
         }
 
         // Si ya está pagado por otra solicitud concurrente, abortar
-        if (booking.paymentStatus === PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
-          console.log(`ℹ️ [Concurrencia] Reserva ${booking.id} ya marcada como PAID.`);
-          return booking;
+        if (bookings[0].paymentStatus === PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
+          console.log(`ℹ️ [Concurrencia] Reservas ya marcadas como PAID.`);
+          return bookings;
         }
-
-        booking.paymentStatus = targetPaymentStatus;
-        booking.status = targetBookingStatus;
-        booking.pricing = {
-          ...booking.pricing,
-          basePrice: netoVendedor,
-          totalPrice: totalPagado,
-        };
 
         let paymentRecord = existingPayment || await trxManager.findOne(Payment, {
           where: { transactionId: String(mpPayment.id) },
@@ -316,8 +368,7 @@ export class PaymentService {
           await trxManager.save(Payment, paymentRecord);
         } else {
           paymentRecord = trxManager.create(Payment, {
-            user: booking.user,
-            booking,
+            user: bookings[0].user,
             amount: totalPagado,
             currency: mpPayment.currency_id || 'PEN',
             method: mappedMethod,
@@ -332,37 +383,54 @@ export class PaymentService {
           await trxManager.save(Payment, paymentRecord);
         }
 
-        booking.payment = paymentRecord;
-        await trxManager.save(Booking, booking);
-        return booking;
+        for (let booking of bookings) {
+          booking.paymentStatus = targetPaymentStatus;
+          booking.status = targetBookingStatus;
+          // Actualizamos los montos netos solo si es una sola reserva para no complicar el split
+          if (bookings.length === 1) {
+            booking.pricing = {
+              ...booking.pricing,
+              basePrice: netoVendedor,
+              totalPrice: totalPagado,
+            };
+          }
+          booking.payment = paymentRecord;
+          await trxManager.save(Booking, booking);
+        }
+        
+        return bookings;
       });
 
-      if (!updatedBooking) {
+      if (!updatedBookings) {
         return;
       }
   
       // 5. Ocupar slots en calendario si el pago fue aprobado
       if (status === 'approved') {
-        await this.generateSlotOccupied(
-          updatedBooking.court.id,
-          updatedBooking.date,
-          updatedBooking.startTime,
-          updatedBooking.duration
-        );
+        for (let booking of updatedBookings) {
+          await this.generateSlotOccupied(
+            booking.court.id,
+            booking.date,
+            booking.startTime,
+            booking.duration
+          );
+        }
       }
   
       // 6. Enviar correos informativos sin bloquear la respuesta del webhook
       try {
         if (correoAEnviar === 'pago_exitoso') {
-          await this.mailerService.sendBookingPaidNotifications(updatedBooking);
+          // Send for the first one as representative or a group email
+          await this.mailerService.sendBookingConfirmationEmail(updatedBookings[0].customerInfo.email, updatedBookings[0]);
+          await this.mailerService.sendBookingPaidNotifications(updatedBookings[0]);
         } else if (correoAEnviar === 'pago_rechazado') {
-          await this.mailerService.sendBookingCancelledEmail(updatedBooking.customerInfo?.email || updatedBooking.user?.email, updatedBooking);
+          await this.mailerService.sendBookingCancelledEmail(updatedBookings[0].customerInfo.email, updatedBookings[0]);
         }
       } catch (mailErr) {
         console.error(`⚠️ Error al enviar correos de confirmación: ${mailErr.message}`);
       }
   
-      console.log(`✅ Webhook procesado correctamente con idempotencia para booking ${updatedBooking.id}`);
+      console.log(`✅ Webhook procesado correctamente con idempotencia para booking ${updatedBookings[0].id}`);
     } catch (error) {
       console.error(`Error al procesar webhook para ID ${paymentId}:`, error);
       throw error;
@@ -378,8 +446,12 @@ export class PaymentService {
     }
 
     const payments = await this.paymentRepo.find({
-      where: { booking: { club: { id: clubId } } },
-      relations: ['booking', 'booking.club', 'booking.court', 'user'],
+      where: { bookings: { club: { id: clubId } } },
+      relations: ['bookings', 'bookings.club', 'bookings.court', 'user'],
+    });
+
+    const bookings = await this.bookingRepo.find({
+      where: { club: { id: clubId } },
     });
 
     let totalRecaudado = 0;
@@ -485,7 +557,7 @@ export class PaymentService {
 
     const query = this.paymentRepo
       .createQueryBuilder('payment')
-      .leftJoinAndSelect('payment.booking', 'booking')
+      .leftJoinAndSelect('payment.bookings', 'booking')
       .leftJoinAndSelect('booking.court', 'court')
       .leftJoinAndSelect('booking.user', 'customer')
       .leftJoinAndSelect('payment.user', 'payer')
@@ -520,10 +592,10 @@ export class PaymentService {
     if (filters.search) {
       const s = filters.search.toLowerCase();
       return rawList.filter((p) => {
-        const ref = (p.booking as any)?.bookingReference?.toLowerCase() || '';
-        const court = p.booking?.court?.name?.toLowerCase() || '';
-        const name = (p.booking as any)?.customerInfo?.name?.toLowerCase() || (p.booking as any)?.user?.name?.toLowerCase() || '';
-        const email = (p.booking as any)?.customerInfo?.email?.toLowerCase() || (p.booking as any)?.user?.email?.toLowerCase() || '';
+        const ref = (p.bookings?.[0] as any)?.bookingReference?.toLowerCase() || '';
+        const court = p.bookings?.[0]?.court?.name?.toLowerCase() || '';
+        const name = (p.bookings?.[0] as any)?.customerInfo?.name?.toLowerCase() || (p.bookings?.[0] as any)?.user?.name?.toLowerCase() || '';
+        const email = (p.bookings?.[0] as any)?.customerInfo?.email?.toLowerCase() || (p.bookings?.[0] as any)?.user?.email?.toLowerCase() || '';
         return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s);
       });
     }
@@ -642,8 +714,49 @@ export class PaymentService {
 
     let savedPayment: Payment;
     const existing = booking.payment || await this.paymentRepo.findOne({
-      where: { booking: { id: dto.bookingId } },
-      relations: ['booking', 'user'],
+      where: { bookings: { id: dto.bookingId } },
+      relations: ['bookings', 'user'],
+    });
+
+    if (existing && existing.status !== PaymentStatus.REJECTED && existing.status !== PaymentStatus.CANCELLED) {
+      if (existing.status === PaymentStatus.PAID) {
+        throw new BadRequestException('Esta reserva ya tiene un pago aprobado.');
+      }
+      return existing;
+    }
+
+    let safeAmount = Number(dto.amount ?? dto.monto);
+    if (isNaN(safeAmount) || safeAmount <= 0) {
+      if (typeof booking.pricing === 'object' && booking.pricing !== null) {
+        safeAmount = Number(booking.pricing.totalPrice ?? booking.pricing.basePrice);
+      } else if (typeof booking.pricing === 'string') {
+        try {
+          const parsed = JSON.parse(booking.pricing);
+          safeAmount = Number(parsed?.totalPrice ?? parsed?.basePrice);
+        } catch {}
+      }
+      if (isNaN(safeAmount) || safeAmount <= 0) {
+        const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
+        const dur = Number(booking.duration || 1);
+        safeAmount = courtPrice * dur * 2;
+      }
+    }
+    if (isNaN(safeAmount) || safeAmount < 0) {
+      safeAmount = 0;
+    }
+
+    const payment = this.paymentRepo.create({
+      bookings: [booking],
+      user,
+      amount: safeAmount,
+      currency: dto.currency || 'PEN',
+      method: safeMethod,
+      paymentMethod: safeMethod,
+      status: PaymentStatus.PENDING,
+      type: safeType,
+      comprobanteUrl: dto.comprobanteUrl,
+      pendingAudit: true,
+      autoConfirmed: false,
     });
 
     if (existing) {
@@ -724,7 +837,7 @@ export class PaymentService {
    */
   async getPaymentsByBooking(bookingId: string) {
     return this.paymentRepo.find({
-      where: { booking: { id: bookingId } },
+      where: { bookings: { id: bookingId } },
       order: { createdAt: 'DESC' },
     });
   }
@@ -741,7 +854,7 @@ export class PaymentService {
   ) {
     const payment = await this.paymentRepo.findOne({
       where: { id: paymentId },
-      relations: ['booking', 'booking.user', 'booking.court', 'user'],
+      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
     });
     if (!payment) throw new BadRequestException('Pago no encontrado');
 
@@ -760,28 +873,30 @@ export class PaymentService {
       }
 
       // Confirmar reserva asociada
-      if (payment.booking) {
-        payment.booking.status = BookingStatus.CONFIRMED;
-        payment.booking.pendingAudit = false;
+      if (payment.bookings && payment.bookings.length > 0) {
+        for (let b of payment.bookings) {
+          b.status = BookingStatus.CONFIRMED;
+          b.pendingAudit = false;
 
-        if (payment.type === PaymentType.PAGO_COMPLETO || payment.saldoStatus === 'PAGADO') {
-          payment.booking.paymentStatus = PaymentStatus.PAID;
-        } else if (payment.type === PaymentType.ADELANTO && payment.saldoStatus !== 'PAGADO') {
-          payment.booking.paymentStatus = PaymentStatus.PENDING;
+          if (payment.type === PaymentType.PAGO_COMPLETO || payment.saldoStatus === 'PAGADO') {
+            b.paymentStatus = PaymentStatus.PAID;
+          } else if (payment.type === PaymentType.ADELANTO && payment.saldoStatus !== 'PAGADO') {
+            b.paymentStatus = PaymentStatus.PENDING;
+          }
+          await this.bookingRepo.save(b);
         }
 
-        await this.bookingRepo.save(payment.booking);
-
-        if (payment.booking.court && payment.booking.date && payment.booking.startTime) {
-          try {
-            await this.generateSlotOccupied(
-              payment.booking.court.id,
-              payment.booking.date,
-              payment.booking.startTime,
-              Number(payment.booking.duration) || 1,
-            );
-          } catch (e) {
-            console.warn('Error al ocupar slots:', e);
+          if (booking.court && booking.date && booking.startTime) {
+            try {
+              await this.generateSlotOccupied(
+                booking.court.id,
+                booking.date,
+                booking.startTime,
+                Number(booking.duration) || 1,
+              );
+            } catch (e) {
+              console.warn('Error al ocupar slots:', e);
+            }
           }
         }
       }
@@ -793,10 +908,12 @@ export class PaymentService {
       payment.motivoRechazo = motivoRechazo || null;
       payment.saldoStatus = 'NO_APLICA';
 
-      if (payment.booking) {
-        payment.booking.paymentStatus = PaymentStatus.REJECTED;
-        payment.booking.pendingAudit = false;
-        await this.bookingRepo.save(payment.booking);
+      if (payment.bookings && payment.bookings.length > 0) {
+        for (let b of payment.bookings) {
+          b.paymentStatus = PaymentStatus.REJECTED;
+          b.pendingAudit = false;
+          await this.bookingRepo.save(b);
+        }
       }
     }
 

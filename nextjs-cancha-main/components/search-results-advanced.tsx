@@ -59,6 +59,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -240,6 +241,17 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string, 
   return validStartTimes
 }
 
+export  const handleClearFilters = () => {
+    setSearchQuery("")
+    setSelectedSport("")
+    setSelectedTeamSize("")
+    setSelectedClub("")
+    setSelectedPriceRange("")
+    setSelectedDate(undefined)
+    setCurrentLocation(null)
+    setUseLocation(false)
+  }
+
 export function SearchResults({
   searchQuery,
   selectedSport,
@@ -265,6 +277,8 @@ export function SearchResults({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedTime, setSelectedTime] = useState("1");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceWeeks, setRecurrenceWeeks] = useState("1");
   const [bookingData, setBookingData] = useState({
     name: user?.name || "",
     email: user?.email || "",
@@ -367,6 +381,36 @@ export function SearchResults({
   // const filteredOptionsR = durationOptions.filter(
   //   (opt) => parseFloat(opt.value) >= parseFloat(selectedCourt?.minimumBookingTime ?? '1')
   // );
+  const getCalculatedHourlyPrice = () => {
+    if (!selectedCourt) return 0;
+    // Default to day price if no time is selected
+    if (!selectedTime) {
+      const pDay = Number(selectedCourt.priceDay || 0);
+      const prDay = Number(selectedCourt.promoDay || 0);
+      return (prDay > 0 ? prDay : pDay) * 2;
+    }
+    
+    const h = parseInt(selectedTime.split(":")[0], 10);
+    const isNightTime = h >= 18;
+    
+    if (isNightTime) {
+      const pNight = Number(selectedCourt.priceNight || selectedCourt.priceDay || 0);
+      const prNight = Number(selectedCourt.promoNight || selectedCourt.promoDay || 0);
+      return (prNight > 0 ? prNight : pNight) * 2;
+    } else {
+      const pDay = Number(selectedCourt.priceDay || 0);
+      const prDay = Number(selectedCourt.promoDay || 0);
+      return (prDay > 0 ? prDay : pDay) * 2;
+    }
+  }
+
+  const getCalculatedTotal = () => {
+    const hourly = getCalculatedHourlyPrice();
+    const dur = Number(duration) || 0;
+    const weeks = isRecurring ? parseInt(recurrenceWeeks, 10) : 1;
+    return hourly * dur * weeks;
+  }
+
   const filteredOptions = durationOptions.filter((opt) => {
     const minBooking = parseFloat(selectedCourt?.minimumBookingTime ?? '1')
     const sport = selectedCourt?.sport?.toLowerCase() ?? ""
@@ -615,8 +659,21 @@ export function SearchResults({
 
     setIsLoading(true);
     try {
+      let dates = [];
+      if (isRecurring && recurrenceWeeks) {
+        const weeks = parseInt(recurrenceWeeks, 10);
+        let currentDate = selectedDate || new Date();
+        for (let i = 0; i < weeks; i++) {
+          dates.push(format(currentDate, "yyyy-MM-dd", { locale: es }));
+          let nextDate = new Date(currentDate);
+          nextDate.setDate(nextDate.getDate() + 7);
+          currentDate = nextDate;
+        }
+      } else {
+        dates = [format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es })];
+      }
+
       if (payMethod === "whatsapp") {
-        const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
         const fechaDisplay = selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: es }) : format(new Date(), "dd/MM/yyyy", { locale: es });
 
         const timeRange = selectedTime && duration ? (() => {
@@ -630,7 +687,7 @@ export function SearchResults({
 
         const newBooking = await createReservation({
           courtId: selectedCourt.id,
-          date: fecha,
+          dates: dates,
           startTime: selectedTime,
           duration: Number(duration) || 1,
           userEmail: bookingData.email,
@@ -645,8 +702,10 @@ export function SearchResults({
           name: bookingData.name,
         });
 
-        const bookingId = newBooking?.id || newBooking?.data?.id;
-        const bookingRef = newBooking?.bookingReference || newBooking?.data?.bookingReference || `REF-${Date.now()}`;
+        // Al crear recurrente puede devolver un array, tomamos el primero para la ref
+        const firstBooking = Array.isArray(newBooking) ? newBooking[0] : newBooking;
+        const bookingId = firstBooking?.id || firstBooking?.data?.id;
+        const bookingRef = firstBooking?.bookingReference || firstBooking?.data?.bookingReference || `REF-${Date.now()}`;
         const clubPhone = selectedCourt.whatsapp || selectedCourt.phone || selectedCourt.clubData?.phone || selectedCourt.clubData?.whatsapp;
 
         if (bookingId) {
@@ -677,7 +736,6 @@ export function SearchResults({
           description: "Tu turno ha sido bloqueado en el sistema. Coordina directamente con el Club por WhatsApp.",
         });
 
-        // Abrir automáticamente el chat de WhatsApp con el Club
         if (clubPhone) {
           const waMsg = getWhatsAppConfirmationMessage(successObj);
           const waUrl = getWhatsAppLink(clubPhone, waMsg);
@@ -690,7 +748,7 @@ export function SearchResults({
       } else if (payMethod === "mercadopago") {
         const { init_point } = await createPreference({
           courtId: selectedCourt.id,
-          date: format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es }),
+          dates: dates,
           startTime: selectedTime,
           duration: Number(duration) || 1,
           userEmail: bookingData.email,
@@ -707,7 +765,6 @@ export function SearchResults({
           });
         }
       } else {
-        // Validación de comprobante para Yape / Plin
         if (!receiptFile) {
           toast({
             title: "Comprobante requerido",
@@ -718,12 +775,9 @@ export function SearchResults({
           return;
         }
 
-        // 1. Subir captura de comprobante
         const uploadRes = await uploadPaymentReceipt(receiptFile);
         const comprobanteUrl = uploadRes?.url;
 
-        // 2. Crear reserva online
-        const fecha = format(selectedDate ?? new Date(), "yyyy-MM-dd", { locale: es });
         const fechaDisplay = selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: es }) : format(new Date(), "dd/MM/yyyy", { locale: es });
 
         const timeRange = selectedTime && duration ? (() => {
@@ -737,7 +791,7 @@ export function SearchResults({
 
         const newBooking = await createReservation({
           courtId: selectedCourt.id,
-          date: fecha,
+          dates: dates,
           startTime: selectedTime,
           duration: Number(duration) || 1,
           userEmail: bookingData.email,
@@ -751,11 +805,11 @@ export function SearchResults({
           name: bookingData.name,
         });
 
-        const bookingId = newBooking?.id || newBooking?.data?.id;
-        const bookingRef = newBooking?.bookingReference || newBooking?.data?.bookingReference || `REF-${Date.now()}`;
+        const firstBooking = Array.isArray(newBooking) ? newBooking[0] : newBooking;
+        const bookingId = firstBooking?.id || firstBooking?.data?.id;
+        const bookingRef = firstBooking?.bookingReference || firstBooking?.data?.bookingReference || `REF-${Date.now()}`;
         const clubPhone = selectedCourt.whatsapp || selectedCourt.phone || selectedCourt.clubData?.phone || selectedCourt.clubData?.whatsapp;
 
-        // 3. Registrar el pago en el backend
         if (bookingId) {
           await createBookingPayment(bookingId, {
             metodo: payMethod === "yape" ? "YAPE" : "PLIN",
@@ -1320,7 +1374,7 @@ export function SearchResults({
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Precio:</span>
                         <span className="font-semibold">
-                          S/ {selectedCourt.price}/hora
+                          S/ {getCalculatedHourlyPrice()}/hora
                         </span>
                       </div>
                     </div>
@@ -1474,6 +1528,42 @@ export function SearchResults({
               <Separator />
 
               <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-sm">Reserva Recurrente</h3>
+                    <p className="text-xs text-muted-foreground">Reservar automáticamente el mismo día en las próximas semanas</p>
+                  </div>
+                  <Switch
+                    checked={isRecurring}
+                    onCheckedChange={setIsRecurring}
+                  />
+                </div>
+                {isRecurring && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="recurrence">Repetir por</Label>
+                      <Select
+                        value={recurrenceWeeks}
+                        onValueChange={setRecurrenceWeeks}
+                      >
+                        <SelectTrigger id="recurrence">
+                          <SelectValue placeholder="Seleccionar periodo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2">2 semanas</SelectItem>
+                          <SelectItem value="3">3 semanas</SelectItem>
+                          <SelectItem value="4">1 mes (4 semanas)</SelectItem>
+                          <SelectItem value="8">2 meses (8 semanas)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
                 <h3 className="font-semibold">Datos del reservante</h3>
                 {!user && (
                   <Alert>
@@ -1551,6 +1641,7 @@ export function SearchResults({
 
               <Separator />
 
+
               {(() => {
                 const bookingPricing = getEffectivePricing(selectedCourt, selectedTime, duration);
                 return (
@@ -1614,6 +1705,46 @@ export function SearchResults({
                   </div>
                 );
               })()}
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Duración y Tarifa:</span>
+                      <span className="font-medium">
+                        {duration} {duration === "1" ? "hora" : "horas"} ({bookingPricing.isNight ? "🌙 Tarifa Noche" : "☀️ Tarifa Día"})
+                      </span>
+                    </div>
+
+                    {isRecurring && (
+                      <div className="flex justify-between text-primary">
+                        <span className="text-muted-foreground">Fechas totales (Recurrente):</span>
+                        <span className="font-bold">x {recurrenceWeeks} semanas</span>
+                      </div>
+                    )}
+
+                    {bookingPricing.hasPromo && (
+                      <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 text-xs bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
+                        <span className="flex items-center gap-1 font-semibold">
+                          🎉 Descuento Promo ({bookingPricing.discountPct}% OFF):
+                        </span>
+                        <span className="font-bold">- S/ {bookingPricing.discountAmount * (isRecurring ? Number(recurrenceWeeks) : 1)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center pt-2 border-t font-semibold">
+                      <span className="text-base">Total a pagar:</span>
+                      <div className="text-right">
+                        {bookingPricing.hasPromo && (
+                          <span className="text-xs line-through text-muted-foreground mr-2">
+                            S/ {bookingPricing.regularTotal * (isRecurring ? Number(recurrenceWeeks) : 1)}
+                          </span>
+                        )}
+                        <span className="text-lg font-bold text-primary">
+                          S/ {bookingPricing.totalPrice * (isRecurring ? Number(recurrenceWeeks) : 1)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <Alert className="border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200">
                 <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -1655,35 +1786,8 @@ export function SearchResults({
                     S/ {selectedCourt.price * (+duration * 2)}
                   </span>
                 </div>
-                <div className="space-y-1.5 text-xs text-muted-foreground">
-                  <div className="flex items-center">
-                    <MapPinIcon className="mr-2 h-3.5 w-3.5" />
-                    <span>{selectedCourt.club || selectedCourt.clubData?.name || "Complejo Deportivo"}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <ClockIcon className="mr-2 h-3.5 w-3.5" />
-                    <span>
-                      {selectedDate
-                        ? format(selectedDate, "EEEE d 'de' MMMM", { locale: es })
-                        : "Hoy"}
-                      {selectedTime && duration ? (
-                        <span className="ml-1.5 font-medium">
-                          {`, ${selectedTime} a ${(() => {
-                            const [h, m] = selectedTime.split(":").map(Number);
-                            const d = new Date();
-                            d.setHours(h, m + parseFloat(duration) * 60, 0, 0);
-                            const endH = d.getHours().toString().padStart(2, "0");
-                            const endM = d.getMinutes().toString().padStart(2, "0");
-                            return `${endH}:${endM}`;
-                          })()}`}
-                        </span>
-                      ) : null}
-                    </span>
-                  </div>
-                  <div className="flex items-center">
-                    <ClockIcon className="mr-2 h-3.5 w-3.5" />
-                    <span>Duración: {duration} {duration === "1" ? "hora" : "horas"}</span>
-                  </div>
+
+
                 </div>
               </div>
 

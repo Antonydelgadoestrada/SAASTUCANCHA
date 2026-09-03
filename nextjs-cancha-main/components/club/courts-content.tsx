@@ -244,7 +244,7 @@ export function ClubCourtsContent() {
                 <CardContent>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Precio día:</span>
+                      <span className="text-sm text-muted-foreground">Precio día (30 min):</span>
                       <div>
                         {court.promoDay ? (
                           <div className="flex items-center gap-2">
@@ -257,7 +257,7 @@ export function ClubCourtsContent() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Precio noche:</span>
+                      <span className="text-sm text-muted-foreground">Precio noche (30 min):</span>
                       <div>
                         {court.promoNight ? (
                           <div className="flex items-center gap-2">
@@ -292,8 +292,8 @@ export function ClubCourtsContent() {
 
                       <th className="px-4 py-3 text-left text-sm font-medium">Tipo</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Superficie</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">Precio Día</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">Precio Noche</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Precio Día (30m)</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Precio Noche (30m)</th>
                       <th className="px-4 py-3 text-right text-sm font-medium">Acciones</th>
                     </tr>
                   </thead>

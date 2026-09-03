@@ -215,18 +215,37 @@ export class BookingService implements OnModuleInit {
       status: BookingStatus.PENDING,
       paymentMethod: dto.paymentMethod || 'online',
       paymentStatus: PaymentStatus.PENDING,
+    };
+    
+    let datesToProcess = dto.dates && dto.dates.length > 0 ? dto.dates : [dto.date];
+    let createdBookings = [];
+
+    for (const date of datesToProcess) {
+      if (!date) continue;
+      
+      let slots = await this.checkAvailability(dto.courtId, date, dto.startTime, parsedDuration);
+      
+      let currentDto = { ...dto, date: date, duration: parsedDuration };
+      let booking = await this.createObjectBooking(currentDto, user);
+      booking = Object.assign(booking, statusManual);
+      
+      const saveBooking = await this.bookingRepo.create(booking);
+      const result = await this.bookingRepo.save(saveBooking);
+      
+      slots = slots.map((slot) => (Object.assign(slot, { status: 'on-hold' })));
+      await this.scheduleTemplateService.bulkUpdate(slots);
+      
+      createdBookings.push(result);
     }
-    let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, parsedDuration);
- 
-    let booking = await this.createObjectBooking({ ...dto, duration: parsedDuration }, user);
-    booking = Object.assign(booking, statusManual);
-    const saveBooking = await this.bookingRepo.create(booking);
-    const result = await this.bookingRepo.save(saveBooking);
-    slots= slots.map((slot)=>(Object.assign(slot, { status: 'on-hold' })))
-    await this.scheduleTemplateService.bulkUpdate(slots);
-    // 📩 Enviar correo de confirmación
-    await this.mailerService.sendBookingReservationNotifications(result);
-    return result;
+
+    if (createdBookings.length > 0) {
+      // Por ahora enviamos notificación basada en la primera reserva
+      await this.mailerService.sendBookingReservationNotifications(createdBookings[0]);
+    }
+    
+    // Si solo hay una, retornamos el objeto para no romper flujos que esperen un solo objeto
+    // Si hay multiples, retornamos el array
+    return createdBookings.length === 1 ? createdBookings[0] : createdBookings;
  }
 
   async createManualBooking(dto: CreateManualBookingDto, user: User) {
@@ -234,35 +253,65 @@ export class BookingService implements OnModuleInit {
     const pricing = dto.pricing ? JSON.parse(dto.pricing) : null;
     if(!userReservation) throw new NotFoundException(`email: ${dto.userEmail} no encontrado`)
     const parsedDuration = Number(dto.duration) || 1;
-    let slots = await this.checkAvailability(dto.courtId, dto.date, dto.startTime, parsedDuration);
+    let datesToBook: Date[] = [];
+    if (dto.dates && dto.dates.length > 0) {
+      if (typeof dto.dates === 'string') {
+        datesToBook = (dto.dates as string).split(',').map(d => new Date(d));
+      } else {
+        datesToBook = dto.dates.map(d => new Date(d));
+      }
+    } else if (dto.date) {
+      datesToBook = [new Date(dto.date)];
+    } else {
+      throw new BadRequestException('Se requiere una fecha o un arreglo de fechas');
+    }
+
     const court: any = await this.courtService.findOne(dto.courtId , ['club']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
-    const booking = this.bookingRepo.create({
-      user:userReservation,
-      court,
-      club: user.club,
-      date: new Date(dto.date),
-      startTime: dto.startTime,
-      endTime: dto.endTime,
-      duration: parsedDuration,
-      customerInfo:{
-        name: userReservation.name,
-        email: userReservation.email,
-        phone: userReservation.phone,
-      },
-      pricing,
-      status: BookingStatus.PENDING,
-      paymentMethod:'manual',
-      paymentStatus: PaymentStatus.PENDING,
-      bookingReference: `REF-${Date.now()}`,
-    });
-    const result = await this.bookingRepo.save(booking);
-    // slots= slots.map((slot)=>(Object.assign(slot, { status: 'occupied' })))
-    slots= slots.map((slot)=>(Object.assign(slot, { status: 'on-hold' })))
-    await this.scheduleTemplateService.bulkUpdate(slots);
-    // 📩 Enviar correo de reserva pagada
-    await this.mailerService.sendBookingConfirmationEmail(result.customerInfo.email, result);
-    return result;
+    
+    const createdBookings = [];
+    const finalPricing = pricing ? {
+      ...pricing,
+      totalPrice: pricing.totalPrice / datesToBook.length,
+      basePrice: pricing.basePrice / datesToBook.length
+    } : null;
+
+    for (let currentdate of datesToBook) {
+      let slots = await this.checkAvailability(dto.courtId, currentdate, dto.startTime, parsedDuration);
+      const booking = this.bookingRepo.create({
+        user:userReservation,
+        court,
+        club: user.club,
+        date: currentdate,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        duration: parsedDuration,
+        customerInfo:{
+          name: userReservation.name,
+          email: userReservation.email,
+          phone: userReservation.phone,
+        },
+        pricing: finalPricing,
+        status: BookingStatus.PENDING,
+        paymentMethod:'manual',
+        paymentStatus: PaymentStatus.PENDING,
+        bookingReference: `REF-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      });
+      const result = await this.bookingRepo.save(booking);
+      slots = slots.map((slot)=>(Object.assign(slot, { status: 'on-hold' })))
+      await this.scheduleTemplateService.bulkUpdate(slots);
+      createdBookings.push(result);
+    }
+    
+    for (const booking of createdBookings) {
+      try {
+        await this.mailerService.sendBookingConfirmationEmail(booking.customerInfo.email, booking);
+      } catch (e) {
+        console.warn(`Error al enviar correo para reserva ${booking.id}:`, e);
+      }
+    }
+    
+    return createdBookings.length === 1 ? createdBookings[0] : createdBookings;
   }
 
   async createDeferredBooking(dto: CreateBookingDto, user: User) {

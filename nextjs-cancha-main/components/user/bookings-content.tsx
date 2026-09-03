@@ -163,6 +163,7 @@ export function UserBookingsContent() {
 
       const fin = getBookingPaymentDetails(selectedBooking)
 
+
       if (paymentMode === "SALDO") {
         // Cancelación de saldo restante
         const payAmount = fin.saldoRemaining
@@ -199,6 +200,7 @@ export function UserBookingsContent() {
         const remainingText = payOption === "advance" ? ` (Saldo pendiente en club: S/ ${(totalPrice - advanceAmount).toFixed(2)})` : ""
         toast.success(`¡Comprobante de ${payMethod === "yape" ? "Yape" : "Plin"} enviado por S/ ${payAmount.toFixed(2)}!${remainingText}`)
       }
+
 
       setIsPaymentDialogOpen(false)
       setReceiptFile(null)

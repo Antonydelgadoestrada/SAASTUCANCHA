@@ -117,3 +117,8 @@ export const deleteCourtScheduleEvent = async (eventId: string) => {
   const result = await api.delete(`/court-schedule-events/${eventId}`);
   return result.data;
 };
+
+export const updateCourtScheduleEvent = async (eventId: string, body: Partial<CreateCourtScheduleEventPayload>) => {
+  const result = await api.patch(`/court-schedule-events/${eventId}`, body);
+  return result.data;
+};

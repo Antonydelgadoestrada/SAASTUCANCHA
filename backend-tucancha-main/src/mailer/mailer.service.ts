@@ -82,6 +82,7 @@ export class MailerService {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     });
 
     const html = this.getEmailTemplate({
@@ -103,6 +104,7 @@ export class MailerService {
     await this.resend.emails.send({
       from: 'TuCancha <noreply@tucancha.com.pe>',
       to,
+      bcc: 'tucancha100@gmail.com',
       subject: 'Tu reserva ha sido confirmada',
       html,
     });
@@ -116,6 +118,7 @@ export class MailerService {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     });
 
     const html = this.getEmailTemplate({
@@ -137,6 +140,7 @@ export class MailerService {
     await this.resend.emails.send({
       from: 'TuCancha <noreply@tucancha.com.pe>',
       to,
+      bcc: 'tucancha100@gmail.com',
       subject: 'Tu pago fue recibido con éxito',
       html,
     });
@@ -150,6 +154,7 @@ export class MailerService {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     });
   
     const detailsUsuario = `
@@ -183,6 +188,7 @@ export class MailerService {
     await this.resend.emails.send({
       from: 'TuCancha <noreply@tucancha.com.pe>',
       to: customerInfo.email,
+      bcc: 'tucancha100@gmail.com',
       subject: 'Tu reserva ha sido registrada',
       html: this.getEmailTemplate({
         title: '¡Reserva Registrada!',
@@ -217,6 +223,7 @@ export class MailerService {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     });
   
     const details = `
@@ -268,6 +275,7 @@ export class MailerService {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     });
 
     const html = this.getEmailTemplate({
@@ -305,6 +313,7 @@ export class MailerService {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     });
 
     const html = this.getEmailTemplate({
@@ -348,6 +357,7 @@ export class MailerService {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     });
 
     const html = this.getEmailTemplate({

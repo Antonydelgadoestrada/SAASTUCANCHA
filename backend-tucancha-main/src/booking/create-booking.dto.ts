@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsEmail, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BookingStatus } from './booking-status.enum';
 import { PaymentStatus } from '../payment/payment-status.enum';
@@ -36,8 +36,14 @@ class PricingDto {
 }
 
 export class CreateBookingDto {
+  @IsOptional()
   @IsDateString()
-  date: Date;
+  date?: Date;
+
+  @IsOptional()
+  @IsArray()
+  @IsDateString({}, { each: true })
+  dates?: Date[];
 
   @IsString()
   startTime: string;
@@ -81,8 +87,14 @@ export class CreateManualBookingDto {
   @IsString()
   courtId: string;
 
+  @IsOptional()
   @IsDateString()
-  date: Date;
+  date?: Date;
+
+  @IsOptional()
+  @IsArray()
+  @IsDateString({}, { each: true })
+  dates?: Date[];
 
   @IsString()
   startTime: string;

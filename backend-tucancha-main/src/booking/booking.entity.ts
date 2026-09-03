@@ -39,7 +39,7 @@
     @Column()
     endTime: string;
   
-    @Column({ type: 'float', default: 1 })
+    @Column({ type: 'float', default: 1, nullable: true })
     duration: number;
   
     @Column('jsonb')
@@ -93,7 +93,7 @@
     @Column({ nullable: true })
     cancellationReason?: string;
   
-    @OneToOne(() => Payment, (payment) => payment.booking, { nullable: true })
+    @ManyToOne(() => Payment, (payment) => payment.bookings, { onDelete: 'SET NULL', nullable: true })
     @JoinColumn()
     payment?: Payment;
 

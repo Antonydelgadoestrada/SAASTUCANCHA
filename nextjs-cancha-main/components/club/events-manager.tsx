@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { SparklesIcon, CalendarIcon, PlusIcon, Trash2Icon, SaveIcon, XIcon } from "lucide-react"
+import { SparklesIcon, CalendarIcon, PlusIcon, Trash2Icon, SaveIcon, XIcon, EditIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar } from "@/components/ui/calendar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -20,10 +21,14 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   createCourtScheduleEvent,
+  updateCourtScheduleEvent,
   deleteCourtScheduleEvent,
   listCourtScheduleEvents,
+  getTemplateByCourtId,
+  parseCourtTemplateByCourtResponse,
   type CreateCourtScheduleEventPayload,
 } from "@/lib/schedule"
+import { getAllCourtsByClub } from "@/lib/courts"
 
 function getApiErrorMessage(e: unknown): string | null {
   if (typeof e !== "object" || e === null || !("response" in e)) return null
@@ -45,19 +50,8 @@ function looksLikeEventOverlapError(message: string): boolean {
 
 export type EventsTabCourt = { id: string; name: string; venue?: { name?: string } }
 
-export type EventsTabProps = {
-  courts: EventsTabCourt[]
-  /** Cancha seleccionada en el calendario (si no es "todas") */
+export type EventsManagerProps = {
   initialCourtId?: string
-  templateId?: string | null
-  /** Horas HH:mm de la plantilla (slots) para selects inicio/fin */
-  templateSlotTimes: string[]
-  /**
-   * Días habilitados en la plantilla (`monday`…`sunday`, minúsculas).
-   * Si viene vacío, se muestran los 7 días (plantilla sin filtro explícito).
-   */
-  templateWeekdayKeys?: string[]
-  onEventsChanged?: () => void | Promise<void>
 }
 
 type TipoBloqueo = "dia" | "mes" | "personalizado"
@@ -150,18 +144,19 @@ function HorariosFinHint() {
   )
 }
 
-export function EventsTab({
-  courts,
+export function EventsManager({
   initialCourtId,
-  templateId,
-  templateSlotTimes,
-  templateWeekdayKeys = [],
-  onEventsChanged,
-}: EventsTabProps) {
+}: EventsManagerProps) {
+  const [courts, setCourts] = useState<EventsTabCourt[]>([])
   const [events, setEvents] = useState<ApiEventRow[]>([])
   const [listLoading, setListLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
+  
+  const [templateSlotTimes, setTemplateSlotTimes] = useState<string[]>([])
+  const [templateWeekdayKeys, setTemplateWeekdayKeys] = useState<string[]>([])
+  const [templateId, setTemplateId] = useState<string | null>(null)
 
   const diasSemanaOpciones = useMemo(() => {
     const allowed = new Set(
@@ -185,12 +180,21 @@ export function EventsTab({
   const [eventCourtId, setEventCourtId] = useState<string>("")
 
   useEffect(() => {
-    if (initialCourtId) {
-      setEventCourtId(initialCourtId)
-      return
+    async function fetchCourts() {
+      try {
+        const data = await getAllCourtsByClub()
+        setCourts(data)
+        if (initialCourtId) {
+          setEventCourtId(initialCourtId)
+        } else if (data.length === 1) {
+          setEventCourtId(data[0].id)
+        }
+      } catch (e) {
+        console.error("Error al obtener canchas", e)
+      }
     }
-    if (courts.length === 1) setEventCourtId(courts[0].id)
-  }, [initialCourtId, courts])
+    void fetchCourts()
+  }, [initialCourtId])
 
   const loadEvents = useCallback(async () => {
     if (!eventCourtId) {
@@ -215,6 +219,39 @@ export function EventsTab({
   }, [loadEvents])
 
   useEffect(() => {
+    async function loadTemplate() {
+      if (!eventCourtId) {
+        setTemplateSlotTimes([])
+        setTemplateWeekdayKeys([])
+        setTemplateId(null)
+        return
+      }
+      try {
+        const raw = await getTemplateByCourtId(eventCourtId)
+        const parsed = parseCourtTemplateByCourtResponse(raw)
+        const t = parsed.template as any
+        setTemplateId(parsed.linkedTemplateId)
+        if (t?.slots && Array.isArray(t.slots)) {
+          setTemplateSlotTimes(t.slots.map((s: any) => s.time))
+        } else {
+          setTemplateSlotTimes([])
+        }
+        if (t?.days && Array.isArray(t.days)) {
+          setTemplateWeekdayKeys(t.days)
+        } else {
+          setTemplateWeekdayKeys([])
+        }
+      } catch (error) {
+        console.error("Error loading template for court", error)
+        setTemplateSlotTimes([])
+        setTemplateWeekdayKeys([])
+        setTemplateId(null)
+      }
+    }
+    void loadTemplate()
+  }, [eventCourtId])
+
+  useEffect(() => {
     const allowed = new Set(
       templateWeekdayKeys.map((k) => String(k).toLowerCase().trim()).filter(Boolean),
     )
@@ -235,6 +272,7 @@ export function EventsTab({
     horarios: [{ inicio: slotTimes[0] ?? "08:00", fin: slotTimes[1] ?? "10:00" }],
     diaMes: 1,
     fechasEspecificas: [] as Date[],
+    fechaLimite: undefined as Date | undefined,
   })
 
   useEffect(() => {
@@ -265,7 +303,9 @@ export function EventsTab({
       horarios: [{ inicio: a, fin: b }],
       diaMes: 1,
       fechasEspecificas: [],
+      fechaLimite: undefined,
     })
+    setEditingEventId(null)
   }
 
   const buildPayload = (): CreateCourtScheduleEventPayload | null => {
@@ -299,6 +339,7 @@ export function EventsTab({
         recurrenceType: "weekly",
         recurrenceConfig: {
           weekdays: formData.diasSemana.map((id) => SPANISH_DAY_TO_EN[id]).filter(Boolean),
+          limitDate: formData.fechaLimite ? format(formData.fechaLimite, "yyyy-MM-dd") : undefined,
         },
         timeRanges,
         price: formData.precio ? parseFloat(formData.precio) : 0,
@@ -313,7 +354,10 @@ export function EventsTab({
         name: formData.nombre.trim(),
         description: formData.descripcion.trim() || undefined,
         recurrenceType: "monthly",
-        recurrenceConfig: { dayOfMonth: formData.diaMes },
+        recurrenceConfig: { 
+          dayOfMonth: formData.diaMes,
+          limitDate: formData.fechaLimite ? format(formData.fechaLimite, "yyyy-MM-dd") : undefined,
+        },
         timeRanges,
         price: formData.precio ? parseFloat(formData.precio) : 0,
         isActive: formData.estado === "activo",
@@ -344,12 +388,16 @@ export function EventsTab({
     if (!payload) return
     setSaving(true)
     try {
-      await createCourtScheduleEvent(payload)
-      toast.success("Evento guardado")
+      if (editingEventId) {
+        await updateCourtScheduleEvent(editingEventId, payload)
+        toast.success("Evento actualizado")
+      } else {
+        await createCourtScheduleEvent(payload)
+        toast.success("Evento guardado")
+      }
       resetForm()
       setIsCreating(false)
       await loadEvents()
-      await onEventsChanged?.()
     } catch (e: unknown) {
       console.error(e)
       const msg = getApiErrorMessage(e)
@@ -363,12 +411,48 @@ export function EventsTab({
     }
   }
 
+  const handleEditEvent = (ev: ApiEventRow) => {
+    setEditingEventId(ev.id)
+    setIsCreating(true)
+
+    const isWeekly = ev.recurrenceType === "weekly"
+    const isMonthly = ev.recurrenceType === "monthly"
+    const isCustom = ev.recurrenceType === "custom"
+
+    const limitDateStr = ev.recurrenceConfig?.limitDate as string | undefined
+    let fechaLimite = undefined
+    if (limitDateStr) {
+      fechaLimite = new Date(`${limitDateStr}T12:00:00`)
+    }
+
+    const horarios = ev.timeRanges.map(r => ({
+      inicio: normalizeHHmm(r.start),
+      fin: add30MinutesLabel(rangeEndLabel(r)), // reconstruct end label for form
+    }))
+
+    setFormData({
+      nombre: ev.name,
+      descripcion: ev.description ?? "",
+      precio: ev.price?.toString() ?? "",
+      tipoBloqueo: isWeekly ? "dia" : isMonthly ? "mes" : "personalizado",
+      estado: ev.isActive ? "activo" : "inactivo",
+      diasSemana: isWeekly 
+        ? ((ev.recurrenceConfig?.weekdays as string[]) || []).map(en => DIAS_SEMANA.find(d => d.en === en)?.id).filter(Boolean) as string[]
+        : [],
+      diaMes: isMonthly ? (ev.recurrenceConfig?.dayOfMonth as number) || 1 : 1,
+      fechasEspecificas: isCustom
+        ? ((ev.recurrenceConfig?.dates as string[]) || []).map(d => new Date(`${d}T12:00:00`))
+        : [],
+      horarios: horarios.length ? horarios : [{ inicio: "08:00", fin: "10:00" }],
+      fechaLimite,
+    })
+  }
+
   const handleDeleteEvent = async (id: string) => {
     try {
       await deleteCourtScheduleEvent(id)
       toast.success("Evento eliminado")
       await loadEvents()
-      await onEventsChanged?.()
     } catch (e) {
       console.error(e)
       toast.error("No se pudo eliminar")
@@ -509,6 +593,37 @@ export function EventsTab({
               <div className="space-y-2">{formData.horarios.map(renderTimeRow)}</div>
               <HorariosFinHint />
             </div>
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Fecha Límite (Opcional)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !formData.fechaLimite && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.fechaLimite
+                      ? format(formData.fechaLimite, "dd/MM/yyyy", { locale: es })
+                      : "Sin fecha límite"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.fechaLimite}
+                    onSelect={(d) => setFormData((prev) => ({ ...prev, fechaLimite: d }))}
+                    locale={es}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground mt-1">
+                Hasta cuándo se repetirá este evento. Déjalo en blanco si se repite indefinidamente.
+              </p>
+            </div>
           </div>
         )
 
@@ -538,6 +653,37 @@ export function EventsTab({
               </div>
               <div className="space-y-2">{formData.horarios.map(renderTimeRow)}</div>
               <HorariosFinHint />
+            </div>
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Fecha Límite (Opcional)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !formData.fechaLimite && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.fechaLimite
+                      ? format(formData.fechaLimite, "dd/MM/yyyy", { locale: es })
+                      : "Sin fecha límite"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.fechaLimite}
+                    onSelect={(d) => setFormData((prev) => ({ ...prev, fechaLimite: d }))}
+                    locale={es}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground mt-1">
+                Hasta cuándo se repetirá este evento. Déjalo en blanco si se repite indefinidamente.
+              </p>
             </div>
           </div>
         )
@@ -643,7 +789,13 @@ export function EventsTab({
                   .join(", ")}
               </span>
             )}
+            {formData.tipoBloqueo === "dia" && formData.fechaLimite && (
+              <span>, Hasta: {format(formData.fechaLimite, "dd/MM/yyyy")}</span>
+            )}
             {formData.tipoBloqueo === "mes" && <span>Día {formData.diaMes} de cada mes</span>}
+            {formData.tipoBloqueo === "mes" && formData.fechaLimite && (
+              <span>, Hasta: {format(formData.fechaLimite, "dd/MM/yyyy")}</span>
+            )}
             {formData.tipoBloqueo === "personalizado" && formData.fechasEspecificas.length > 0 && (
               <span>{formData.fechasEspecificas.length} fecha(s) específica(s)</span>
             )}
@@ -676,7 +828,15 @@ export function EventsTab({
           </p>
         </div>
         <Button
-          onClick={() => setIsCreating(!isCreating)}
+          onClick={() => {
+            if (isCreating) {
+              setIsCreating(false)
+              setEditingEventId(null)
+              resetForm()
+            } else {
+              setIsCreating(true)
+            }
+          }}
           variant={isCreating ? "outline" : "default"}
           className="flex items-center gap-2"
         >
@@ -716,21 +876,36 @@ export function EventsTab({
             <Card key={ev.id}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div 
+                    className="flex items-center gap-2 min-w-0 cursor-pointer hover:underline"
+                    onClick={() => handleEditEvent(ev)}
+                  >
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: EVENT_COLOR }} />
                     <CardTitle className="text-sm truncate">{ev.name}</CardTitle>
                     <Badge variant={ev.isActive ? "default" : "secondary"} className="text-xs shrink-0">
                       {ev.isActive ? "activo" : "inactivo"}
                     </Badge>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-red-600 hover:text-red-700 shrink-0"
-                    onClick={() => handleDeleteEvent(ev.id)}
-                  >
-                    <Trash2Icon className="h-3 w-3" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-primary shrink-0"
+                      onClick={() => handleEditEvent(ev)}
+                      title="Editar evento"
+                    >
+                      <EditIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 shrink-0"
+                      onClick={() => handleDeleteEvent(ev.id)}
+                      title="Eliminar evento"
+                    >
+                      <Trash2Icon className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground space-y-1">
@@ -752,13 +927,28 @@ export function EventsTab({
         </div>
       )}
 
-      {isCreating && (
-        <Card className="border-2 border-primary/20">
-          <CardHeader>
-            <CardTitle className="text-lg">Crear evento</CardTitle>
-            <CardDescription>Configura bloqueos recurrentes u ocasionales para la cancha seleccionada.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+      <Dialog 
+        open={isCreating} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreating(false)
+            setEditingEventId(null)
+            resetForm()
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingEventId ? "Editar evento" : "Crear evento"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingEventId 
+                ? "Modifica los detalles del bloqueo de horario." 
+                : "Configura bloqueos recurrentes u ocasionales para la cancha seleccionada."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
             <div className="space-y-4">
               <div>
                 <Label htmlFor="nombre">Nombre del evento *</Label>
@@ -851,9 +1041,9 @@ export function EventsTab({
                 {saving ? "Guardando…" : "Guardar evento"}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {events.length === 0 && !isCreating && !listLoading && (
         <div className="text-center py-12 px-4 bg-muted/30 rounded-lg">
