@@ -9,14 +9,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { UserRecentBookings } from "@/components/user/recent-bookings"
 import { UserUpcomingBookings } from "@/components/user/upcoming-bookings"
 import { getAllReservationByUser } from "@/lib/reservation"
-import { getLimit10 } from "@/lib/courts"
 import { useUserStore } from "@/stores/userStore"
 import { parseSafeDate } from "@/lib/utils"
 
 export function UserDashboardContent() {
   const user = useUserStore((state) => state.user)
   const [bookings, setBookings] = useState<any[]>([])
-  const [recommendedCourts, setRecommendedCourts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchData = async () => {
@@ -25,10 +23,6 @@ export function UserDashboardContent() {
       // 1. Obtener todas las reservas reales del usuario
       const bookingsData = await getAllReservationByUser()
       setBookings(bookingsData || [])
-
-      // 2. Obtener canchas recomendadas reales (canchas destacadas del backend)
-      const featured = await getLimit10()
-      setRecommendedCourts((featured || []).slice(0, 3))
     } catch (error) {
       console.error("Error al cargar datos del dashboard de usuario", error)
     } finally {
@@ -159,60 +153,6 @@ export function UserDashboardContent() {
         <UserRecentBookings bookings={bookings} />
       </section>
 
-      {/* Canchas Recomendadas Reales */}
-      <section className="space-y-4">
-        <div className="flex flex-col space-y-1">
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Canchas Recomendadas</h2>
-          <p className="text-sm text-muted-foreground font-semibold">Canchas destacadas y activas disponibles en la plataforma.</p>
-        </div>
-        
-        {recommendedCourts.length === 0 ? (
-          <p className="text-sm text-muted-foreground font-medium">No hay canchas recomendadas en este momento.</p>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {recommendedCourts.map((court) => {
-              const courtImage = Array.isArray(court.images) && court.images.length > 0 ? court.images[0] : "/placeholder.svg"
-              return (
-                <Card key={court.id} className="shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div>
-                    <div className="aspect-video w-full overflow-hidden rounded-t-lg bg-muted relative">
-                      <img
-                        src={courtImage}
-                        alt={court.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <CardHeader>
-                      <CardTitle className="text-lg font-bold">{court.name}</CardTitle>
-                      <CardDescription className="font-semibold text-muted-foreground">{court.venue?.name || "Complejo Deportivo"}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="pb-4">
-                      {court.venue?.address && (
-                        <div className="flex items-center text-sm text-muted-foreground font-medium">
-                          <MapPinIcon className="mr-1 h-4 w-4 text-primary shrink-0" />
-                          <span className="truncate">{court.venue.address}</span>
-                        </div>
-                      )}
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="font-bold text-foreground">S/ {court.priceDay || 0}/hora</span>
-                        <div className="flex items-center space-x-1">
-                          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                          <span className="text-sm font-bold text-foreground">4.8</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </div>
-                  <CardFooter className="pt-4 border-t border-border/40">
-                    <Link href={`/user/search?court=${court.id}`} className="w-full">
-                      <Button className="w-full font-semibold">Reservar Ahora</Button>
-                    </Link>
-                  </CardFooter>
-                </Card>
-              )
-            })}
-          </div>
-        )}
-      </section>
     </div>
   )
 }
