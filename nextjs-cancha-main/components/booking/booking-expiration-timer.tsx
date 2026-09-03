@@ -4,6 +4,11 @@ import React, { useEffect, useState } from "react"
 import { Clock, AlertTriangle, Flame } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+function dateStringHasTimezone(str: string) {
+  // Regex to check if the string ends with a timezone offset like -05:00 or +0200
+  return /[+-]\d{2}:?\d{2}$/.test(str);
+}
+
 interface BookingExpirationTimerProps {
   createdAt?: string | Date
   paymentMethod?: string
@@ -35,7 +40,11 @@ export function BookingExpirationTimer({
   useEffect(() => {
     if (!createdAt) return
 
-    const createdTime = new Date(createdAt).getTime()
+    let dateStr = typeof createdAt === "string" ? createdAt : new Date(createdAt).toISOString()
+    if (typeof dateStr === "string" && !dateStr.endsWith("Z") && !dateStr.includes("+") && !dateStringHasTimezone(dateStr)) {
+      dateStr += "Z"
+    }
+    const createdTime = new Date(dateStr).getTime()
     if (isNaN(createdTime)) return
 
     const expiryTime = createdTime + limitMinutes * 60 * 1000
