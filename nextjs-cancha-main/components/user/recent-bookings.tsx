@@ -1,8 +1,16 @@
 "use client"
 
 import { es } from "date-fns/locale"
-import { CalendarIcon, CheckCircleIcon, ClockIcon, XCircleIcon, HistoryIcon } from "lucide-react"
+import { CalendarIcon, CheckCircleIcon, ClockIcon, XCircleIcon, HistoryIcon, MapPinIcon, CreditCardIcon } from "lucide-react"
 import Link from "next/link"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -93,11 +101,54 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
                       <TableCell className="font-bold text-foreground">S/ {price}</TableCell>
                       <TableCell>{getStatusBadge(booking.status)}</TableCell>
                       <TableCell className="text-right">
-                        <Link href="/user/bookings">
-                          <Button variant="ghost" size="sm">
-                            Ver detalles
-                          </Button>
-                        </Link>
+                        <Sheet>
+                          <SheetTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              Ver detalles
+                            </Button>
+                          </SheetTrigger>
+                          <SheetContent className="overflow-y-auto">
+                            <SheetHeader className="mb-6">
+                              <SheetTitle>Detalles de la Reserva</SheetTitle>
+                              <SheetDescription>
+                                ID: {booking.id?.split('-')[0].toUpperCase()}
+                              </SheetDescription>
+                            </SheetHeader>
+                            
+                            <div className="space-y-6">
+                              <div className="space-y-2">
+                                <h3 className="font-semibold text-sm flex items-center gap-2">
+                                  <MapPinIcon className="h-4 w-4 text-primary" /> 
+                                  Lugar
+                                </h3>
+                                <p className="text-sm font-medium">{booking.court?.name || "Cancha"}</p>
+                                <p className="text-sm text-muted-foreground">{booking.court?.venue?.name || "Complejo Deportivo"}</p>
+                              </div>
+
+                              <div className="space-y-2">
+                                <h3 className="font-semibold text-sm flex items-center gap-2">
+                                  <ClockIcon className="h-4 w-4 text-primary" /> 
+                                  Fecha y Hora
+                                </h3>
+                                <p className="text-sm capitalize">{formattedDate}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {booking.startTime} - {booking.endTime} ({booking.duration} {booking.duration === 1 ? "hora" : "horas"})
+                                </p>
+                              </div>
+
+                              <div className="space-y-2">
+                                <h3 className="font-semibold text-sm flex items-center gap-2">
+                                  <CreditCardIcon className="h-4 w-4 text-primary" /> 
+                                  Pago y Estado
+                                </h3>
+                                <p className="text-sm font-bold">Precio total: S/ {price}</p>
+                                <div className="pt-1">
+                                  Estado de reserva: <span className="ml-2">{getStatusBadge(booking.status)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </SheetContent>
+                        </Sheet>
                       </TableCell>
                     </TableRow>
                   )
@@ -148,11 +199,54 @@ export function UserRecentBookings({ bookings }: UserRecentBookingsProps) {
                 <div className="font-bold text-foreground">Precio: S/ {price}</div>
               </CardContent>
               <CardFooter className="pt-3 border-t border-border/40">
-                <Link href="/user/bookings" className="w-full">
-                  <Button variant="outline" size="sm" className="w-full">
-                    Ver detalles
-                  </Button>
-                </Link>
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full">
+                      Ver detalles
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="bottom" className="h-[80vh] overflow-y-auto rounded-t-2xl">
+                    <SheetHeader className="mb-6">
+                      <SheetTitle>Detalles de la Reserva</SheetTitle>
+                      <SheetDescription>
+                        ID: {booking.id?.split('-')[0].toUpperCase()}
+                      </SheetDescription>
+                    </SheetHeader>
+                    
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <h3 className="font-semibold text-sm flex items-center gap-2">
+                          <MapPinIcon className="h-4 w-4 text-primary" /> 
+                          Lugar
+                        </h3>
+                        <p className="text-sm font-medium">{booking.court?.name || "Cancha"}</p>
+                        <p className="text-sm text-muted-foreground">{booking.court?.venue?.name || "Complejo Deportivo"}</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <h3 className="font-semibold text-sm flex items-center gap-2">
+                          <ClockIcon className="h-4 w-4 text-primary" /> 
+                          Fecha y Hora
+                        </h3>
+                        <p className="text-sm capitalize">{formattedDate}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {booking.startTime} - {booking.endTime} ({booking.duration} {booking.duration === 1 ? "hora" : "horas"})
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <h3 className="font-semibold text-sm flex items-center gap-2">
+                          <CreditCardIcon className="h-4 w-4 text-primary" /> 
+                          Pago y Estado
+                        </h3>
+                        <p className="text-sm font-bold">Precio total: S/ {price}</p>
+                        <div className="pt-1">
+                          Estado de reserva: <span className="ml-2">{getStatusBadge(booking.status)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
               </CardFooter>
             </Card>
           )
