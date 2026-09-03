@@ -221,7 +221,7 @@ function MetricCard({
   icon: any; iconClass: string; valueClass?: string; loading?: boolean
 }) {
   return (
-    <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+    <Card className="border-slate-200 dark:border-border shadow-sm">
       <CardContent className="p-5">
         <div className="flex items-start justify-between mb-3">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{title}</p>
@@ -387,7 +387,7 @@ function SettleSaldoModal({
                   className={`p-2.5 rounded-lg border text-xs font-medium text-left transition-all ${
                     selectedMethod === m.id
                       ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold ring-1 ring-emerald-500"
-                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300"
+                      : "border-slate-200 dark:border-border hover:bg-slate-50 dark:hover: text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   {m.label}
@@ -581,7 +581,7 @@ function PaymentDetailModal({
           )}
 
           {/* Info de Reserva y Cliente */}
-          <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border">
+          <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark: rounded-xl border">
             <div>
               <p className="text-xs text-slate-500 mb-0.5">Cliente</p>
               <p className="font-semibold text-slate-900 dark:text-white">{customer?.name || payment.user?.name || "—"}</p>
@@ -612,7 +612,7 @@ function PaymentDetailModal({
           {/* ══════════════════════════════════════════════════════════════════
               CAMPO 1: PRIMER PAGO (ADELANTO / ABONO INICIAL)
           ══════════════════════════════════════════════════════════════════ */}
-          <div className="p-4 rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-3.5 shadow-sm">
+          <div className="p-4 rounded-xl border-2 border-slate-200 dark:border-border bg-white dark:bg-background space-y-3.5 shadow-sm">
             <div className="flex items-center justify-between border-b pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0"></span>
@@ -626,7 +626,7 @@ function PaymentDetailModal({
               {comprobanteBadge(payment.status, payment.autoConfirmed, payment.pendingAudit)}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50 dark: rounded-lg text-xs">
               <div>
                 <p className="text-slate-500">Monto Abonado</p>
                 <p className="text-lg font-bold text-emerald-600">{fmt(payment.amount)}</p>
@@ -643,7 +643,7 @@ function PaymentDetailModal({
 
             {/* Visualizador de Comprobante 1 */}
             {payment.comprobanteUrl ? (
-              <div className="space-y-2 p-3 bg-slate-50/70 dark:bg-slate-900/70 rounded-xl border">
+              <div className="space-y-2 p-3 bg-slate-50/70 dark:/70 rounded-xl border">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                     <FileTextIcon className="w-3.5 h-3.5 text-emerald-600" />
@@ -686,7 +686,7 @@ function PaymentDetailModal({
                 </div>
 
                 <div
-                  className="border rounded-xl overflow-hidden bg-white dark:bg-slate-900 max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
+                  className="border rounded-xl overflow-hidden bg-white dark: max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
                   onClick={() =>
                     onOpenLightbox(
                       payment.comprobanteUrl!,
@@ -704,7 +704,7 @@ function PaymentDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-500 text-center">
+              <div className="p-3 bg-slate-50 dark: rounded-lg text-xs text-slate-500 text-center">
                 Pago procesado automáticamente o sin imagen de comprobante adjunta.
               </div>
             )}
@@ -815,7 +815,7 @@ function PaymentDetailModal({
           {/* ══════════════════════════════════════════════════════════════════
               CAMPO 2: SEGUNDO PAGO (SALDO RESTANTE Y LIQUIDACIÓN)
           ══════════════════════════════════════════════════════════════════ */}
-          <div className="p-4 rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-3.5 shadow-sm">
+          <div className="p-4 rounded-xl border-2 border-slate-200 dark:border-border bg-white dark:bg-background space-y-3.5 shadow-sm">
             <div className="flex items-center justify-between border-b pb-2.5">
               <div className="flex items-center gap-2">
                 <span
@@ -842,13 +842,13 @@ function PaymentDetailModal({
             </div>
 
             {!details.isAdvance ? (
-              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl text-center text-xs text-slate-500">
+              <div className="p-4 bg-slate-50 dark: rounded-xl text-center text-xs text-slate-500">
                 <p className="font-semibold text-slate-700 dark:text-slate-300">No aplica saldo pendiente</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">La reserva fue pagada al 100% en el primer pago inicial.</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50 dark: rounded-lg text-xs">
                   <div>
                     <p className="text-slate-500">Monto del Saldo</p>
                     <p className={`text-lg font-bold ${details.isSaldoPaid ? "text-emerald-600" : "text-amber-600"}`}>
@@ -871,7 +871,7 @@ function PaymentDetailModal({
 
                 {/* Visualizador de Comprobante de Saldo (2do pago) */}
                 {payment.saldoComprobanteUrl ? (
-                  <div className="space-y-2 p-3 bg-slate-50/70 dark:bg-slate-900/70 rounded-xl border">
+                  <div className="space-y-2 p-3 bg-slate-50/70 dark:/70 rounded-xl border">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                         <FileTextIcon className="w-3.5 h-3.5 text-amber-600" />
@@ -914,7 +914,7 @@ function PaymentDetailModal({
                     </div>
 
                     <div
-                      className="border rounded-xl overflow-hidden bg-white dark:bg-slate-900 max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
+                      className="border rounded-xl overflow-hidden bg-white dark: max-h-56 flex items-center justify-center p-2 cursor-pointer hover:opacity-95 transition-opacity"
                       onClick={() =>
                         onOpenLightbox(
                           payment.saldoComprobanteUrl!,
@@ -932,7 +932,7 @@ function PaymentDetailModal({
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-500 text-center">
+                  <div className="p-3 bg-slate-50 dark: rounded-lg text-xs text-slate-500 text-center">
                     {details.isSaldoPaid
                       ? "Saldo liquidado directamente en efectivo/caja sin comprobante digital."
                       : "Aún no se ha adjuntado comprobante de saldo restante."}
@@ -947,7 +947,7 @@ function PaymentDetailModal({
                 )}
 
                 {payment.saldoNotas && (
-                  <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-400">
+                  <div className="p-2.5 bg-slate-50 dark: rounded-lg text-xs text-slate-600 dark:text-slate-400">
                     <strong>Notas de saldo:</strong> {payment.saldoNotas}
                   </div>
                 )}
@@ -1218,8 +1218,8 @@ function MetricsAuditTab() {
       </div>
 
       {/* Bandeja de Transacciones y Comprobantes */}
-      <div className="rounded-xl border overflow-hidden bg-white dark:bg-slate-950 shadow-sm">
-        <div className="p-4 border-b bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
+      <div className="rounded-xl border overflow-hidden bg-white dark:bg-background shadow-sm">
+        <div className="p-4 border-b bg-slate-50 dark: flex items-center justify-between">
           <div>
             <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">
               Bandeja de Transacciones y Auditoría de Comprobantes
@@ -1246,7 +1246,7 @@ function MetricsAuditTab() {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-500 uppercase tracking-wide border-b">
+              <thead className="bg-slate-50 dark: text-xs font-bold text-slate-500 uppercase tracking-wide border-b">
                 <tr>
                   <th className="px-4 py-3 text-left">Cliente & Reserva</th>
                   <th className="px-4 py-3 text-left">1er Pago (Inicial / Adelanto)</th>
@@ -1268,7 +1268,7 @@ function MetricsAuditTab() {
                   return (
                     <tr
                       key={p.id}
-                      className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${
+                      className={`hover:bg-slate-50 dark:hover:/50 transition-colors ${
                         isAuditRequired1 || isAuditRequired2 ? "bg-amber-50/30 dark:bg-amber-950/10" : ""
                       }`}
                     >
