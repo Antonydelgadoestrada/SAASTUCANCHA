@@ -73,15 +73,36 @@ import { GetUser } from '../auth/get-user.decorator';
       }),
     )
     async create(
-      @Body() data: Partial<Court>,
+      @Body() data: any,
       @UploadedFiles() images: MulterFile[],
       @GetUser() user: User
     ) {
-      const urls = images?.length ? await this.service.uploadFiles(images) : []
-      if (user?.club?.id) {
-          (data as any).club = user.club.id;
+      let existingUrls: string[] = [];
+      if (data.existingImages) {
+        try {
+          existingUrls = typeof data.existingImages === 'string' ? JSON.parse(data.existingImages) : data.existingImages;
+        } catch {
+          existingUrls = [];
+        }
+      } else if (data.images) {
+        if (Array.isArray(data.images)) existingUrls = data.images;
+        else if (typeof data.images === 'string') {
+          try {
+            existingUrls = JSON.parse(data.images);
+          } catch {
+            existingUrls = [data.images];
+          }
+        }
       }
-      return this.service.create({ ...data, images: urls })
+
+      const uploadedUrls = images?.length ? await this.service.uploadFiles(images) : [];
+      const allImages = [...(Array.isArray(existingUrls) ? existingUrls : []), ...uploadedUrls];
+
+      delete data.existingImages;
+      if (user?.club?.id) {
+        data.club = user.club.id;
+      }
+      return this.service.create({ ...data, images: allImages });
     }
     
     @UseGuards(JwtAuthGuard)

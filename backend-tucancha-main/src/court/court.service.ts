@@ -118,11 +118,15 @@ export class CourtService {
       .where("court.isActive = true")
       .andWhere("club.status = 'APPROVED'")
       .andWhere(`
-        EXISTS (
-          SELECT 1
-          FROM club_memberships cm
-          WHERE cm."clubId" = club.id
-            AND cm.status IN ('ACTIVE', 'GRACE')
+        (
+          (club."trialEndDate" IS NOT NULL AND club."trialEndDate" >= NOW())
+          OR (club."trialEndDate" IS NULL AND club.status = 'APPROVED')
+          OR EXISTS (
+            SELECT 1
+            FROM club_memberships cm
+            WHERE cm."clubId" = club.id
+              AND cm.status IN ('ACTIVE', 'GRACE')
+          )
         )
       `)
       .orderBy(field, direction)
@@ -252,8 +256,20 @@ export class CourtService {
       },
     });
 
+    const defaultTimes: string[] = [];
+    for (let hour = 7; hour <= 23; hour++) {
+      defaultTimes.push(`${hour.toString().padStart(2, '0')}:00`);
+      defaultTimes.push(`${hour.toString().padStart(2, '0')}:30`);
+    }
+
     if (!court.schedule_template_id) {
-      return overrides;
+      if (overrides.length > 0) return overrides;
+      return defaultTimes.map((time) => ({
+        courtId: court.id,
+        date: dateStr,
+        time,
+        status: 'available',
+      }));
     }
 
     const template = await this.scheduleTemplateRepo.findOne({
@@ -261,7 +277,13 @@ export class CourtService {
     });
 
     if (!template) {
-      return overrides;
+      if (overrides.length > 0) return overrides;
+      return defaultTimes.map((time) => ({
+        courtId: court.id,
+        date: dateStr,
+        time,
+        status: 'available',
+      }));
     }
 
     const daysMap: Record<string, number> = {
@@ -273,7 +295,7 @@ export class CourtService {
       friday: 5,
       saturday: 6,
     };
-    const enabledDays = template.days.map((d: string) => daysMap[d.toLowerCase()]);
+    const enabledDays = (template.days || []).map((d: string) => daysMap[d.toLowerCase()]);
     const targetDate = new Date(dateStr + 'T00:00:00');
     const dayOfWeek = targetDate.getDay();
 
@@ -282,7 +304,7 @@ export class CourtService {
     }
 
     const virtualSlots: any[] = [];
-    for (const slot of template.slots) {
+    for (const slot of (template.slots || [])) {
       const override = overrides.find((o) => o.time === slot.time);
       if (override) {
         virtualSlots.push(override);
@@ -311,11 +333,15 @@ export class CourtService {
   
       qb.andWhere("club.status = 'APPROVED'");
       qb.andWhere(`
-        EXISTS (
-          SELECT 1
-          FROM club_memberships cm
-          WHERE cm."clubId" = club.id
-            AND cm.status IN ('ACTIVE', 'GRACE')
+        (
+          (club."trialEndDate" IS NOT NULL AND club."trialEndDate" >= NOW())
+          OR (club."trialEndDate" IS NULL AND club.status = 'APPROVED')
+          OR EXISTS (
+            SELECT 1
+            FROM club_memberships cm
+            WHERE cm."clubId" = club.id
+              AND cm.status IN ('ACTIVE', 'GRACE')
+          )
         )
       `);
 
