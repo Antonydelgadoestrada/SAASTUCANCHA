@@ -168,42 +168,15 @@ export async function resetPassword(email: string){
   return data.message
 }
 
-// Modificar la función registerUser para que retorne el usuario creado
 export async function registerUser(userData: {
   name: string
   email: string
   password: string
-  role: string,
-  club?: ClubFormValues
-  // services?: string[]
-  // coordinates?: { lat: number; lng: number }
-  // [key: string]: any
-}): Promise<User> {
-  // Simular retraso de red
-   // await new Promise((resolve) => setTimeout(resolve, 1000))
-   const result = await api.post('auth/register', userData)
-   // Verificar si el correo ya está registrado
-  
-
-  // Guardar sesión en localStorage para usuarios normales (solo para demo)
-  if (userData.role === "USER" && typeof window !== "undefined") {
-    // localStorage.setItem(
-    //   "user",
-    //   JSON.stringify({
-    //     id: newUser.id,
-    //     name: newUser.name,
-    //     email: newUser.email,
-    //     role: newUser.role,
-    //   }),
-    // )
-  }
-
-  return {
-    id: 'result.id',
-    name: 'result.name',
-    email: 'result.email',
-    role:   "USER" 
-  }
+  role: string
+  club?: any
+}): Promise<any> {
+  const result = await api.post("/auth/register", userData)
+  return result.data
 }
 
 // Simular cierre de sesión

@@ -19,8 +19,6 @@ import { GooglePlacesAutocomplete } from "../google-places-autocomplete"
 import { signIn } from "next-auth/react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-// Distritos para el formulario de registro de clubes
-
 // Esquema para usuario normal
 const userFormSchema = z.object({
   name: z.string().min(2, {
@@ -32,7 +30,7 @@ const userFormSchema = z.object({
   password: z.string().min(6, {
     message: "La contraseña debe tener al menos 6 caracteres.",
   }),
-  phone: z.string().min(8, {
+  phone: z.string().min(6, {
     message: "Por favor ingresa un número de teléfono válido.",
   }),
   role: z.literal("USER"),
@@ -41,7 +39,7 @@ const userFormSchema = z.object({
 // Esquema extendido para club deportivo
 const clubFormSchema = z.object({
   name: z.string().min(2, {
-    message: "El nombre debe tener al menos 2 caracteres.",
+    message: "El nombre del club debe tener al menos 2 caracteres.",
   }),
   email: z.string().email({
     message: "Por favor ingresa un correo electrónico válido.",
@@ -50,44 +48,28 @@ const clubFormSchema = z.object({
     message: "La contraseña debe tener al menos 6 caracteres.",
   }),
   role: z.literal("CLUB"),
-  phone: z.string().min(8, {
+  phone: z.string().min(6, {
     message: "Por favor ingresa un número de teléfono válido.",
   }),
-  address: z.string().min(5, {
-    message: "Por favor ingresa una dirección válida.",
+  address: z.string().min(3, {
+    message: "Por favor ingresa la dirección de tu club.",
   }),
-  district: z.string({
-    required_error: "Por favor selecciona un distrito.",
-  }),
+  district: z.string().optional().or(z.literal("")),
   description: z
     .string()
-    .min(10, {
-      message: "Por favor proporciona una descripción de al menos 10 caracteres.",
+    .min(5, {
+      message: "Por favor proporciona una descripción de al menos 5 caracteres.",
     })
     .max(500, {
       message: "La descripción no puede exceder los 500 caracteres.",
     }),
-  website: z
-    .string()
-    .url({
-      message: "Por favor ingresa una URL válida.",
-    })
-    .optional()
-    .or(z.literal("")),
-  foundedYear: z
-    .string()
-    .regex(/^\d{4}$/, {
-      message: "Por favor ingresa un año válido (YYYY).",
-    })
-    .optional()
-    .or(z.literal("")),
-  openingHours: z.string().min(5, {
-    message: "Por favor especifica los horarios de atención.",
-  }),
+  website: z.string().optional().or(z.literal("")),
+  foundedYear: z.string().optional().or(z.literal("")),
+  openingHours: z.string().optional().or(z.literal("")),
   services: z.string().optional(),
-  facebookUrl: z.string().optional(),
-  instagramUrl: z.string().optional(),
-  twitterUrl: z.string().optional(),
+  facebookUrl: z.string().optional().or(z.literal("")),
+  instagramUrl: z.string().optional().or(z.literal("")),
+  twitterUrl: z.string().optional().or(z.literal("")),
   coordinates: z
     .object({
       lat: z.number(),
@@ -171,7 +153,9 @@ export function RegisterForm() {
   const handleLocationSelect = (place: string, coordinates: { lat: number; lng: number; }) => {
     setSelectedLocation(coordinates)
     clubForm.setValue("coordinates", coordinates)
-    clubForm.setValue("address", place)
+    if (place) {
+      clubForm.setValue("address", place, { shouldValidate: true })
+    }
   }
 
   async function onUserSubmit(values: UserFormValues) {
@@ -183,11 +167,11 @@ export function RegisterForm() {
         role: "USER",
       })
 
-      toast.success(`Registro exitoso. Bienvenido a ${process.env.NEXT_PUBLIC_APP_NAME}.`)
+      toast.success(`Registro exitoso. Bienvenido a TuCancha.`)
       router.push('/user/dashboard')
     } catch (error: any) {
       const msg = error?.response?.data?.message || "Error al registrar. Por favor intenta nuevamente."
-      toast.error(msg)
+      toast.error(typeof msg === "object" ? JSON.stringify(msg) : msg)
     } finally {
       setIsLoading(false)
     }
@@ -197,21 +181,54 @@ export function RegisterForm() {
     setIsLoading(true)
 
     try {
+      const clubPayload = {
+        name: values.name.trim(),
+        email: values.email.trim().toLowerCase(),
+        phone: values.phone.trim(),
+        address: values.address.trim(),
+        district: values.district?.trim() || undefined,
+        description: values.description.trim(),
+        services: selectedServices,
+        coordinates: selectedLocation || values.coordinates || { lat: -12.046374, lng: -77.042793 },
+        socialMedia: {
+          facebook: values.facebookUrl?.trim() || undefined,
+          instagram: values.instagramUrl?.trim() || undefined,
+          twitter: values.twitterUrl?.trim() || undefined,
+        },
+      }
+
       await registerUser({
-        name: values.name,
-        email:values.email,
+        name: values.name.trim(),
+        email: values.email.trim().toLowerCase(),
         password: values.password,
         role: "CLUB",
-        club: Object.assign(values, {services: selectedServices,
-          coordinates: selectedLocation})
+        club: clubPayload as any,
       })
 
       setShowClubWelcomeDialog(true)
     } catch (error: any) {
-      const msg = error?.response?.data?.message || "Error al registrar. Por favor intenta nuevamente."
-      toast.error(msg)
+      console.error("Error en registro de club:", error)
+      const msg = error?.response?.data?.message || "Error al registrar el club. Por favor verifica tus datos e intenta nuevamente."
+      toast.error(typeof msg === "object" ? (Array.isArray(msg) ? msg.join(", ") : JSON.stringify(msg)) : msg)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const onClubError = (errors: any) => {
+    console.warn("Errores de validación en formulario de club:", errors)
+    const errorKeys = Object.keys(errors)
+    if (errorKeys.length > 0) {
+      const firstError = errors[errorKeys[0]]?.message || "Por favor completa todos los campos obligatorios."
+      toast.error(String(firstError))
+    }
+  }
+
+  const onUserError = (errors: any) => {
+    const errorKeys = Object.keys(errors)
+    if (errorKeys.length > 0) {
+      const firstError = errors[errorKeys[0]]?.message || "Por favor completa todos los campos obligatorios."
+      toast.error(String(firstError))
     }
   }
 
@@ -219,7 +236,7 @@ export function RegisterForm() {
     setShowGoogleLoading(true)
     try {
       const callbackUrl = searchParams.get("callbackUrl") || '/user/dashboard'
-      await signIn("google", { callbackUrl})
+      await signIn("google", { callbackUrl })
       toast.success(`Bienvenido`)
     } catch (error) {
       toast.error("Error al iniciar sesión con Google")
@@ -239,13 +256,13 @@ export function RegisterForm() {
         {/* Formulario para Usuario */}
         <TabsContent value="USER">
           <Form {...userForm}>
-            <form onSubmit={userForm.handleSubmit(onUserSubmit)} className="space-y-4">
+            <form onSubmit={userForm.handleSubmit(onUserSubmit, onUserError)} className="space-y-4">
               <FormField
                 control={userForm.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nombre Completo</FormLabel>
+                    <FormLabel>Nombre Completo *</FormLabel>
                     <FormControl>
                       <Input placeholder="Tu nombre completo" disabled={isLoading} {...field} />
                     </FormControl>
@@ -258,7 +275,7 @@ export function RegisterForm() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Correo electrónico</FormLabel>
+                    <FormLabel>Correo electrónico *</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="correo@ejemplo.com"
@@ -274,25 +291,25 @@ export function RegisterForm() {
                   </FormItem>
                 )}
               />
-               <FormField
-                    control={userForm.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Teléfono</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Número de teléfono" disabled={isLoading} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              <FormField
+                control={userForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Número de teléfono" disabled={isLoading} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={userForm.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Contraseña</FormLabel>
+                    <FormLabel>Contraseña *</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="••••••••"
@@ -318,18 +335,18 @@ export function RegisterForm() {
         {/* Formulario para Club Deportivo */}
         <TabsContent value="CLUB">
           <Form {...clubForm}>
-            <form onSubmit={clubForm.handleSubmit(onClubSubmit)} className="space-y-6">
+            <form onSubmit={clubForm.handleSubmit(onClubSubmit, onClubError)} className="space-y-6">
               {/* Información Básica */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Información Básica</h3>
 
-                <div className="grid gap-4 sm:grid-cols-1">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
                     control={clubForm.control}
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nombre del Club</FormLabel>
+                        <FormLabel>Nombre del Club *</FormLabel>
                         <FormControl>
                           <Input placeholder="Nombre del club deportivo" disabled={isLoading} {...field} />
                         </FormControl>
@@ -345,7 +362,7 @@ export function RegisterForm() {
                       <FormItem>
                         <FormLabel>Año de Fundación (opcional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="2020" disabled={isLoading} {...field} />
+                          <Input placeholder="Ej: 2020" disabled={isLoading} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -358,11 +375,11 @@ export function RegisterForm() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Descripción del Club</FormLabel>
+                      <FormLabel>Descripción del Club *</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Describe tu club deportivo, historia, filosofía, etc."
-                          className="min-h-[120px] resize-none"
+                          placeholder="Describe tu club deportivo, instalaciones, deportes que ofrece, etc."
+                          className="min-h-[100px] resize-none"
                           disabled={isLoading}
                           {...field}
                         />
@@ -375,7 +392,7 @@ export function RegisterForm() {
 
               {/* Información de Contacto */}
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Información de Contacto</h3>
+                <h3 className="text-lg font-medium">Información de Contacto y Cuenta</h3>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
@@ -383,7 +400,7 @@ export function RegisterForm() {
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Correo electrónico</FormLabel>
+                        <FormLabel>Correo electrónico *</FormLabel>
                         <FormControl>
                           <Input
                             placeholder="club@ejemplo.com"
@@ -405,9 +422,9 @@ export function RegisterForm() {
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Teléfono</FormLabel>
+                        <FormLabel>Teléfono / WhatsApp *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Número de teléfono" disabled={isLoading} {...field} />
+                          <Input placeholder="Número de teléfono o WhatsApp" disabled={isLoading} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -415,63 +432,95 @@ export function RegisterForm() {
                   />
                 </div>
 
-                <FormField
-                  control={clubForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contraseña</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="••••••••"
-                          type="password"
-                          autoCapitalize="none"
-                          autoComplete="new-password"
-                          disabled={isLoading}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={clubForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contraseña *</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="•••••••• (mínimo 6 caracteres)"
+                            type="password"
+                            autoCapitalize="none"
+                            autoComplete="new-password"
+                            disabled={isLoading}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={clubForm.control}
-                  name="website"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Sitio Web (opcional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://tuclub.com.pe" disabled={isLoading} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={clubForm.control}
+                    name="website"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sitio Web (opcional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://tuclub.com.pe" disabled={isLoading} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
 
               {/* Ubicación */}
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Ubicación</h3>
+                <h3 className="text-lg font-medium">Ubicación del Club</h3>
 
                 {/* Selector de ubicación en mapa */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Ubicación en el Mapa
+                  <label className="text-sm font-medium leading-none">
+                    Buscar en Google Maps (opcional)
                   </label>
-                  <p className="text-sm text-muted-foreground">
-                    Haz clic en el mapa para seleccionar la ubicación exacta de tu club
+                  <p className="text-xs text-muted-foreground">
+                    Escribe para buscar tu club y autocompletar la dirección y coordenadas exactas
                   </p>
                   <GooglePlacesAutocomplete
-                    placeholder="Buscar distrito, dirección o lugar..."
+                    placeholder="Buscar dirección, distrito o lugar en el mapa..."
                     onPlaceSelect={handleLocationSelect}
                   />
                   {selectedLocation && (
-                    <div className="text-sm text-muted-foreground">
-                      Coordenadas seleccionadas: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                    <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                      ✓ Coordenadas seleccionadas: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
                     </div>
                   )}
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={clubForm.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dirección Física *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: Av. Javier Prado Este 1234" disabled={isLoading} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={clubForm.control}
+                    name="district"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Distrito / Ciudad</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: San Borja, Surco, Los Olivos..." disabled={isLoading} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               </div>
 
@@ -481,11 +530,11 @@ export function RegisterForm() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    <label className="text-sm font-medium leading-none">
                       Servicios Disponibles
                     </label>
-                    <p className="text-sm text-muted-foreground">Selecciona los servicios que ofrece tu club</p>
-                    <div className="grid grid-cols-2 gap-4 mt-2 sm:grid-cols-2">
+                    <p className="text-xs text-muted-foreground mt-1">Selecciona los servicios que ofrece tu complejo</p>
+                    <div className="grid grid-cols-2 gap-3 mt-3 sm:grid-cols-2">
                       {availableServices.map((service) => (
                         <div key={service.id} className="flex items-center space-x-2">
                           <Checkbox
@@ -495,7 +544,7 @@ export function RegisterForm() {
                           />
                           <label
                             htmlFor={service.id}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                           >
                             {service.label}
                           </label>
@@ -510,9 +559,9 @@ export function RegisterForm() {
                   name="openingHours"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Horarios de Atención</FormLabel>
+                      <FormLabel>Horarios de Atención (opcional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ej: Lunes a Domingo 6:00 - 22:00" disabled={isLoading} {...field} />
+                        <Input placeholder="Ej: Lunes a Domingo 6:00 - 23:00" disabled={isLoading} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -558,7 +607,7 @@ export function RegisterForm() {
                     name="twitterUrl"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Twitter</FormLabel>
+                        <FormLabel>Twitter / X</FormLabel>
                         <FormControl>
                           <Input placeholder="https://twitter.com/tuclub" disabled={isLoading} {...field} />
                         </FormControl>
@@ -569,12 +618,12 @@ export function RegisterForm() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" className="w-full text-base py-6 font-bold" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 Registrar Club Deportivo
               </Button>
 
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-center text-xs text-muted-foreground">
                 Las cuentas de club requieren aprobación del administrador antes de poder ser utilizadas.
               </p>
             </form>
@@ -582,50 +631,6 @@ export function RegisterForm() {
         </TabsContent>
       </Tabs>
 
-      {/* <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">O continuar con</span>
-        </div>
-      </div> */}
-
-      {/* <Button variant="outline" type="button" onClick={handleGoogleSignUp} disabled={isLoading || showGoogleLoading}>
-        {showGoogleLoading ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <svg
-            className="mr-2 h-4 w-4"
-            aria-hidden="true"
-            focusable="false"
-            data-prefix="fab"
-            data-icon="google"
-            role="img"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-          >
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              fill="#EA4335"
-            />
-            <path d="M1 1h22v22H1z" fill="none" />
-          </svg>
-        )}
-        Registrarse con Google
-      </Button> */}
       <Dialog open={showClubWelcomeDialog} onOpenChange={(open) => {
         if (!open) {
           setShowClubWelcomeDialog(false);
@@ -638,13 +643,13 @@ export function RegisterForm() {
             <DialogDescription asChild>
               <div className="pt-2 text-foreground space-y-3">
                 <p className="font-medium">
-                  La creación de tu cuenta como club ha sido registrada y requiere aprobación del administrador.
+                  La creación de tu cuenta como club ha sido registrada y se encuentra <strong>esperando la confirmación del administrador</strong>.
                 </p>
                 <p>
-                  Además, has accedido a la <strong>prueba gratuita de 30 días</strong> de Tu Cancha.
+                  Una vez que el administrador acepte tu club, accederás automáticamente a los <strong>30 días de prueba gratis</strong> de TuCancha para gestionar tus canchas y cobros.
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  Pasados los 30 días, se te notificará al correo de Gmail sobre el vencimiento y podrás renovar o cancelar la suscripción desde tu cuenta.
+                  Hemos enviado una notificación a tu correo electrónico con los detalles del registro.
                 </p>
               </div>
             </DialogDescription>
@@ -662,3 +667,4 @@ export function RegisterForm() {
     </div>
   )
 }
+
