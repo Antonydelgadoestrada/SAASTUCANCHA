@@ -256,20 +256,8 @@ export class CourtService {
       },
     });
 
-    const defaultTimes: string[] = [];
-    for (let hour = 7; hour <= 23; hour++) {
-      defaultTimes.push(`${hour.toString().padStart(2, '0')}:00`);
-      defaultTimes.push(`${hour.toString().padStart(2, '0')}:30`);
-    }
-
     if (!court.schedule_template_id) {
-      if (overrides.length > 0) return overrides;
-      return defaultTimes.map((time) => ({
-        courtId: court.id,
-        date: dateStr,
-        time,
-        status: 'available',
-      }));
+      return overrides;
     }
 
     const template = await this.scheduleTemplateRepo.findOne({
@@ -277,13 +265,7 @@ export class CourtService {
     });
 
     if (!template) {
-      if (overrides.length > 0) return overrides;
-      return defaultTimes.map((time) => ({
-        courtId: court.id,
-        date: dateStr,
-        time,
-        status: 'available',
-      }));
+      return overrides;
     }
 
     const daysMap: Record<string, number> = {

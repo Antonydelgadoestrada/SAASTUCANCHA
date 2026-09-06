@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Loader2, X, AlertTriangleIcon } from "lucide-react"
+import { Loader2, X, AlertTriangleIcon, PlusIcon, CalendarClockIcon } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -10,7 +10,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,18 +20,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { ScheduleTemplateForm } from "@/components/club/schedule-template-form"
+import { createSchedule } from "@/lib/schedule"
 import { sportTypes } from "@/lib/sports"
 import { VenueDTO } from "./courts-content"
+
 const durationOptions = [
   { value: "1", label: "1 hora" },
   { value: "1.5", label: "1.5 horas" },
   { value: "2", label: "2 horas" },
 ]
+
 type CourtFormData = {
   name: string
-
   type: string
   surface: string
   priceDay: number
@@ -40,13 +42,12 @@ type CourtFormData = {
   promoDay?: number | null
   promoNight?: number | null
   description: string
-  schedule_template_id?: string
+  schedule_template_id: string
 }
 
 interface Court {
   id: number
   name: string
-
   minimumBookingTime?: string
   type: string
   surface: string
@@ -63,18 +64,17 @@ interface Court {
     coordinates: { lat: number; lng: number }
   }
   schedule_template_id?: string
-
 }
 
 type CourtFormProps = {
-  // onSubmit: (data: Partial<Court> & { id?: number; images?: string[] }) => void
   onSubmit: (data: any) => void
   court?: Court | null
   onCancel?: () => void
   templates?: any[]
+  onTemplateCreated?: (template: any) => void
 }
 
-export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormProps) {
+export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplateCreated }: CourtFormProps) {
   const MAX_FILE_SIZE_MB = 2
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
@@ -88,18 +88,28 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
   const [showTemplateChangeDialog, setShowTemplateChangeDialog] = useState(false)
   const [tempTemplateId, setTempTemplateId] = useState<string>("")
   const [currentTemplateId, setCurrentTemplateId] = useState<string>("")
+
+  const [localTemplates, setLocalTemplates] = useState<any[]>(templates || [])
+  const [isCreateTemplateDialogOpen, setIsCreateTemplateDialogOpen] = useState(false)
+
+  useEffect(() => {
+    if (templates) {
+      setLocalTemplates(templates)
+    }
+  }, [templates])
+
   const form = useForm<CourtFormData>({
     defaultValues: {
       name: "",
       minimumBookingTime: '1',
-
       type: "",
       surface: "",
       priceDay: 0,
       priceNight: 0,
       promoDay: null,
       promoNight: null,
-      description: ""
+      description: "",
+      schedule_template_id: "",
     },
   })
 
@@ -186,7 +196,29 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
     setTempTemplateId("")
   }
 
+  const handleCreateTemplateInline = async (templateData: any) => {
+    try {
+      const newTemplate = await createSchedule(templateData)
+      toast.success("Plantilla de horarios creada correctamente")
+      setLocalTemplates((prev) => [...prev, newTemplate])
+      form.setValue("schedule_template_id", String(newTemplate.id), { shouldValidate: true })
+      setCurrentTemplateId(String(newTemplate.id))
+      if (onTemplateCreated) {
+        onTemplateCreated(newTemplate)
+      }
+      setIsCreateTemplateDialogOpen(false)
+    } catch (error: any) {
+      console.error("Error creating template inline:", error)
+      toast.error("Error al crear la plantilla de horario: " + (error?.response?.data?.message || error.message))
+    }
+  }
+
   async function handleSubmit(values: CourtFormData) {
+    if (!values.schedule_template_id || values.schedule_template_id === "none" || values.schedule_template_id.trim() === "") {
+      toast.error("Debes seleccionar o crear una plantilla de horarios para la cancha.")
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -204,7 +236,6 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
         // Solo resetear si es una nueva cancha
         form.reset()
         setSelectedFiles([])
-
         setImages([])
         setNewImageUrl("")
       }
@@ -421,33 +452,60 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
           name="schedule_template_id"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Plantilla de Horario</FormLabel>
+              <div className="flex items-center justify-between gap-2">
+                <FormLabel>Plantilla de Horario <span className="text-red-500">*</span></FormLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCreateTemplateDialogOpen(true)}
+                  className="h-7 text-xs px-2.5 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 hover:border-emerald-500/50"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  Nueva plantilla
+                </Button>
+              </div>
               <Select
                 value={field.value ? String(field.value) : undefined}
                 onValueChange={handleTemplateChange}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Seleccionar plantilla de horario" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {templates && templates.length > 0 ? (
-                    templates.map((template: any) => (
+                  {localTemplates && localTemplates.length > 0 ? (
+                    localTemplates.map((template: any) => (
                       <SelectItem key={template.id} value={String(template.id)}>
                         {template.name || `Plantilla ${template.id}`}
                       </SelectItem>
                     ))
                   ) : (
                     <SelectItem value="none" disabled>
-                      No hay plantillas disponibles
+                      No hay plantillas creadas
                     </SelectItem>
                   )}
                 </SelectContent>
               </Select>
-              <FormDescription>
-                Selecciona una plantilla de horario para esta cancha
-              </FormDescription>
+              {(!localTemplates || localTemplates.length === 0) ? (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2 mt-1">
+                  <span>No tienes plantillas de horario. Crea una ahora para configurar la disponibilidad.</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setIsCreateTemplateDialogOpen(true)}
+                    className="h-7 text-xs shrink-0 bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600"
+                  >
+                    Crear plantilla
+                  </Button>
+                </div>
+              ) : (
+                <FormDescription>
+                  Selecciona la plantilla que define los días y turnos disponibles para esta cancha.
+                </FormDescription>
+              )}
               <FormMessage />
             </FormItem>
           )}
@@ -477,13 +535,6 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
               setSelectedFiles((prev) => [...prev, ...validFiles])
               setPreviewUrls((prev) => [...prev, ...validPreviews])
             }}
-          // onChange={(e) => {
-          //   if (!e.target.files) return
-          //   const files = Array.from(e.target.files)
-          //   const newPreviews = files.map((file) => URL.createObjectURL(file))
-          //   setSelectedFiles((prev) => [...prev, ...files])
-          //   setPreviewUrls((prev) => [...prev, ...newPreviews])
-          // }}
           />
           <div className="flex flex-wrap gap-4">
             {existingImages.map((url, index) => (
@@ -568,6 +619,26 @@ export function CourtForm({ onSubmit, court, onCancel, templates }: CourtFormPro
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {/* Modal para crear plantilla de horarios inline */}
+    <Dialog open={isCreateTemplateDialogOpen} onOpenChange={setIsCreateTemplateDialogOpen}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarClockIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            Crear Plantilla de Horarios
+          </DialogTitle>
+          <DialogDescription>
+            Configura los días y franjas horarias disponibles. Al guardarla, se asignará automáticamente a esta cancha.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-2">
+          <ScheduleTemplateForm
+            onSubmit={handleCreateTemplateInline}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   )
 }

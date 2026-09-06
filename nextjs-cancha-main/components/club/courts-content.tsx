@@ -96,10 +96,6 @@ export function ClubCourtsContent() {
   })
 
   const handleAddCourt = async (courtData: any) => {
-    if(templates.length==0) {
-      toast.error("Para crear cancha se debe tener una plantilla")
-      return;
-    }
     const result = await createCourts(courtData);
     setCourts((prev) => [...prev, result ])
     setIsAddDialogOpen(false)
@@ -181,7 +177,14 @@ export function ClubCourtsContent() {
                 <DialogTitle>Agregar Nueva Cancha</DialogTitle>
                 <DialogDescription>Completa los detalles para agregar una nueva cancha a tu club.</DialogDescription>
               </DialogHeader>
-              <CourtForm onSubmit={handleAddCourt} onCancel={() => setIsAddDialogOpen(false)} templates={templates} />
+              <CourtForm
+                onSubmit={handleAddCourt}
+                onCancel={() => setIsAddDialogOpen(false)}
+                templates={templates}
+                onTemplateCreated={(newTemplate) => {
+                  setTemplates((prev) => [...prev, newTemplate])
+                }}
+              />
             </DialogContent>
           </Dialog>
         </div>
@@ -363,7 +366,15 @@ export function ClubCourtsContent() {
             <DialogDescription>Modifica los detalles de la cancha.</DialogDescription>
           </DialogHeader>
           {editingCourt && (
-            <CourtForm court={editingCourt} onSubmit={handleEditCourt} onCancel={closeEditDialog} templates={templates} />
+            <CourtForm
+              court={editingCourt}
+              onSubmit={handleEditCourt}
+              onCancel={closeEditDialog}
+              templates={templates}
+              onTemplateCreated={(newTemplate) => {
+                setTemplates((prev) => [...prev, newTemplate])
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>
