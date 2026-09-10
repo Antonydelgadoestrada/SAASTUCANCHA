@@ -80,11 +80,15 @@ export class ClubService {
     const savedClub = await this.repo.save(club);
 
     // Enviar correo de confirmación de aprobación con 30 días de prueba gratis
-    const targetEmail = savedClub.owner?.email || savedClub.email;
-    if (targetEmail) {
+    try {
+      const clubEmails = Array.from(new Set([savedClub.owner?.email, savedClub.email].filter(Boolean)));
       const ownerName = savedClub.owner?.name || savedClub.name;
       const trialEndDate = savedClub.trialEndDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      await this.mailerService.sendClubApprovedWithTrialEmail(targetEmail, savedClub.name, trialEndDate, ownerName);
+      for (const targetEmail of clubEmails) {
+        await this.mailerService.sendClubApprovedWithTrialEmail(targetEmail, savedClub.name, trialEndDate, ownerName);
+      }
+    } catch (mailErr) {
+      console.warn('⚠️ Error enviando correo de aprobación de club:', mailErr?.message);
     }
 
     return savedClub;

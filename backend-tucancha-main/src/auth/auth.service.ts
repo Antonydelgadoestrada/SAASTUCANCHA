@@ -214,7 +214,7 @@ export class AuthService {
 
         const newClub = this.clubRepository.create({
           ...club,
-          email: email,
+          email: club.email || email,
           owner: savedUser,
           status: 'PENDING',
         });
@@ -222,7 +222,10 @@ export class AuthService {
         createdClub = await this.clubRepository.save(newClub);
         try {
           const adminEmail = process.env.ADMIN_EMAIL || 'tucancha100@gmail.com';
-          await this.mailerService.sendClubRegisteredPendingApprovalEmail(savedUser.email, createdClub, savedUser.name);
+          const clubEmails = Array.from(new Set([savedUser.email, createdClub.email].filter(Boolean)));
+          for (const targetEmail of clubEmails) {
+            await this.mailerService.sendClubRegisteredPendingApprovalEmail(targetEmail, createdClub, savedUser.name);
+          }
           await this.mailerService.sendNewClubAdminNotificationEmail(adminEmail, createdClub, savedUser);
         } catch (mailErr) {
           console.warn('⚠️ No se pudieron enviar correos de notificación de club:', mailErr?.message);
