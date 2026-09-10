@@ -846,12 +846,78 @@ export class MailerService {
     return this.sendClubRegisteredPendingApprovalEmail(clubEmail, { name: clubName, email: clubEmail, phone: adminPhone });
   }
 
+  /**
+   * Correo recordatorio cuando la prueba gratuita de 30 días está por vencer (3 días antes)
+   */
+  async sendTrialExpiringSoonEmail(
+    to: string,
+    clubName: string,
+    daysLeft: number = 3,
+    trialEndDate: Date,
+    ownerName?: string,
+  ) {
+    const formattedDate = new Date(trialEndDate).toLocaleDateString('es-PE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const membershipPlansUrl = `${this.webUrl}/club/membership`;
+
+    const html = this.getEmailTemplate({
+      title: '⏳ Tu periodo de prueba vence en 3 días',
+      greeting: `Hola ${ownerName || clubName},`,
+      message: `
+        Te recordamos que tu <strong>periodo de prueba gratuita de 30 días</strong> en TuCancha está próximo a finalizar.<br/><br/>
+        Tu prueba vencerá en <strong>${daysLeft} días</strong> (el <strong>${formattedDate}</strong>).
+      `,
+      bookingDetailsHtml: `
+        <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 18px; margin: 20px 0;">
+          <h4 style="margin: 0 0 10px 0; color: #b45309; font-size: 15px;">🚀 ¡No detengas tus reservas deportivas!</h4>
+          <p style="margin: 0 0 10px 0; font-size: 13px; color: #78350f; line-height: 1.6;">
+            Para que tus canchas sigan visibles en el buscador público, los jugadores puedan seguir reservando y continúes recibiendo pagos sin interrupciones, elije tu plan de membresía antes del <strong>${formattedDate}</strong>.
+          </p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #92400e; line-height: 1.8;">
+            <li>Visibilidad permanente en el buscador para miles de deportistas.</li>
+            <li>Gestión automatizada de reservas y cobros directos por Yape, Plin y Mercado Pago.</li>
+            <li>Control total de canchas, horarios, tarifas y promociones.</li>
+          </ul>
+        </div>
+      `,
+      actionButton: {
+        text: 'Elegir Plan y Continuar Activo',
+        url: membershipPlansUrl,
+        color: '#16A34A',
+      },
+      footerNote: 'El proceso de suscripción toma menos de 2 minutos. Si necesitas asistencia, contáctanos a soporte@tucancha.com.pe.',
+    });
+
+    try {
+      if (process.env.RESEND_API_KEY) {
+        await this.resend.emails.send({
+          from: this.fromEmail,
+          to,
+          subject: `⏳ Tu prueba gratuita en TuCancha vence en ${daysLeft} días (${clubName})`,
+          html,
+        });
+        this.logger.log(`📧 [Mailer] Correo de prueba por vencer en ${daysLeft} días enviado a ${to}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`⚠️ [MailerService] Error enviando aviso de prueba por vencer a ${to}:`, err?.message || err);
+    }
+  }
+
+  /**
+   * Correo recordatorio cuando la membresía de pago está por vencer (3 días antes)
+   */
   async sendMembershipExpiringSoonEmail(
     to: string,
     clubName: string,
     planName: string,
-    daysLeft: number,
+    daysLeft: number = 3,
     endDate: Date,
+    ownerName?: string,
   ) {
     const formattedDate = new Date(endDate).toLocaleDateString('es-PE', {
       weekday: 'long',
@@ -860,16 +926,34 @@ export class MailerService {
       day: 'numeric',
     });
 
+    const membershipPlansUrl = `${this.webUrl}/club/membership`;
+
     const html = this.getEmailTemplate({
-      title: 'Tu membresía vence pronto',
-      greeting: `Hola ${clubName},`,
-      message: `Te recordamos que tu membresía <strong>${planName}</strong> vencerá en <strong>${daysLeft} días</strong> (el ${formattedDate}).`,
+      title: '⏳ Tu membresía vence en 3 días',
+      greeting: `Hola ${ownerName || clubName},`,
+      message: `
+        Te recordamos que tu membresía <strong>${planName}</strong> en TuCancha está próxima a vencer.<br/><br/>
+        Tu plan vencerá en <strong>${daysLeft} días</strong> (el <strong>${formattedDate}</strong>).
+      `,
+      bookingDetailsHtml: `
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; margin: 20px 0;">
+          <h4 style="margin: 0 0 10px 0; color: #166534; font-size: 15px;">🛡️ Mantén tu club siempre activo:</h4>
+          <p style="margin: 0 0 10px 0; font-size: 13px; color: #15803d; line-height: 1.6;">
+            Renueva tu membresía a tiempo para evitar interrupciones en la visibilidad pública de tus canchas y en la recepción de reservas de tus clientes.
+          </p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #166534; line-height: 1.8;">
+            <li>Continuidad de reservas en tiempo real sin interrupciones.</li>
+            <li>Tus clientes seguirán reservando con normalidad.</li>
+            <li>Soporte técnico y todas las herramientas de gestión activas.</li>
+          </ul>
+        </div>
+      `,
       actionButton: {
-        text: 'Renovar Membresía',
-        url: `${this.webUrl}/club/membership`,
+        text: 'Renovar Membresía Ahora',
+        url: membershipPlansUrl,
         color: '#16A34A',
       },
-      footerNote: 'Si ya renovaste, por favor desestima este mensaje.',
+      footerNote: 'Si tu suscripción está configurada con renovación automática, no tienes que realizar ninguna acción.',
     });
 
     try {
@@ -877,9 +961,10 @@ export class MailerService {
         await this.resend.emails.send({
           from: this.fromEmail,
           to,
-          subject: `Tu membresía en TuCancha vence en ${daysLeft} días`,
+          subject: `⏳ Tu membresía en TuCancha vence en ${daysLeft} días (${clubName})`,
           html,
         });
+        this.logger.log(`📧 [Mailer] Aviso de membresía por vencer en ${daysLeft} días enviado a ${to}`);
       }
     } catch (err: any) {
       this.logger.warn(`⚠️ [MailerService] Error enviando aviso de membresía a ${to}:`, err?.message || err);

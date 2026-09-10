@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, Between, MoreThan } from 'typeorm';
-import { addDays, subDays } from 'date-fns';
+import { addDays, subDays, startOfDay, endOfDay } from 'date-fns';
 import { ClubMembership } from './entities/club_membership.entity';
 import { Club } from '../club/club.entity';
 import { MembershipStatus } from './enums/membership-status.enum';
@@ -22,11 +22,12 @@ export class MembershipCronService {
 
   /**
    * Se ejecuta diariamente a las 00:05 AM para evaluar y transicionar
-   * los estados de las membresías de los clubes (ACTIVE -> GRACE -> EXPIRED).
+   * los estados de las membresías de los clubes (ACTIVE -> GRACE -> EXPIRED),
+   * y enviar recordatorios preventivos de 3 días antes de vencimiento tanto para membresías como para pruebas gratuitas.
    */
   @Cron('0 5 0 * * *')
   async handleMembershipStatusTransitions() {
-    this.logger.log('Iniciando verificación programada del estado de membresías...');
+    this.logger.log('Iniciando verificación programada del estado de membresías y periodos de prueba...');
     const now = new Date();
 
     try {
@@ -38,12 +39,12 @@ export class MembershipCronService {
           status: MembershipStatus.ACTIVE,
           endDate: LessThan(now),
         },
-        relations: ['club', 'plan'],
+        relations: ['club', 'club.owner', 'plan'],
       });
 
       for (const membership of expiredActiveMemberships) {
         const clubName = membership.club?.name || 'Club';
-        const clubEmail = membership.club?.email;
+        const clubEmails = Array.from(new Set([membership.club?.owner?.email, membership.club?.email].filter(Boolean)));
 
         // Si tiene periodo de gracia vigente, pasa a GRACE
         if (membership.graceEndDate && new Date(membership.graceEndDate) > now) {
@@ -51,15 +52,15 @@ export class MembershipCronService {
           await this.membershipRepo.save(membership);
           this.logger.warn(`Membresía del club ${clubName} (${membership.clubId}) pasó a estado GRACE.`);
 
-          if (clubEmail) {
+          for (const targetEmail of clubEmails) {
             try {
               await this.mailerService.sendMembershipEnteredGraceEmail(
-                clubEmail,
+                targetEmail,
                 clubName,
                 new Date(membership.graceEndDate),
               );
-            } catch (err) {
-              this.logger.error(`Error enviando email de periodo de gracia a ${clubEmail}: ${err.message}`);
+            } catch (err: any) {
+              this.logger.error(`Error enviando email de periodo de gracia a ${targetEmail}: ${err.message}`);
             }
           }
         } else {
@@ -68,11 +69,11 @@ export class MembershipCronService {
           await this.membershipRepo.save(membership);
           this.logger.warn(`Membresía del club ${clubName} (${membership.clubId}) pasó a estado EXPIRED.`);
 
-          if (clubEmail) {
+          for (const targetEmail of clubEmails) {
             try {
-              await this.mailerService.sendMembershipExpiredEmail(clubEmail, clubName);
-            } catch (err) {
-              this.logger.error(`Error enviando email de expiración a ${clubEmail}: ${err.message}`);
+              await this.mailerService.sendMembershipExpiredEmail(targetEmail, clubName);
+            } catch (err: any) {
+              this.logger.error(`Error enviando email de expiración a ${targetEmail}: ${err.message}`);
             }
           }
         }
@@ -86,22 +87,22 @@ export class MembershipCronService {
           status: MembershipStatus.GRACE,
           graceEndDate: LessThan(now),
         },
-        relations: ['club', 'plan'],
+        relations: ['club', 'club.owner', 'plan'],
       });
 
       for (const membership of expiredGraceMemberships) {
         const clubName = membership.club?.name || 'Club';
-        const clubEmail = membership.club?.email;
+        const clubEmails = Array.from(new Set([membership.club?.owner?.email, membership.club?.email].filter(Boolean)));
 
         membership.status = MembershipStatus.EXPIRED;
         await this.membershipRepo.save(membership);
         this.logger.warn(`Membresía en gracia del club ${clubName} (${membership.clubId}) expiró definitivamente.`);
 
-        if (clubEmail) {
+        for (const targetEmail of clubEmails) {
           try {
-            await this.mailerService.sendMembershipExpiredEmail(clubEmail, clubName);
-          } catch (err) {
-            this.logger.error(`Error enviando email de expiración final a ${clubEmail}: ${err.message}`);
+            await this.mailerService.sendMembershipExpiredEmail(targetEmail, clubName);
+          } catch (err: any) {
+            this.logger.error(`Error enviando email de expiración final a ${targetEmail}: ${err.message}`);
           }
         }
       }
@@ -109,45 +110,90 @@ export class MembershipCronService {
       // ----------------------------------------------------------------------
       // 3. AVISO PREVENTIVO: MEMBRESÍAS ACTIVAS QUE VENCEN EN EXACTAMENTE 3 DÍAS
       // ----------------------------------------------------------------------
-      const threeDaysFromNow = addDays(now, 3);
-      const startOfTargetDay = new Date(threeDaysFromNow.setHours(0, 0, 0, 0));
-      const endOfTargetDay = new Date(threeDaysFromNow.setHours(23, 59, 59, 999));
+      const threeDaysAhead = addDays(now, 3);
+      const startOfTargetDay = startOfDay(threeDaysAhead);
+      const endOfTargetDay = endOfDay(threeDaysAhead);
 
       const soonExpiringMemberships = await this.membershipRepo.find({
         where: {
           status: MembershipStatus.ACTIVE,
           endDate: Between(startOfTargetDay, endOfTargetDay),
         },
-        relations: ['club', 'plan'],
+        relations: ['club', 'club.owner', 'plan'],
       });
 
       for (const membership of soonExpiringMemberships) {
         const clubName = membership.club?.name || 'Club';
-        const clubEmail = membership.club?.email;
+        const ownerName = membership.club?.owner?.name || clubName;
+        const clubEmails = Array.from(new Set([membership.club?.owner?.email, membership.club?.email].filter(Boolean)));
         const planName = membership.plan?.name || 'Membresía';
 
-        if (clubEmail) {
+        for (const targetEmail of clubEmails) {
           try {
             await this.mailerService.sendMembershipExpiringSoonEmail(
-              clubEmail,
+              targetEmail,
               clubName,
               planName,
               3,
               new Date(membership.endDate),
+              ownerName,
             );
-            this.logger.log(`Aviso de vencimiento en 3 días enviado a ${clubName} (${clubEmail}).`);
-          } catch (err) {
-            this.logger.error(`Error sending prevent notice to ${clubEmail}: ${err.message}`);
+            this.logger.log(`Aviso de membresía por vencer en 3 días enviado a ${clubName} (${targetEmail}).`);
+          } catch (err: any) {
+            this.logger.error(`Error enviando aviso preventivo de membresía a ${targetEmail}: ${err.message}`);
           }
         }
       }
 
       // ----------------------------------------------------------------------
-      // 4. EVALUAR EXPIRACIÓN DE PRUEBAS GRATUITAS DE CLUBES (30 DÍAS)
+      // 4. AVISO PREVENTIVO: PRUEBAS GRATUITAS (30 DÍAS) QUE VENCEN EN 3 DÍAS
+      // ----------------------------------------------------------------------
+      this.logger.log('Verificando pruebas gratuitas que vencen en 3 días...');
+      const soonExpiringTrialClubs = await this.clubRepo.find({
+        where: {
+          status: 'APPROVED',
+          trialEndDate: Between(startOfTargetDay, endOfTargetDay),
+        },
+        relations: ['owner'],
+      });
+
+      for (const club of soonExpiringTrialClubs) {
+        // Verificar si ya tiene una membresía de pago activa
+        const hasPaidMembership = await this.membershipRepo.findOne({
+          where: [
+            { clubId: club.id, status: MembershipStatus.ACTIVE },
+            { clubId: club.id, status: MembershipStatus.GRACE },
+          ],
+        });
+
+        if (!hasPaidMembership && club.trialEndDate) {
+          const clubEmails = Array.from(new Set([club.owner?.email, club.email].filter(Boolean)));
+          const ownerName = club.owner?.name || club.name;
+
+          for (const targetEmail of clubEmails) {
+            try {
+              await this.mailerService.sendTrialExpiringSoonEmail(
+                targetEmail,
+                club.name,
+                3,
+                new Date(club.trialEndDate),
+                ownerName,
+              );
+              this.logger.log(`Aviso de prueba gratuita por vencer en 3 días enviado a ${club.name} (${targetEmail}).`);
+            } catch (err: any) {
+              this.logger.error(`Error enviando aviso preventivo de prueba a ${targetEmail}: ${err.message}`);
+            }
+          }
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // 5. EVALUAR EXPIRACIÓN DE PRUEBAS GRATUITAS DE CLUBES (30 DÍAS) YA PASADAS
       // ----------------------------------------------------------------------
       this.logger.log('Iniciando verificación programada de expiración de pruebas gratuitas...');
       const approvedClubs = await this.clubRepo.find({
         where: { status: 'APPROVED' },
+        relations: ['owner'],
       });
 
       for (const club of approvedClubs) {
@@ -165,19 +211,20 @@ export class MembershipCronService {
             await this.clubRepo.save(club);
             this.logger.warn(`Prueba gratuita del club ${club.name} (${club.id}) expiró. Acceso SUSPENDIDO.`);
 
-            if (club.email) {
+            const clubEmails = Array.from(new Set([club.owner?.email, club.email].filter(Boolean)));
+            for (const targetEmail of clubEmails) {
               try {
-                await (this.mailerService as any).sendTrialExpiredEmail(club.email, club.name);
-              } catch (err) {
-                this.logger.error(`Error enviando email de expiración de prueba a ${club.email}: ${err.message}`);
+                await this.mailerService.sendTrialExpiredEmail(targetEmail, club.name);
+              } catch (err: any) {
+                this.logger.error(`Error enviando email de expiración de prueba a ${targetEmail}: ${err.message}`);
               }
             }
           }
         }
       }
 
-      this.logger.log('Verificación programada de membresías completada con éxito.');
-    } catch (error) {
+      this.logger.log('Verificación programada de membresías y pruebas completada con éxito.');
+    } catch (error: any) {
       this.logger.error(`Error durante el cron de membresías: ${error?.message || error}`);
     }
   }
