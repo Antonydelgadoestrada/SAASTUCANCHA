@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2 } from "lucide-react"
+import { Loader2, MapPin, Navigation } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import * as z from "zod"
@@ -142,6 +142,8 @@ export function RegisterForm() {
     },
   })
 
+  const [isGettingGps, setIsGettingGps] = useState(false)
+
   const handleServiceChange = (serviceId: string, checked: boolean) => {
     if (checked) {
       setSelectedServices([...selectedServices, serviceId])
@@ -154,8 +156,65 @@ export function RegisterForm() {
     setSelectedLocation(coordinates)
     clubForm.setValue("coordinates", coordinates)
     if (place) {
-      clubForm.setValue("address", place, { shouldValidate: true })
+      const parts = place.split(',').map((p) => p.trim())
+      const addressPart = parts.length > 1 ? `${parts[0]}, ${parts[1]}` : parts[0]
+      clubForm.setValue("address", addressPart || place, { shouldValidate: true })
+
+      if (parts.length >= 2) {
+        const possibleDistrict = parts[parts.length - 2] || parts[1]
+        if (possibleDistrict) {
+          clubForm.setValue("district", possibleDistrict, { shouldValidate: true })
+        }
+      }
     }
+  }
+
+  const handleUseCurrentLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      toast.error("Tu navegador no soporta geolocalización.")
+      return
+    }
+
+    setIsGettingGps(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setSelectedLocation(coords)
+        clubForm.setValue("coordinates", coords)
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}&addressdetails=1`,
+            { headers: { 'Accept-Language': 'es-PE,es;q=0.9' } }
+          )
+          if (res.ok) {
+            const data = await res.json()
+            if (data?.display_name) {
+              const road = data.address?.road || data.address?.pedestrian || data.address?.neighbourhood || ''
+              const houseNumber = data.address?.house_number || ''
+              const district = data.address?.suburb || data.address?.city_district || data.address?.city || data.address?.town || ''
+              const addr = road ? `${road} ${houseNumber}`.trim() : data.display_name.split(',')[0]
+
+              clubForm.setValue("address", addr, { shouldValidate: true })
+              if (district) {
+                clubForm.setValue("district", district, { shouldValidate: true })
+              }
+            }
+          }
+          toast.success("Ubicación actual obtenida con éxito")
+        } catch {
+          toast.success("Coordenadas GPS obtenidas con éxito")
+        } finally {
+          setIsGettingGps(false)
+        }
+      },
+      (err) => {
+        console.warn("Error GPS:", err)
+        toast.error("No se pudo obtener la ubicación GPS automáticamente. Por favor escribe tu dirección en el buscador.")
+        setIsGettingGps(false)
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    )
   }
 
   async function onUserSubmit(values: UserFormValues) {
@@ -476,19 +535,37 @@ export function RegisterForm() {
 
                 {/* Selector de ubicación en mapa */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium leading-none">
-                    Buscar en Google Maps (opcional)
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium leading-none">
+                      Buscar dirección o distrito
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUseCurrentLocation}
+                      disabled={isGettingGps || isLoading}
+                      className="h-7 text-xs px-2.5 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                    >
+                      {isGettingGps ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Navigation className="h-3.5 w-3.5" />
+                      )}
+                      Usar mi ubicación GPS
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Escribe para buscar tu club y autocompletar la dirección y coordenadas exactas
+                    Escribe para autocompletar tu dirección, distrito y coordenadas exactas en el mapa
                   </p>
                   <GooglePlacesAutocomplete
-                    placeholder="Buscar dirección, distrito o lugar en el mapa..."
+                    placeholder="Buscar dirección, distrito o lugar..."
                     onPlaceSelect={handleLocationSelect}
                   />
                   {selectedLocation && (
-                    <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                      ✓ Coordenadas seleccionadas: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                    <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-xs text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-2">
+                      <MapPin className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <span>Ubicación seleccionada: Lat {selectedLocation.lat.toFixed(6)}, Lng {selectedLocation.lng.toFixed(6)}</span>
                     </div>
                   )}
                 </div>
