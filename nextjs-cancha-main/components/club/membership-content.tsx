@@ -346,6 +346,16 @@ export function MembershipContent() {
                 {daysRemaining > 0 ? `${daysRemaining} días restantes` : "Vence hoy"}
               </span>
             )}
+            {currentMembership?.status === "GRACE" && (
+              <span className="text-sm font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/60 px-3 py-1 rounded-full">
+                En Periodo de Gracia
+              </span>
+            )}
+            {currentMembership?.status === "EXPIRED" && (
+              <span className="text-sm font-medium text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950/60 px-3 py-1 rounded-full">
+                Vencida
+              </span>
+            )}
           </div>
           <CardDescription>
             Información del plan actual y fechas de facturación.

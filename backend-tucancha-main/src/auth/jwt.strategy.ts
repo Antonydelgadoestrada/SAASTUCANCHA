@@ -1,10 +1,11 @@
-// src/auth/jwt.strategy.ts
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UserService } from '../user/user.service';
 import { User } from '../user/user.entity';
-
+import { Club } from '../club/club.entity';
+import { ClubMembership } from '../membership/entities/club_membership.entity';
+import { MembershipStatus } from '../membership/enums/membership-status.enum';
 import { DataSource } from 'typeorm';
 
 @Injectable()
@@ -31,21 +32,48 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
 
       // Chequeo dinámico de membresía y prueba gratuita
-      const activeMembership = await this.dataSource.createQueryBuilder()
-        .select('cm')
-        .from('club_memberships', 'cm')
-        .where('cm.clubId = :clubId', { clubId: user.club.id })
-        .andWhere('cm.status IN (:...statuses)', { statuses: ['ACTIVE', 'GRACE'] })
-        .getOne();
+      const membership = await this.dataSource.getRepository(ClubMembership).findOne({
+        where: { clubId: user.club.id },
+        order: { endDate: 'DESC' },
+      });
 
-      const trialExpired = user.club.trialEndDate ? new Date(user.club.trialEndDate) < new Date() : true;
+      const now = new Date();
+      let hasActiveMembership = false;
 
-      if (user.club.status === 'APPROVED' && !activeMembership && trialExpired) {
-        user.club.status = 'SUSPENDED';
-        await this.dataSource.getRepository('Club').save(user.club);
-      } else if (user.club.status === 'SUSPENDED' && activeMembership) {
-        user.club.status = 'APPROVED';
-        await this.dataSource.getRepository('Club').save(user.club);
+      if (membership) {
+        if (new Date(membership.endDate) >= now) {
+          hasActiveMembership = true;
+          if (membership.status !== MembershipStatus.ACTIVE) {
+            membership.status = MembershipStatus.ACTIVE;
+            await this.dataSource.getRepository(ClubMembership).save(membership);
+          }
+        } else if (membership.graceEndDate && new Date(membership.graceEndDate) >= now) {
+          hasActiveMembership = true;
+          if (membership.status !== MembershipStatus.GRACE) {
+            membership.status = MembershipStatus.GRACE;
+            await this.dataSource.getRepository(ClubMembership).save(membership);
+          }
+        } else {
+          // Ya venció
+          if (membership.status !== MembershipStatus.EXPIRED) {
+            membership.status = MembershipStatus.EXPIRED;
+            await this.dataSource.getRepository(ClubMembership).save(membership);
+          }
+        }
+      }
+
+      const trialExpired = user.club.trialEndDate ? new Date(user.club.trialEndDate) < now : true;
+
+      if (hasActiveMembership) {
+        if (user.club.status === 'SUSPENDED') {
+          user.club.status = 'APPROVED';
+          await this.dataSource.getRepository(Club).save(user.club);
+        }
+      } else if (trialExpired) {
+        if (user.club.status === 'APPROVED') {
+          user.club.status = 'SUSPENDED';
+          await this.dataSource.getRepository(Club).save(user.club);
+        }
       }
     }
 

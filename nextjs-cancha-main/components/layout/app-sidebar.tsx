@@ -49,21 +49,23 @@ export function AppSidebar({ user }: AppSidebarProps) {
     return pathname === path || pathname.startsWith(`${path}/`)
   }
 
+  const clubId = (user as any)?.clubId || (user as any)?.club?.id
+
   // 1. Consultar estado de membresía del club si el usuario es CLUB
-  const { data: membershipData } = useQuery({
+  const { data: membershipData, isLoading: isLoadingMembership } = useQuery({
     queryKey: ["club-membership"],
     queryFn: getMyClubMembership,
-    enabled: user.role === "CLUB" && Boolean(user.clubId),
+    enabled: user.role === "CLUB",
   })
 
   // 2. Consultar datos del club
-  const { data: clubData } = useQuery({
-    queryKey: ["club-profile", user.clubId],
+  const { data: clubData, isLoading: isLoadingClub } = useQuery({
+    queryKey: ["club-profile", clubId],
     queryFn: async () => {
-      const res = await api.get(`/clubs/${user.clubId}`)
+      const res = await api.get(`/clubs/${clubId}`)
       return res.data
     },
-    enabled: user.role === "CLUB" && Boolean(user.clubId),
+    enabled: user.role === "CLUB" && Boolean(clubId),
   })
 
   const hasPaidMembership = Boolean(
@@ -77,7 +79,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
     clubData.status === "APPROVED"
   )
 
-  const isClubSuspended = user.role === "CLUB" && !hasPaidMembership && (!isTrialActive || clubData?.status === "SUSPENDED")
+  const isClubSuspended = Boolean(
+    user.role === "CLUB" &&
+    !isLoadingMembership &&
+    !hasPaidMembership &&
+    (!isTrialActive || clubData?.status === "SUSPENDED")
+  )
 
   // Menú para usuarios normales
   const userMenu = [

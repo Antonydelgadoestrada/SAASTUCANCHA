@@ -28,12 +28,14 @@ const authOptions: NextAuthOptions = {
           const token = res.data.access_token
           const refreshToken = res.data.refresh_token;
           if (!token) return null
-          const decoded = jwtDecode<DecodedToken>(token)
+          const decoded = jwtDecode<any>(token)
+          const userId = decoded.id || decoded.sub
           return {
-            id: decoded.id,
+            id: userId,
             name: decoded.name,
             email: decoded.email,
             role: decoded.role,
+            clubId: decoded.clubId,
             accessToken: token, // opcional: puedes guardar el token para llamadas futuras
             refreshToken
           }
@@ -61,6 +63,8 @@ const authOptions: NextAuthOptions = {
         token.role = user.role
         token.accessToken = (user as any).accessToken 
         token.refreshToken = (user as any).refreshToken; // 👈 nuevo
+        token.clubId = (user as any).clubId
+        token.sub = (user as any).id
       }
       if (account?.provider === "google" && account.id_token) {
         try {

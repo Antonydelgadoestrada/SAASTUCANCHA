@@ -48,35 +48,6 @@ export class MembershipService implements OnModuleInit {
       await this.paymentRepo.query(
         'ALTER TABLE membership_payments ALTER COLUMN "membershipId" DROP NOT NULL;',
       ).catch(() => {});
-
-      // 2. Corregir planes anuales existentes a mensuales
-      const annualPlans = await this.planRepo.find({
-        where: [
-          { name: 'Plan Pro Anual' },
-          { interval: BillingInterval.ANNUAL },
-        ],
-      });
-      for (const plan of annualPlans) {
-        plan.name = 'Plan Pro Mensual';
-        plan.interval = BillingInterval.MONTHLY;
-        await this.planRepo.save(plan);
-      }
-
-      // 3. Corregir membresías de clubes existentes con vigencia de 1 año (> 35 días) a 1 mes
-      const allMemberships = await this.membershipRepo.find({
-        relations: ['plan'],
-      });
-      for (const m of allMemberships) {
-        const start = new Date(m.startDate);
-        const end = new Date(m.endDate);
-        const diffInDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
-        if (diffInDays > 35) {
-          const newEnd = addMonths(start, 1);
-          m.endDate = newEnd;
-          m.graceEndDate = addDays(newEnd, m.plan?.graceDays || 7);
-          await this.membershipRepo.save(m);
-        }
-      }
     } catch (e) {
       // Ignorar errores durante inicialización si la BD aún no migró
     }
@@ -149,14 +120,43 @@ export class MembershipService implements OnModuleInit {
   // GESTIÓN DE MEMBRESÍAS DE CLUB
   // ----------------------------------------------------
   async getClubActiveMembership(clubId: string): Promise<ClubMembership | null> {
-    return this.membershipRepo.findOne({
-      where: [
-        { clubId, status: MembershipStatus.ACTIVE },
-        { clubId, status: MembershipStatus.GRACE },
-      ],
+    const latest = await this.membershipRepo.findOne({
+      where: { clubId },
       relations: ['plan'],
       order: { endDate: 'DESC' },
     });
+
+    if (!latest) {
+      return null;
+    }
+
+    const now = new Date();
+    // Evaluación dinámica y en tiempo real de fechas
+    if (new Date(latest.endDate) >= now) {
+      if (latest.status !== MembershipStatus.ACTIVE) {
+        latest.status = MembershipStatus.ACTIVE;
+        await this.membershipRepo.save(latest);
+      }
+      return latest;
+    } else if (latest.graceEndDate && new Date(latest.graceEndDate) >= now) {
+      if (latest.status !== MembershipStatus.GRACE) {
+        latest.status = MembershipStatus.GRACE;
+        await this.membershipRepo.save(latest);
+      }
+      return latest;
+    } else {
+      // Expiró
+      if (latest.status !== MembershipStatus.EXPIRED) {
+        latest.status = MembershipStatus.EXPIRED;
+        await this.membershipRepo.save(latest);
+        const club = await this.clubRepo.findOne({ where: { id: clubId } });
+        if (club && club.status === 'APPROVED') {
+          club.status = 'SUSPENDED';
+          await this.clubRepo.save(club);
+        }
+      }
+      return latest;
+    }
   }
 
   async getClubMembershipHistory(clubId: string): Promise<ClubMembership[]> {

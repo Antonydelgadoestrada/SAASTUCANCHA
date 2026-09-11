@@ -20,7 +20,7 @@ export function TrialBanner() {
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
   useEffect(() => {
-    if (!session || session.user.role !== "CLUB" || !session.user.clubId) {
+    if (!session || session.user.role !== "CLUB") {
       setIsLoading(false)
       return
     }
@@ -29,21 +29,27 @@ export function TrialBanner() {
       try {
         // 1. Verificar si tiene membresía de pago activa
         const membershipData = await getMyClubMembership()
-        if (membershipData?.membership) {
+        if (
+          membershipData?.membership &&
+          (membershipData.membership.status === "ACTIVE" || membershipData.membership.status === "GRACE")
+        ) {
           setHasPaidMembership(true)
           setIsLoading(false)
           return
         }
 
         // 2. Si no tiene membresía activa, consultar los detalles del club
-        const clubRes = await api.get(`/clubs/${session?.user.clubId}`)
-        const club = clubRes.data
-        setClubStatus(club?.status)
+        const clubId = session?.user?.clubId
+        if (clubId) {
+          const clubRes = await api.get(`/clubs/${clubId}`)
+          const club = clubRes.data
+          setClubStatus(club?.status)
 
-        if (club && club.trialEndDate) {
-          const diffTime = new Date(club.trialEndDate).getTime() - Date.now()
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-          setTrialDaysLeft(diffDays >= 0 ? diffDays : 0)
+          if (club && club.trialEndDate) {
+            const diffTime = new Date(club.trialEndDate).getTime() - Date.now()
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            setTrialDaysLeft(diffDays >= 0 ? diffDays : 0)
+          }
         }
       } catch (error) {
         console.error("Error al consultar el estado de la prueba gratuita:", error)

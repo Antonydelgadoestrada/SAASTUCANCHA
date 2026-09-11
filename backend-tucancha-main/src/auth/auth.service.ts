@@ -15,6 +15,8 @@ import { RegisterDto } from './dto/register.dto';
 import { User } from '../user/user.entity';
 import { UserRole } from '../user/user-role.enum';
 import { Club } from '../club/club.entity';
+import { ClubMembership } from '../membership/entities/club_membership.entity';
+import { MembershipStatus } from '../membership/enums/membership-status.enum';
 import { UserService } from '../user/user.service';
 import { MailerService } from '../mailer/mailer.service';
 import { GoogleAuthService } from './google-auth.service';
@@ -49,22 +51,52 @@ export class AuthService {
     }
     // let payload = { id: user.id, name:user.name, email: user.email, role: user.role}
     let payload = { sub: user.id, name: user.name, email: user.email, role: user.role }
-    
+
     if (user.club) {
       if (user.club.status === 'PENDING') {
         throw new UnauthorizedException('El administrador debe aceptar el club');
       }
 
-      // Chequeo dinámico de prueba gratuita
-      if (user.club.status === 'APPROVED' && user.club.trialEndDate && new Date(user.club.trialEndDate) < new Date()) {
-        const activeMembership = await this.clubRepository.manager.createQueryBuilder()
-          .select('cm')
-          .from('club_memberships', 'cm')
-          .where('cm.clubId = :clubId', { clubId: user.club.id })
-          .andWhere('cm.status IN (:...statuses)', { statuses: ['ACTIVE', 'GRACE'] })
-          .getOne();
+      // Chequeo dinámico de prueba gratuita y membresía activa
+      const membership = await this.clubRepository.manager.getRepository(ClubMembership).findOne({
+        where: { clubId: user.club.id },
+        order: { endDate: 'DESC' },
+      });
 
-        if (!activeMembership) {
+      const now = new Date();
+      let hasActiveMembership = false;
+
+      if (membership) {
+        if (new Date(membership.endDate) >= now) {
+          hasActiveMembership = true;
+          if (membership.status !== MembershipStatus.ACTIVE) {
+            membership.status = MembershipStatus.ACTIVE;
+            await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
+          }
+        } else if (membership.graceEndDate && new Date(membership.graceEndDate) >= now) {
+          hasActiveMembership = true;
+          if (membership.status !== MembershipStatus.GRACE) {
+            membership.status = MembershipStatus.GRACE;
+            await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
+          }
+        } else {
+          // Ya venció
+          if (membership.status !== MembershipStatus.EXPIRED) {
+            membership.status = MembershipStatus.EXPIRED;
+            await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
+          }
+        }
+      }
+
+      const trialExpired = user.club.trialEndDate ? new Date(user.club.trialEndDate) < now : true;
+
+      if (hasActiveMembership) {
+        if (user.club.status === 'SUSPENDED') {
+          user.club.status = 'APPROVED';
+          await this.clubRepository.save(user.club);
+        }
+      } else if (trialExpired) {
+        if (user.club.status === 'APPROVED') {
           user.club.status = 'SUSPENDED';
           await this.clubRepository.save(user.club);
         }
