@@ -30,19 +30,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         throw new UnauthorizedException('El administrador debe aceptar el club');
       }
 
-      // Chequeo dinámico de prueba gratuita
-      if (user.club.status === 'APPROVED' && user.club.trialEndDate && new Date(user.club.trialEndDate) < new Date()) {
-        const activeMembership = await this.dataSource.createQueryBuilder()
-          .select('cm')
-          .from('club_memberships', 'cm')
-          .where('cm.clubId = :clubId', { clubId: user.club.id })
-          .andWhere('cm.status IN (:...statuses)', { statuses: ['ACTIVE', 'GRACE'] })
-          .getOne();
+      // Chequeo dinámico de membresía y prueba gratuita
+      const activeMembership = await this.dataSource.createQueryBuilder()
+        .select('cm')
+        .from('club_memberships', 'cm')
+        .where('cm.clubId = :clubId', { clubId: user.club.id })
+        .andWhere('cm.status IN (:...statuses)', { statuses: ['ACTIVE', 'GRACE'] })
+        .getOne();
 
-        if (!activeMembership) {
-          user.club.status = 'SUSPENDED';
-          await this.dataSource.getRepository('Club').save(user.club);
-        }
+      const trialExpired = user.club.trialEndDate ? new Date(user.club.trialEndDate) < new Date() : true;
+
+      if (user.club.status === 'APPROVED' && !activeMembership && trialExpired) {
+        user.club.status = 'SUSPENDED';
+        await this.dataSource.getRepository('Club').save(user.club);
+      } else if (user.club.status === 'SUSPENDED' && activeMembership) {
+        user.club.status = 'APPROVED';
+        await this.dataSource.getRepository('Club').save(user.club);
       }
     }
 

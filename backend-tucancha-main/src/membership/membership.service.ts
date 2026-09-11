@@ -17,6 +17,8 @@ import { BillingInterval } from './enums/billing-interval.enum';
 import { MembershipPaymentStatus } from './enums/membership-payment-status.enum';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { UpdateMembershipPlanDto } from './dto/update-membership-plan.dto';
+import { SubmitManualMembershipPaymentDto } from './dto/submit-manual-membership-payment.dto';
+import { S3Service } from '../aws/s3.service';
 import { Club } from '../club/club.entity';
 
 @Injectable()
@@ -32,6 +34,7 @@ export class MembershipService implements OnModuleInit {
     private readonly paymentRepo: Repository<MembershipPayment>,
     @InjectRepository(Club)
     private readonly clubRepo: Repository<Club>,
+    private readonly s3Service: S3Service,
   ) {
     // REGLA DE ORO: Las membresías siempre utilizan las credenciales de la plataforma (Dueño)
     this.mercadopago = new MercadoPagoConfig({
@@ -210,6 +213,12 @@ export class MembershipService implements OnModuleInit {
     let startDate: Date;
     let endDate: Date;
 
+    // Garantizar que el club esté en estado APPROVED y reactivado
+    if (club.status === 'SUSPENDED') {
+      club.status = 'APPROVED';
+      await this.clubRepo.save(club);
+    }
+
     if (currentActive && isAfter(new Date(currentActive.endDate), now)) {
       // Renovación anticipada: se suma el nuevo tiempo a la fecha de fin actual
       startDate = new Date(currentActive.startDate);
@@ -243,6 +252,71 @@ export class MembershipService implements OnModuleInit {
 
       return this.membershipRepo.save(newMembership);
     }
+  }
+
+  /**
+   * Registra un pago manual de membresía (Yape, Plin, Transferencia con comprobante).
+   * Al enviar el pago, reactiva inmediatamente la cuenta y membresía del club.
+   */
+  async submitManualPayment(
+    clubId: string,
+    dto: SubmitManualMembershipPaymentDto,
+    file?: any,
+  ): Promise<{ payment: MembershipPayment; membership: ClubMembership }> {
+    const club = await this.clubRepo.findOne({ where: { id: clubId } });
+    if (!club) {
+      throw new NotFoundException(`Club con ID ${clubId} no encontrado`);
+    }
+
+    const plan = await this.findPlanById(dto.planId);
+    if (!plan.isActive) {
+      throw new BadRequestException('El plan de membresía seleccionado no está activo');
+    }
+
+    let comprobanteUrl: string | undefined = undefined;
+    if (file && file.buffer) {
+      const sanitized = file.originalname?.replace(/[^a-zA-Z0-9.-]/g, '_') || 'voucher.png';
+      const safeName = `membership_${Date.now()}_${sanitized}`;
+      comprobanteUrl = await this.s3Service.uploadFile(
+        file.buffer,
+        safeName,
+        file.mimetype || 'image/png',
+        'membership-vouchers',
+      );
+    }
+
+    // 1. Activar / renovar membresía inmediatamente (reactivación automática al enviar pago)
+    const activatedMembership = await this.activateOrRenewMembership(
+      clubId,
+      plan.id,
+      true,
+    );
+
+    // 2. Registrar el pago de membresía
+    const payment = this.paymentRepo.create({
+      clubId,
+      club,
+      membershipId: activatedMembership.id,
+      membership: activatedMembership,
+      planId: plan.id,
+      plan,
+      amount: Number(plan.price),
+      currency: plan.currency || 'PEN',
+      paymentMethod: dto.paymentMethod || 'MANUAL',
+      paymentType: 'MANUAL',
+      comprobanteUrl,
+      referenceNumber: dto.referenceNumber,
+      notes: dto.notes,
+      status: MembershipPaymentStatus.PAID,
+      paidAt: new Date(),
+    });
+
+    const savedPayment = await this.paymentRepo.save(payment);
+
+    return {
+      payment: savedPayment,
+      membership: activatedMembership,
+    };
   }
 
   /**

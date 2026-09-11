@@ -73,6 +73,18 @@ export class MembershipPayment {
   @Column({ nullable: true })
   paymentType?: string;
 
+  @Column({ nullable: true })
+  comprobanteUrl?: string;
+
+  @Column({ nullable: true })
+  referenceNumber?: string;
+
+  @Column({ type: 'text', nullable: true })
+  notes?: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  auditedAt?: Date;
+
   @Column({ type: 'jsonb', nullable: true })
   gatewayResponse?: any;
 

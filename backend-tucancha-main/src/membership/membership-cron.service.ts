@@ -67,7 +67,11 @@ export class MembershipCronService {
           // Si no tiene periodo de gracia o ya venció, pasa a EXPIRED
           membership.status = MembershipStatus.EXPIRED;
           await this.membershipRepo.save(membership);
-          this.logger.warn(`Membresía del club ${clubName} (${membership.clubId}) pasó a estado EXPIRED.`);
+          if (membership.club && membership.club.status === 'APPROVED') {
+            membership.club.status = 'SUSPENDED';
+            await this.clubRepo.save(membership.club);
+          }
+          this.logger.warn(`Membresía del club ${clubName} (${membership.clubId}) pasó a estado EXPIRED. Club SUSPENDIDO.`);
 
           for (const targetEmail of clubEmails) {
             try {
@@ -96,7 +100,11 @@ export class MembershipCronService {
 
         membership.status = MembershipStatus.EXPIRED;
         await this.membershipRepo.save(membership);
-        this.logger.warn(`Membresía en gracia del club ${clubName} (${membership.clubId}) expiró definitivamente.`);
+        if (membership.club && membership.club.status === 'APPROVED') {
+          membership.club.status = 'SUSPENDED';
+          await this.clubRepo.save(membership.club);
+        }
+        this.logger.warn(`Membresía en gracia del club ${clubName} (${membership.clubId}) expiró definitivamente. Club SUSPENDIDO.`);
 
         for (const targetEmail of clubEmails) {
           try {

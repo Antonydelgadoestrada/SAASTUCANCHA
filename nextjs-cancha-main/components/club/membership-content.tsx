@@ -17,6 +17,12 @@ import {
   SparklesIcon,
   ReceiptIcon,
   RefreshCwIcon,
+  SmartphoneIcon,
+  Building2Icon,
+  UploadCloudIcon,
+  FileTextIcon,
+  EyeIcon,
+  LockIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -25,6 +31,7 @@ import {
   getMyClubMembership,
   getMyMembershipPayments,
   createMembershipCheckout,
+  submitMembershipManualPayment,
   cancelMembershipAutoRenew,
   checkMembershipPaymentStatus,
   MembershipPlan,
@@ -35,6 +42,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -50,6 +68,15 @@ export function MembershipContent() {
   const queryClient = useQueryClient()
   const [isCheckingPayment, setIsCheckingPayment] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
+
+  // Estado para Modal de Pago Manual (Yape / Plin / Transferencia)
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false)
+  const [manualPlan, setManualPlan] = useState<MembershipPlan | null>(null)
+  const [manualMethod, setManualMethod] = useState<"YAPE" | "PLIN" | "TRANSFERENCIA">("YAPE")
+  const [referenceNumber, setReferenceNumber] = useState("")
+  const [manualNotes, setManualNotes] = useState("")
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null)
+  const [comprobantePreview, setComprobantePreview] = useState<string | null>(null)
 
   const paymentQueryParam = searchParams.get("payment")
   const paymentIdParam = searchParams.get("payment_id")
@@ -93,6 +120,7 @@ export function MembershipContent() {
             toast.success("¡Pago confirmado! Tu membresía ha sido activada exitosamente.")
             refetchMembership()
             refetchPayments()
+            queryClient.invalidateQueries({ queryKey: ["club-profile"] })
           } else {
             toast.info("Pago en proceso de confirmación por Mercado Pago.")
           }
@@ -106,7 +134,7 @@ export function MembershipContent() {
     } else if (paymentQueryParam === "failure") {
       toast.error("El pago no se pudo completar. Por favor intenta nuevamente.")
     }
-  }, [paymentQueryParam, paymentIdParam, refetchMembership, refetchPayments])
+  }, [paymentQueryParam, paymentIdParam, refetchMembership, refetchPayments, queryClient])
 
   // 5. Mutación para crear preferencia de Mercado Pago
   const checkoutMutation = useMutation({
@@ -130,7 +158,41 @@ export function MembershipContent() {
     },
   })
 
-  // 6. Mutación para cancelar auto-renovación
+  // 6. Mutación para enviar pago manual y comprobante (Reactivación Inmediata)
+  const manualPaymentMutation = useMutation({
+    mutationFn: async () => {
+      if (!manualPlan) throw new Error("No hay plan seleccionado")
+      if (!comprobanteFile) throw new Error("Por favor adjunta la foto o captura del comprobante de pago")
+
+      const formData = new FormData()
+      formData.append("planId", manualPlan.id)
+      formData.append("paymentMethod", manualMethod)
+      if (referenceNumber) formData.append("referenceNumber", referenceNumber)
+      if (manualNotes) formData.append("notes", manualNotes)
+      formData.append("comprobante", comprobanteFile)
+
+      return submitMembershipManualPayment(formData)
+    },
+    onSuccess: () => {
+      toast.success("¡Comprobante enviado y cuenta reactivada con éxito!", {
+        description: "Tu membresía se ha actualizado inmediatamente. Ya tienes acceso a todas las funciones del club.",
+      })
+      setIsManualModalOpen(false)
+      setComprobanteFile(null)
+      setComprobantePreview(null)
+      setReferenceNumber("")
+      setManualNotes("")
+      refetchMembership()
+      refetchPayments()
+      queryClient.invalidateQueries({ queryKey: ["club-profile"] })
+      queryClient.invalidateQueries({ queryKey: ["club-membership"] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || error.message || "Error al enviar el comprobante de pago")
+    },
+  })
+
+  // 7. Mutación para cancelar auto-renovación
   const cancelMutation = useMutation({
     mutationFn: cancelMembershipAutoRenew,
     onSuccess: () => {
@@ -172,8 +234,8 @@ export function MembershipContent() {
         )
       default:
         return (
-          <Badge variant="outline" className="gap-1 px-3 py-1 text-sm font-medium">
-            Sin Membresía
+          <Badge variant="outline" className="gap-1 px-3 py-1 text-sm font-medium border-amber-400 text-amber-600">
+            ⚠️ Pago Pendiente
           </Badge>
         )
     }
@@ -191,6 +253,22 @@ export function MembershipContent() {
     }
   }
 
+  const handleOpenManualPayment = (plan: MembershipPlan) => {
+    setManualPlan(plan)
+    setIsManualModalOpen(true)
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setComprobanteFile(file)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setComprobantePreview(event.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
   if (isLoadingMembership || isLoadingPlans) {
     return (
       <div className="flex h-96 w-full items-center justify-center">
@@ -206,6 +284,8 @@ export function MembershipContent() {
     ? differenceInDays(new Date(currentMembership.endDate), new Date())
     : 0
 
+  const isSuspended = !currentMembership || currentMembership.status === "EXPIRED"
+
   return (
     <div className="flex flex-col gap-8 p-6 md:p-8 max-w-7xl mx-auto w-full">
       {/* Alerta de Retorno de Mercado Pago */}
@@ -214,7 +294,7 @@ export function MembershipContent() {
           <ShieldCheckIcon className="h-5 w-5 text-emerald-600" />
           <AlertTitle className="font-semibold text-lg">¡Pago Recibido con Éxito!</AlertTitle>
           <AlertDescription>
-            Tu transacción ha sido procesada por Mercado Pago y tu membresía está en regla.
+            Tu transacción ha sido procesada y tu membresía está 100% activa. Ya puedes utilizar todos los módulos del club.
           </AlertDescription>
         </Alert>
       )}
@@ -222,9 +302,20 @@ export function MembershipContent() {
       {paymentQueryParam === "failure" && (
         <Alert variant="destructive">
           <XCircleIcon className="h-5 w-5" />
-          <AlertTitle className="font-semibold">No se pudo procesar el pago</AlertTitle>
+          <AlertTitle className="font-semibold">No se pudo procesar el pago online</AlertTitle>
           <AlertDescription>
-            Hubo un problema al procesar el pago en Mercado Pago. Puedes intentar nuevamente con otro medio de pago.
+            Hubo un problema con Mercado Pago. Puedes intentar nuevamente o realizar el pago manual por Yape, Plin o Transferencia.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Alerta si la cuenta está suspendida por falta de pago */}
+      {isSuspended && (
+        <Alert variant="destructive" className="border-2 border-red-500 bg-red-50 dark:bg-red-950/40 text-red-950 dark:text-red-100">
+          <AlertTriangleIcon className="h-6 w-6 text-red-600 animate-pulse" />
+          <AlertTitle className="font-bold text-lg">⚠️ Acceso Limitado: Regularización de Membresía Requerida</AlertTitle>
+          <AlertDescription className="text-sm mt-1">
+            Tu mensualidad o periodo de prueba ha concluido. Para reactivar tu cuenta y desbloquear el panel de canchas, horarios y reservas, selecciona un plan y envía tu pago a continuación. <strong>La reactivación es inmediata una vez enviado el pago.</strong>
           </AlertDescription>
         </Alert>
       )}
@@ -235,7 +326,7 @@ export function MembershipContent() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Membresía del Club</h1>
             <p className="text-muted-foreground mt-1">
-              Administra tu suscripción para mantener tus canchas visibles en la plataforma y recibir reservas online.
+              Administra tu suscripción mensual para mantener tus canchas visibles al público y habilitar todas las operaciones del club.
             </p>
           </div>
           <div>{getStatusBadge(currentMembership?.status)}</div>
@@ -285,7 +376,7 @@ export function MembershipContent() {
                 <span className="text-xs text-muted-foreground uppercase font-semibold">Renovación Automática</span>
                 <p className="text-base font-medium text-foreground mt-0.5 flex items-center gap-2">
                   {currentMembership.autoRenew && !currentMembership.cancelAtPeriodEnd ? (
-                    <span className="text-emerald-600 flex items-center gap-1">
+                    <span className="text-emerald-600 flex items-center gap-1 font-semibold">
                       <CheckCircle2Icon className="h-4 w-4" /> Activada
                     </span>
                   ) : (
@@ -299,9 +390,9 @@ export function MembershipContent() {
           ) : (
             <div className="p-6 text-center border border-dashed rounded-lg bg-muted/30">
               <AlertTriangleIcon className="h-10 w-10 text-amber-500 mx-auto mb-2" />
-              <h3 className="text-lg font-semibold">No tienes una membresía activa</h3>
+              <h3 className="text-lg font-semibold">Sin membresía activa</h3>
               <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1">
-                Elige uno de los planes a continuación para publicar tus canchas y comenzar a recibir reservas de deportistas en TuCancha.
+                Elige uno de los planes a continuación para reactivar tu cuenta, publicar tus canchas y comenzar a recibir reservas en TuCancha.
               </p>
             </div>
           )}
@@ -312,7 +403,7 @@ export function MembershipContent() {
               <AlertTriangleIcon className="h-5 w-5 text-amber-600" />
               <AlertTitle className="font-semibold">Tu membresía está en periodo de gracia</AlertTitle>
               <AlertDescription>
-                Tienes hasta el {currentMembership.graceEndDate ? format(new Date(currentMembership.graceEndDate), "dd 'de' MMMM", { locale: es }) : "pronto"} para renovar antes de que tus canchas queden ocultas al público.
+                Tienes hasta el {currentMembership.graceEndDate ? format(new Date(currentMembership.graceEndDate), "dd 'de' MMMM", { locale: es }) : "pronto"} para renovar antes de que tus funciones queden suspendidas.
               </AlertDescription>
             </Alert>
           )}
@@ -338,7 +429,7 @@ export function MembershipContent() {
         <div className="flex flex-col gap-1">
           <h2 className="text-2xl font-bold tracking-tight">Planes de Membresía Disponibles</h2>
           <p className="text-muted-foreground">
-            Pago 100% seguro procesado por Mercado Pago hacia la cuenta de la plataforma.
+            Puedes pagar en línea con Mercado Pago o mediante pago manual (Yape, Plin o Transferencia bancaria).
           </p>
         </div>
 
@@ -394,11 +485,15 @@ export function MembershipContent() {
                           </li>
                           <li className="flex items-start gap-2 text-foreground/90">
                             <CheckCircle2Icon className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                            <span>Recepción de pagos directos con Mercado Pago</span>
+                            <span>Recepción de pagos automáticos (Mercado Pago)</span>
                           </li>
                           <li className="flex items-start gap-2 text-foreground/90">
                             <CheckCircle2Icon className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                            <span>Gestión de horarios y bloqueos recurrentes</span>
+                            <span>Recepción de pagos manuales (Yape y Plin)</span>
+                          </li>
+                          <li className="flex items-start gap-2 text-foreground/90">
+                            <CheckCircle2Icon className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                            <span>Gestión de horarios, reservas y bloqueos</span>
                           </li>
                         </>
                       )}
@@ -409,30 +504,32 @@ export function MembershipContent() {
                     </ul>
                   </CardContent>
                 </div>
-                <CardFooter className="pt-4 border-t">
+                <CardFooter className="pt-4 border-t flex flex-col gap-2.5">
                   <Button
-                    className="w-full font-semibold"
-                    variant={isCurrentPlan ? "outline" : "default"}
+                    className="w-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
                     disabled={checkoutMutation.isPending}
                     onClick={() => checkoutMutation.mutate(plan.id)}
-                    aria-label={`Suscribirme al plan ${plan.name} por S/ ${plan.price}`}
                   >
                     {isProcessingThis ? (
                       <>
                         <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                        Conectando con Mercado Pago...
-                      </>
-                    ) : isCurrentPlan ? (
-                      <>
-                        <RefreshCwIcon className="h-4 w-4 mr-2" />
-                        Renovar Suscripción
+                        Conectando Mercado Pago...
                       </>
                     ) : (
                       <>
                         <CreditCardIcon className="h-4 w-4 mr-2" />
-                        Suscribirme con Mercado Pago
+                        Pagar con Mercado Pago
                       </>
                     )}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="w-full font-medium text-xs border-purple-300 text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30 gap-1.5"
+                    onClick={() => handleOpenManualPayment(plan)}
+                  >
+                    <SmartphoneIcon className="h-3.5 w-3.5" />
+                    Pagar con Yape / Plin / Transferencia
                   </Button>
                 </CardFooter>
               </Card>
@@ -465,15 +562,16 @@ export function MembershipContent() {
               <TableRow>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Plan</TableHead>
+                <TableHead>Método</TableHead>
                 <TableHead>Monto</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Referencia MP</TableHead>
+                <TableHead>Comprobante / Ref</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {payments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                     No se registran pagos de membresía previos.
                   </TableCell>
                 </TableRow>
@@ -484,20 +582,37 @@ export function MembershipContent() {
                       {format(new Date(p.createdAt), "dd/MM/yyyy HH:mm")}
                     </TableCell>
                     <TableCell>{p.plan?.name || "Membresía Club"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {p.paymentMethod || p.paymentType || "Mercado Pago"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="font-semibold">
                       {p.currency} {Number(p.amount).toFixed(2)}
                     </TableCell>
                     <TableCell>
                       {p.status === "PAID" ? (
-                        <Badge className="bg-emerald-500 text-white hover:bg-emerald-600">Aprobado</Badge>
+                        <Badge className="bg-emerald-500 text-white hover:bg-emerald-600">Aprobado ✓</Badge>
                       ) : p.status === "PENDING" ? (
-                        <Badge variant="outline" className="text-amber-600 border-amber-500">Pendiente</Badge>
+                        <Badge variant="outline" className="text-amber-600 border-amber-500">En Revisión</Badge>
                       ) : (
                         <Badge variant="destructive">Rechazado</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground font-mono">
-                      {p.mpPaymentId || p.id.substring(0, 8)}
+                    <TableCell className="text-xs">
+                      {p.comprobanteUrl ? (
+                        <a
+                          href={p.comprobanteUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1 font-medium"
+                        >
+                          <FileTextIcon className="w-3.5 h-3.5" />
+                          Ver Voucher
+                        </a>
+                      ) : (
+                        <span className="font-mono text-muted-foreground">{p.mpPaymentId || p.id.substring(0, 8)}</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -506,6 +621,174 @@ export function MembershipContent() {
           </Table>
         </Card>
       </div>
+
+      {/* ───────────────────────────────────────────────────────────────────
+          MODAL DE PAGO MANUAL (YAPE, PLIN, TRANSFERENCIA)
+      ─────────────────────────────────────────────────────────────────── */}
+      <Dialog open={isManualModalOpen} onOpenChange={setIsManualModalOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <SmartphoneIcon className="w-5 h-5 text-purple-600" />
+              Pago Manual de Membresía ({manualPlan?.name})
+            </DialogTitle>
+            <DialogDescription>
+              Realiza la transferencia o pago por Yape/Plin a la cuenta oficial de TuCancha y sube tu comprobante para reactivar tu cuenta de inmediato.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            {/* Resumen del Plan */}
+            <div className="p-3.5 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">Plan Seleccionado</p>
+                <p className="font-bold text-foreground">{manualPlan?.name}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Monto a Cancelar</p>
+                <p className="text-xl font-black text-purple-600 dark:text-purple-400">
+                  S/ {Number(manualPlan?.price || 0).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            {/* Selector de Método Manual */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Selecciona tu método de pago
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "YAPE", label: "🟣 Yape" },
+                  { id: "PLIN", label: "🟢 Plin" },
+                  { id: "TRANSFERENCIA", label: "🏦 Transferencia" },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setManualMethod(m.id as any)}
+                    className={`p-2.5 rounded-lg border text-xs font-bold transition-all text-center ${
+                      manualMethod === m.id
+                        ? "border-purple-500 bg-purple-100/50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 ring-2 ring-purple-500"
+                        : "border-border hover:bg-muted/50 text-foreground"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Datos Oficiales de la Plataforma */}
+            <div className="p-4 bg-muted/40 rounded-xl border text-xs space-y-2.5">
+              <p className="font-bold text-foreground flex items-center gap-1.5">
+                <Building2Icon className="w-4 h-4 text-primary" />
+                Cuentas Oficiales de TuCancha:
+              </p>
+              {manualMethod === "YAPE" && (
+                <div className="space-y-1">
+                  <p><strong>Número Yape:</strong> 999 888 777</p>
+                  <p><strong>Titular:</strong> TuCancha S.A.C.</p>
+                </div>
+              )}
+              {manualMethod === "PLIN" && (
+                <div className="space-y-1">
+                  <p><strong>Número Plin:</strong> 999 888 777</p>
+                  <p><strong>Titular:</strong> TuCancha S.A.C.</p>
+                </div>
+              )}
+              {manualMethod === "TRANSFERENCIA" && (
+                <div className="space-y-1">
+                  <p><strong>Banco:</strong> BCP / Interbank</p>
+                  <p><strong>Cuenta Corriente:</strong> 191-99887766-0-12</p>
+                  <p><strong>CCI:</strong> 002-191-009988776601-23</p>
+                  <p><strong>Titular:</strong> TuCancha S.A.C.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Subir Comprobante / Voucher */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span>Foto o Captura del Comprobante *</span>
+                {comprobanteFile && <span className="text-emerald-600 font-semibold">✓ Archivo cargado</span>}
+              </Label>
+              <div className="border-2 border-dashed rounded-xl p-4 text-center hover:bg-muted/20 transition-colors">
+                <input
+                  type="file"
+                  id="voucher-upload"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <label htmlFor="voucher-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                  <UploadCloudIcon className="w-8 h-8 text-purple-600" />
+                  <span className="text-xs font-semibold text-foreground">
+                    {comprobanteFile ? comprobanteFile.name : "Haz clic aquí para seleccionar o arrastrar el voucher"}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">PNG, JPG, WEBP hasta 10MB</span>
+                </label>
+              </div>
+
+              {comprobantePreview && (
+                <div className="mt-2 max-h-40 rounded-lg overflow-hidden border flex items-center justify-center bg-black/5 p-2">
+                  <img src={comprobantePreview} alt="Preview voucher" className="max-h-36 object-contain rounded" />
+                </div>
+              )}
+            </div>
+
+            {/* Número de Operación */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Número de Operación / Referencia (Opcional)</Label>
+              <Input
+                placeholder="Ej. 12984719"
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                className="text-xs font-mono"
+              />
+            </div>
+
+            {/* Notas */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Notas adicionales (Opcional)</Label>
+              <Textarea
+                placeholder="Ej. Pago correspondiente a la mensualidad de este mes..."
+                value={manualNotes}
+                onChange={(e) => setManualNotes(e.target.value)}
+                rows={2}
+                className="text-xs"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 pt-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsManualModalOpen(false)}
+              disabled={manualPaymentMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white font-semibold flex-1 gap-2"
+              onClick={() => manualPaymentMutation.mutate()}
+              disabled={manualPaymentMutation.isPending || !comprobanteFile}
+            >
+              {manualPaymentMutation.isPending ? (
+                <>
+                  <Loader2Icon className="w-4 h-4 animate-spin" />
+                  Enviando Comprobante...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2Icon className="w-4 h-4" />
+                  Enviar Comprobante y Reactivar Cuenta
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

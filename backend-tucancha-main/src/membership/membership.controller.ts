@@ -8,13 +8,18 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage, File as MulterFile } from 'multer';
 import { MembershipService } from './membership.service';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { UpdateMembershipPlanDto } from './dto/update-membership-plan.dto';
 import { SubscribePlanDto } from './dto/subscribe-plan.dto';
+import { SubmitManualMembershipPaymentDto } from './dto/submit-manual-membership-payment.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
 import { User } from '../user/user.entity';
@@ -143,5 +148,20 @@ export class MembershipController {
       throw new ForbiddenException('Club no disponible para este usuario');
     }
     return this.membershipService.checkPaymentStatus(paymentId, user.club.id);
+  }
+
+  // Registrar pago manual (Yape, Plin, Transferencia con comprobante) y reactivar cuenta
+  @UseGuards(JwtAuthGuard)
+  @Post('manual-payment')
+  @UseInterceptors(FileInterceptor('comprobante', { storage: memoryStorage() }))
+  async submitManualPayment(
+    @Body() body: SubmitManualMembershipPaymentDto,
+    @UploadedFile() file: MulterFile,
+    @GetUser() user: Partial<User>,
+  ) {
+    if (!user?.club?.id) {
+      throw new ForbiddenException('Club no disponible para este usuario');
+    }
+    return this.membershipService.submitManualPayment(user.club.id, body, file);
   }
 }

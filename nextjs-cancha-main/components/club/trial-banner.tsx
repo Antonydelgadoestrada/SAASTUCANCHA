@@ -55,30 +55,36 @@ export function TrialBanner() {
     checkTrialStatus()
   }, [session])
 
-  // Guard de enrutamiento: si está suspendido, obligarlo a permanecer en /club/membership
+  // Guard de enrutamiento: si está suspendido, obligarlo a permanecer EXCLUSIVAMENTE en /club/membership
   useEffect(() => {
     if (isLoading || !session || session.user.role !== "CLUB") return
 
-    if (clubStatus === "SUSPENDED") {
-      if (pathname !== "/club/membership" && !pathname.startsWith("/club/payments")) {
-        toast.error("Tu periodo de prueba ha vencido. Por favor, selecciona un plan para continuar.")
+    const isExpired = !hasPaidMembership && (clubStatus === "SUSPENDED" || (trialDaysLeft !== null && trialDaysLeft <= 0))
+
+    if (isExpired) {
+      if (pathname !== "/club/membership") {
+        toast.error("Tu mensualidad o periodo de prueba ha vencido.", {
+          description: "Por favor regulariza tu membresía para reactivar el acceso completo al club.",
+        })
         router.push("/club/membership")
       }
     }
-  }, [clubStatus, pathname, isLoading, session, router])
+  }, [clubStatus, trialDaysLeft, hasPaidMembership, pathname, isLoading, session, router])
 
   if (isLoading || hasPaidMembership || !session) {
     return null
   }
 
-  // Si el club está suspendido, mostrar banner de alerta roja de pago obligatorio
-  if (clubStatus === "SUSPENDED") {
+  const isSuspendedOrExpired = clubStatus === "SUSPENDED" || (trialDaysLeft !== null && trialDaysLeft <= 0)
+
+  // Si el club está suspendido o vencido, mostrar banner de alerta roja de pago obligatorio
+  if (isSuspendedOrExpired) {
     return (
       <div className="w-full bg-gradient-to-r from-destructive to-red-600 text-white text-xs md:text-sm py-2.5 px-4 flex flex-wrap items-center justify-between gap-2 shadow-sm font-medium">
         <div className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0 text-red-100 animate-pulse" />
           <span>
-            <strong>Tu plan de prueba o membresía ha vencido.</strong> Para reactivar tu cuenta y acceder a las funciones del club, por favor adquiere un plan a continuación.
+            <strong>Tu membresía o periodo de prueba ha vencido.</strong> Para reactivar tu cuenta y acceder a las funciones del club, por favor regulariza tu mensualidad a continuación.
           </span>
         </div>
       </div>

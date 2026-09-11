@@ -39,6 +39,9 @@ export interface MembershipPayment {
   mpPreferenceId?: string;
   paymentMethod?: string;
   paymentType?: string;
+  comprobanteUrl?: string;
+  referenceNumber?: string;
+  notes?: string;
   paidAt?: string;
   createdAt: string;
 }
@@ -68,6 +71,17 @@ export const createMembershipCheckout = async (
   autoRenew: boolean = true
 ): Promise<{ init_point: string; preferenceId: string; paymentId: string }> => {
   const result = await api.post("/memberships/checkout-preference", { planId, autoRenew });
+  return result.data;
+};
+
+export const submitMembershipManualPayment = async (
+  formData: FormData
+): Promise<{ payment: MembershipPayment; membership: ClubMembership }> => {
+  const result = await api.post("/memberships/manual-payment", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
   return result.data;
 };
 
