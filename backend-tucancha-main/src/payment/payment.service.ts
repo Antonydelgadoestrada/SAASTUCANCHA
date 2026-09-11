@@ -454,12 +454,19 @@ export class PaymentService {
     }
 
     const payments = await this.paymentRepo.find({
-      where: { bookings: { club: { id: clubId } } },
+      where: [
+        { bookings: { club: { id: clubId } } },
+        { bookings: { court: { club: { id: clubId } } } }
+      ],
       relations: ['bookings', 'bookings.club', 'bookings.court', 'user'],
     });
 
-    const bookings = await this.bookingRepo.find({
-      where: { club: { id: clubId } },
+    const allClubBookings = await this.bookingRepo.find({
+      where: [
+        { club: { id: clubId } },
+        { court: { club: { id: clubId } } }
+      ],
+      relations: ['court', 'user', 'payment'],
     });
 
     let totalRecaudado = 0;
@@ -473,7 +480,15 @@ export class PaymentService {
     let totalRechazadosCount = 0;
     let saldoPendienteTotal = 0;
 
+    const processedBookingIds = new Set<string>();
+
     for (const p of payments) {
+      if (p.bookings) {
+        for (const b of p.bookings) {
+          processedBookingIds.add(b.id);
+        }
+      }
+
       const isConfirmed = p.status === PaymentStatus.PAID || (p.status as string) === 'CONFIRMADO';
       const isPending = p.status === PaymentStatus.PENDING || (p.status as string) === 'PENDIENTE';
       const isRejected = p.status === PaymentStatus.REJECTED || (p.status as string) === 'RECHAZADO';
@@ -532,6 +547,43 @@ export class PaymentService {
       }
     }
 
+    // Process bookings that don't have a Payment row yet
+    for (const b of allClubBookings) {
+      if (!processedBookingIds.has(b.id)) {
+        let totalPrice = 0;
+        if (b.pricing && typeof b.pricing === 'object') {
+          totalPrice = Number((b.pricing as any).totalPrice ?? (b.pricing as any).basePrice ?? 0);
+        }
+        if (isNaN(totalPrice) || totalPrice <= 0) {
+          const courtPrice = Number(b.court?.priceDay || b.court?.priceNight || 0);
+          const dur = Number(b.duration || 1);
+          totalPrice = courtPrice * dur * 2;
+        }
+
+        const isPaid = b.paymentStatus === PaymentStatus.PAID || (b.paymentStatus as any) === 'paid';
+        const isCancelled = b.status === BookingStatus.CANCELLED || (b.status as any) === 'cancelled';
+
+        if (isCancelled) {
+          totalRechazadosCount++;
+        } else if (isPaid) {
+          totalConfirmadosCount++;
+          totalRecaudado += totalPrice;
+          const meth = (b.paymentMethod || '').toUpperCase();
+          if (meth.includes('YAPE')) recaudadoYape += totalPrice;
+          else if (meth.includes('PLIN')) recaudadoPlin += totalPrice;
+          else if (meth.includes('TRANSFER')) recaudadoTransfer += totalPrice;
+          else if (meth.includes('EFECTIVO') || meth.includes('MANUAL')) recaudadoEfectivo += totalPrice;
+          else recaudadoMercadoPago += totalPrice;
+        } else {
+          // Pending reservation
+          saldoPendienteTotal += totalPrice;
+          if (b.proofOfPaymentUrl) {
+            comprobantesPendientesCount++;
+          }
+        }
+      }
+    }
+
     const recaudadoManual = recaudadoYape + recaudadoPlin + recaudadoTransfer + recaudadoEfectivo;
 
     return {
@@ -553,7 +605,7 @@ export class PaymentService {
     };
   }
 
-  // ─── LISTA DE PAGOS CON FILTROS ────────────────────────────────────────────
+  // ─── LISTA DE PAGOS Y RESERVAS CON FILTROS ─────────────────────────────────
 
   async getClubPaymentsList(
     user: User,
@@ -575,72 +627,84 @@ export class PaymentService {
       .orderBy('payment.createdAt', 'DESC');
 
     if (clubId) {
-      query.where('(booking.clubId = :clubId OR court.clubId = :clubId OR payment.clubId = :clubId)', { clubId });
+      query.where('(booking.clubId = :clubId OR court.clubId = :clubId)', { clubId });
     }
 
-    if (filters.status && filters.status !== 'all') {
-      const st = filters.status.toLowerCase().trim();
-      if (st === 'pending' || st === 'pendiente') {
-        query.andWhere('(LOWER(payment.status) IN (:...ps) OR payment.pendingAudit = true)', { ps: ['pending', 'pendiente'] });
-      } else if (st === 'pending_audit') {
-        query.andWhere('payment.pendingAudit = true');
-      } else if (st === 'confirmed' || st === 'confirmado' || st === 'paid' || st === 'completed') {
-        query.andWhere('LOWER(payment.status) IN (:...cs)', { cs: ['paid', 'confirmado', 'confirmed', 'completed', 'approved'] });
-      } else if (st === 'rejected' || st === 'rechazado') {
-        query.andWhere('LOWER(payment.status) IN (:...rs)', { rs: ['rejected', 'rechazado', 'failed'] });
-      } else {
-        query.andWhere('LOWER(payment.status) = :st', { st });
+    const rawPayments = await query.getMany();
+
+    // Query all club bookings to make sure no booking is missed
+    const bookingsQuery = this.bookingRepo
+      .createQueryBuilder('b')
+      .leftJoinAndSelect('b.court', 'court')
+      .leftJoinAndSelect('b.user', 'customer')
+      .leftJoinAndSelect('b.payment', 'payment')
+      .orderBy('b.createdAt', 'DESC');
+
+    if (clubId) {
+      bookingsQuery.where('(b.clubId = :clubId OR court.clubId = :clubId)', { clubId });
+    }
+
+    const allClubBookings = await bookingsQuery.getMany();
+
+    const existingBookingIds = new Set<string>();
+    for (const p of rawPayments) {
+      if (p.bookings) {
+        for (const b of p.bookings) {
+          existingBookingIds.add(b.id);
+        }
       }
     }
 
-    if (filters.method && filters.method !== 'all') {
-      const meth = filters.method.toUpperCase().trim();
-      if (meth.includes('MERCADO') || meth === 'MP' || meth.includes('CARD')) {
-        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
-          m: ['MERCADOPAGO', 'MP', 'CARD', 'mercadopago', 'credit_card', 'debit_card'],
-          pm: '%mercado%',
+    const unlinkedPaymentItems: any[] = [];
+    for (const b of allClubBookings) {
+      if (!existingBookingIds.has(b.id)) {
+        let totalPrice = 0;
+        if (b.pricing && typeof b.pricing === 'object') {
+          totalPrice = Number((b.pricing as any).totalPrice ?? (b.pricing as any).basePrice ?? 0);
+        }
+        if (isNaN(totalPrice) || totalPrice <= 0) {
+          const courtPrice = Number(b.court?.priceDay || b.court?.priceNight || 0);
+          const dur = Number(b.duration || 1);
+          totalPrice = courtPrice * dur * 2;
+        }
+
+        const isPaid = b.paymentStatus === PaymentStatus.PAID || (b.paymentStatus as any) === 'PAID' || (b.paymentStatus as any) === 'paid';
+        const isCancelled = b.status === BookingStatus.CANCELLED || (b.status as any) === 'CANCELLED' || (b.status as any) === 'cancelled';
+
+        let method = PaymentMethod.EFECTIVO;
+        const bMeth = (b.paymentMethod || '').toUpperCase();
+        if (bMeth.includes('YAPE')) method = PaymentMethod.YAPE;
+        else if (bMeth.includes('PLIN')) method = PaymentMethod.PLIN;
+        else if (bMeth.includes('MERCADO') || bMeth.includes('MP') || bMeth.includes('ONLINE')) method = PaymentMethod.MERCADOPAGO;
+        else if (bMeth.includes('TRANSFER')) method = PaymentMethod.TRANSFERENCIA;
+        else if (bMeth.includes('WHATSAPP')) method = PaymentMethod.WHATSAPP;
+
+        unlinkedPaymentItems.push({
+          id: b.id,
+          amount: totalPrice,
+          currency: 'PEN',
+          method,
+          paymentMethod: b.paymentMethod || method,
+          status: isCancelled ? PaymentStatus.REJECTED : (isPaid ? PaymentStatus.PAID : PaymentStatus.PENDING),
+          type: PaymentType.PAGO_COMPLETO,
+          comprobanteUrl: b.proofOfPaymentUrl || null,
+          motivoRechazo: b.cancellationReason || null,
+          createdAt: b.createdAt || new Date(),
+          saldoStatus: isPaid ? 'NO_APLICA' : 'PENDIENTE',
+          saldoAmount: 0,
+          pendingAudit: Boolean(b.proofOfPaymentUrl && !isPaid && !isCancelled),
+          autoConfirmed: false,
+          bookings: [b],
+          user: b.user,
         });
-      } else if (meth.includes('YAPE')) {
-        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
-          m: ['YAPE', 'yape'],
-          pm: '%yape%',
-        });
-      } else if (meth.includes('PLIN')) {
-        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
-          m: ['PLIN', 'plin'],
-          pm: '%plin%',
-        });
-      } else if (meth.includes('TRANSFER')) {
-        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
-          m: ['TRANSFERENCIA', 'TRANSFER', 'transferencia', 'transfer', 'bank_transfer'],
-          pm: '%transfer%',
-        });
-      } else if (meth.includes('EFECTIVO') || meth.includes('CASH')) {
-        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
-          m: ['EFECTIVO', 'CASH', 'efectivo', 'cash'],
-          pm: '%efectivo%',
-        });
-      } else {
-        query.andWhere('payment.method = :method', { method: filters.method });
       }
     }
 
-    if (filters.type && filters.type !== 'all') {
-      const tp = filters.type.toUpperCase().trim();
-      if (tp.includes('ADELANTO') || tp.includes('ADVANCE')) {
-        query.andWhere("(payment.type = 'ADELANTO' OR payment.type = 'advance' OR payment.type IS NULL)");
-      } else if (tp.includes('SALDO') || tp.includes('BALANCE')) {
-        query.andWhere("(payment.type = 'SALDO' OR payment.type = 'balance')");
-      } else if (tp.includes('COMPLETO') || tp.includes('FULL') || tp.includes('PAGO_COMPLETO')) {
-        query.andWhere("(payment.type = 'PAGO_COMPLETO' OR payment.type = 'COMPLETO' OR payment.type = 'full' OR payment.type IS NULL)");
-      } else {
-        query.andWhere('LOWER(payment.type) = :type', { type: filters.type.toLowerCase() });
-      }
-    }
+    const combinedList = [...rawPayments, ...unlinkedPaymentItems].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
 
-    const rawList = await query.getMany();
-
-    const formattedList = rawList.map((p) => {
+    const formattedList = combinedList.map((p) => {
       const b = p.bookings?.[0] || null;
       const customerName = b?.customerInfo?.name || b?.user?.name || p.user?.name || 'Cliente';
       const customerEmail = b?.customerInfo?.email || b?.user?.email || p.user?.email || '';
@@ -683,9 +747,62 @@ export class PaymentService {
       };
     });
 
+    let result = formattedList;
+
+    if (filters.status && filters.status !== 'all') {
+      const st = filters.status.toLowerCase().trim();
+      result = result.filter((p) => {
+        const normStatus = String(p.status || '').toLowerCase();
+        if (st === 'pending' || st === 'pendiente') {
+          return normStatus === 'pending' || normStatus === 'pendiente' || p.pendingAudit === true;
+        } else if (st === 'pending_audit') {
+          return p.pendingAudit === true;
+        } else if (st === 'confirmed' || st === 'confirmado' || st === 'paid' || st === 'completed') {
+          return ['paid', 'confirmado', 'confirmed', 'completed', 'approved'].includes(normStatus);
+        } else if (st === 'rejected' || st === 'rechazado') {
+          return ['rejected', 'rechazado', 'failed', 'cancelled', 'cancelado'].includes(normStatus);
+        }
+        return normStatus === st;
+      });
+    }
+
+    if (filters.method && filters.method !== 'all') {
+      const meth = filters.method.toUpperCase().trim();
+      result = result.filter((p) => {
+        const pMethod = String(p.method || (p as any).paymentMethod || '').toUpperCase();
+        if (meth.includes('MERCADO') || meth === 'MP' || meth.includes('CARD')) {
+          return pMethod.includes('MERCADO') || pMethod.includes('MP') || pMethod.includes('CARD') || pMethod.includes('ONLINE');
+        } else if (meth.includes('YAPE')) {
+          return pMethod.includes('YAPE');
+        } else if (meth.includes('PLIN')) {
+          return pMethod.includes('PLIN');
+        } else if (meth.includes('TRANSFER')) {
+          return pMethod.includes('TRANSFER');
+        } else if (meth.includes('EFECTIVO') || meth.includes('CASH')) {
+          return pMethod.includes('EFECTIVO') || pMethod.includes('CASH') || pMethod.includes('MANUAL');
+        }
+        return pMethod === meth;
+      });
+    }
+
+    if (filters.type && filters.type !== 'all') {
+      const tp = filters.type.toUpperCase().trim();
+      result = result.filter((p) => {
+        const pType = String(p.type || '').toUpperCase();
+        if (tp.includes('ADELANTO') || tp.includes('ADVANCE')) {
+          return pType.includes('ADELANTO') || pType.includes('ADVANCE');
+        } else if (tp.includes('SALDO') || tp.includes('BALANCE')) {
+          return pType.includes('SALDO') || pType.includes('BALANCE');
+        } else if (tp.includes('COMPLETO') || tp.includes('FULL') || tp.includes('PAGO_COMPLETO')) {
+          return pType.includes('COMPLETO') || pType.includes('FULL') || pType === '';
+        }
+        return pType === tp;
+      });
+    }
+
     if (filters.search) {
       const s = filters.search.toLowerCase().trim();
-      return formattedList.filter((p) => {
+      result = result.filter((p) => {
         const ref = (p.bookings?.[0] as any)?.bookingReference?.toLowerCase() || p.booking?.bookingReference?.toLowerCase() || p.id.toLowerCase();
         const court = p.bookings?.[0]?.court?.name?.toLowerCase() || p.booking?.court?.name?.toLowerCase() || '';
         const name = p.booking?.customerInfo?.name?.toLowerCase() || (p.bookings?.[0] as any)?.user?.name?.toLowerCase() || p.user?.name?.toLowerCase() || '';
@@ -695,7 +812,7 @@ export class PaymentService {
       });
     }
 
-    return formattedList;
+    return result;
   }
 
   generateTimeSlots(start: string, duration: number): string[] {
@@ -913,6 +1030,72 @@ export class PaymentService {
   }
 
   /**
+   * Helper para buscar un Payment por ID o buscar/crear un Payment a partir de un Booking ID
+   */
+  private async findOrCreatePaymentForAudit(paymentId: string): Promise<Payment> {
+    let payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
+    });
+    if (!payment) {
+      const booking = await this.bookingRepo.findOne({
+        where: { id: paymentId },
+        relations: ['court', 'court.club', 'club', 'user', 'payment'],
+      });
+      if (booking) {
+        if (booking.payment) {
+          payment = await this.paymentRepo.findOne({
+            where: { id: booking.payment.id },
+            relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
+          });
+        }
+        if (!payment) {
+          let totalPrice = 0;
+          if (booking.pricing && typeof booking.pricing === 'object') {
+            totalPrice = Number((booking.pricing as any).totalPrice ?? (booking.pricing as any).basePrice ?? 0);
+          }
+          if (isNaN(totalPrice) || totalPrice <= 0) {
+            const courtPrice = Number(booking.court?.priceDay || booking.court?.priceNight || 0);
+            const dur = Number(booking.duration || 1);
+            totalPrice = courtPrice * dur * 2;
+          }
+
+          let safeMethod: PaymentMethod = PaymentMethod.EFECTIVO;
+          const bMeth = (booking.paymentMethod || '').toUpperCase();
+          if (bMeth.includes('YAPE')) safeMethod = PaymentMethod.YAPE;
+          else if (bMeth.includes('PLIN')) safeMethod = PaymentMethod.PLIN;
+          else if (bMeth.includes('MERCADO') || bMeth.includes('MP')) safeMethod = PaymentMethod.MERCADOPAGO;
+          else if (bMeth.includes('TRANSFER')) safeMethod = PaymentMethod.TRANSFERENCIA;
+          else if (bMeth.includes('WHATSAPP')) safeMethod = PaymentMethod.WHATSAPP;
+
+          const newPayment = this.paymentRepo.create({
+            bookings: [booking],
+            user: booking.user,
+            amount: totalPrice,
+            currency: 'PEN',
+            method: safeMethod,
+            status: PaymentStatus.PENDING,
+            type: PaymentType.PAGO_COMPLETO,
+            saldoStatus: 'NO_APLICA',
+            pendingAudit: Boolean(booking.proofOfPaymentUrl),
+            comprobanteUrl: booking.proofOfPaymentUrl || undefined,
+            autoConfirmed: false,
+          });
+          const saved = await this.paymentRepo.save(newPayment);
+          booking.payment = saved;
+          await this.bookingRepo.save(booking);
+
+          payment = await this.paymentRepo.findOne({
+            where: { id: saved.id },
+            relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
+          });
+        }
+      }
+    }
+    return payment;
+  }
+
+  /**
    * Auditar un pago manual: CONFIRMAR o RECHAZAR el comprobante subido por el usuario.
    * Actualiza el estado del pago y dispara notificaciones si aplica.
    */
@@ -922,11 +1105,8 @@ export class PaymentService {
     auditor: User,
     motivoRechazo?: string,
   ) {
-    const payment = await this.paymentRepo.findOne({
-      where: { id: paymentId },
-      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
-    });
-    if (!payment) throw new BadRequestException('Pago no encontrado');
+    const payment = await this.findOrCreatePaymentForAudit(paymentId);
+    if (!payment) throw new BadRequestException('Pago o reserva no encontrada');
 
     if (action === 'CONFIRMAR') {
       payment.status = PaymentStatus.PAID;
@@ -1033,11 +1213,8 @@ export class PaymentService {
     auditor: User,
     motivoRechazo?: string,
   ) {
-    const payment = await this.paymentRepo.findOne({
-      where: { id: paymentId },
-      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
-    });
-    if (!payment) throw new BadRequestException('Pago no encontrado');
+    const payment = await this.findOrCreatePaymentForAudit(paymentId);
+    if (!payment) throw new BadRequestException('Pago o reserva no encontrada');
 
     if (action === 'CONFIRMAR') {
       payment.saldoStatus = 'PAGADO';
@@ -1094,11 +1271,8 @@ export class PaymentService {
     },
     auditor: User,
   ) {
-    const payment = await this.paymentRepo.findOne({
-      where: { id: paymentId },
-      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
-    });
-    if (!payment) throw new BadRequestException('Pago no encontrado');
+    const payment = await this.findOrCreatePaymentForAudit(paymentId);
+    if (!payment) throw new BadRequestException('Pago o reserva no encontrada');
 
     const firstBooking = payment.bookings?.[0];
 
