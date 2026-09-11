@@ -213,6 +213,8 @@ export class CourtService {
             porcentajeAdelantoDefault: club.porcentajeAdelantoDefault ?? 50,
             adelantoMinimo: club.adelantoMinimo,
             aceptaMercadopago: club.aceptaMercadopago ?? false,
+            aceptaYape: club.aceptaYape ?? true,
+            aceptaPlin: club.aceptaPlin ?? true,
           } : undefined,
           sport: type,
           price: Number(court.priceDay || 0),

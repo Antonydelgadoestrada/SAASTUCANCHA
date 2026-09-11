@@ -93,6 +93,12 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
     @Column({ default: false })
     aceptaMercadopago: boolean;
 
+    @Column({ default: true })
+    aceptaYape: boolean;
+
+    @Column({ default: true })
+    aceptaPlin: boolean;
+
     @Column({ nullable: true })
     whatsapp?: string;
 

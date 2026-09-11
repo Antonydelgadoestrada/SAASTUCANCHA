@@ -6,6 +6,14 @@ export class UpdateClubPaymentConfigDto {
   aceptaMercadopago?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  aceptaYape?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  aceptaPlin?: boolean;
+
+  @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsString()
   whatsapp?: string | null;

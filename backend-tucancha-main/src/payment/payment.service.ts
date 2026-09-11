@@ -393,13 +393,14 @@ export class PaymentService {
         for (let booking of bookings) {
           booking.paymentStatus = targetPaymentStatus;
           booking.status = targetBookingStatus;
-          // Actualizamos los montos netos solo si es una sola reserva para no complicar el split
+          // Preservar precio total de la reserva y registrar monto pagado
           if (bookings.length === 1) {
+            const currentTotal = (booking.pricing as any)?.totalPrice;
             booking.pricing = {
               ...booking.pricing,
-              basePrice: netoVendedor,
-              totalPrice: totalPagado,
-            };
+              basePrice: (booking.pricing as any)?.basePrice ?? netoVendedor,
+              totalPrice: currentTotal && Number(currentTotal) > 0 ? Number(currentTotal) : totalPagado,
+            } as any;
           }
           booking.payment = paymentRecord;
           await trxManager.save(Booking, booking);
@@ -574,25 +575,29 @@ export class PaymentService {
       .orderBy('payment.createdAt', 'DESC');
 
     if (clubId) {
-      query.where('booking.clubId = :clubId', { clubId });
+      query.where('(booking.clubId = :clubId OR court.clubId = :clubId OR payment.clubId = :clubId)', { clubId });
     }
 
     if (filters.status && filters.status !== 'all') {
       const st = filters.status.toLowerCase().trim();
       if (st === 'pending' || st === 'pendiente') {
-        query.andWhere('LOWER(payment.status) IN (:...ps)', { ps: ['pending', 'pendiente'] });
+        query.andWhere('(LOWER(payment.status) IN (:...ps) OR payment.pendingAudit = true)', { ps: ['pending', 'pendiente'] });
+      } else if (st === 'pending_audit') {
+        query.andWhere('payment.pendingAudit = true');
       } else if (st === 'confirmed' || st === 'confirmado' || st === 'paid' || st === 'completed') {
         query.andWhere('LOWER(payment.status) IN (:...cs)', { cs: ['paid', 'confirmado', 'confirmed', 'completed', 'approved'] });
       } else if (st === 'rejected' || st === 'rechazado') {
         query.andWhere('LOWER(payment.status) IN (:...rs)', { rs: ['rejected', 'rechazado', 'failed'] });
+      } else {
+        query.andWhere('LOWER(payment.status) = :st', { st });
       }
     }
 
     if (filters.method && filters.method !== 'all') {
       const meth = filters.method.toUpperCase().trim();
-      if (meth.includes('MERCADO') || meth === 'MP') {
+      if (meth.includes('MERCADO') || meth === 'MP' || meth.includes('CARD')) {
         query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
-          m: ['MERCADOPAGO', 'MP', 'CARD', 'mercadopago'],
+          m: ['MERCADOPAGO', 'MP', 'CARD', 'mercadopago', 'credit_card', 'debit_card'],
           pm: '%mercado%',
         });
       } else if (meth.includes('YAPE')) {
@@ -607,7 +612,7 @@ export class PaymentService {
         });
       } else if (meth.includes('TRANSFER')) {
         query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
-          m: ['TRANSFERENCIA', 'TRANSFER', 'transferencia', 'transfer'],
+          m: ['TRANSFERENCIA', 'TRANSFER', 'transferencia', 'transfer', 'bank_transfer'],
           pm: '%transfer%',
         });
       } else if (meth.includes('EFECTIVO') || meth.includes('CASH')) {
@@ -623,11 +628,13 @@ export class PaymentService {
     if (filters.type && filters.type !== 'all') {
       const tp = filters.type.toUpperCase().trim();
       if (tp.includes('ADELANTO') || tp.includes('ADVANCE')) {
-        query.andWhere('payment.type IN (:...ts)', { ts: ['ADELANTO', 'advance', 'advance_payment'] });
-      } else if (tp.includes('SALDO')) {
-        query.andWhere('payment.type IN (:...ts)', { ts: ['SALDO', 'saldo', 'balance'] });
+        query.andWhere("(payment.type = 'ADELANTO' OR payment.type = 'advance' OR payment.type IS NULL)");
+      } else if (tp.includes('SALDO') || tp.includes('BALANCE')) {
+        query.andWhere("(payment.type = 'SALDO' OR payment.type = 'balance')");
       } else if (tp.includes('COMPLETO') || tp.includes('FULL') || tp.includes('PAGO_COMPLETO')) {
-        query.andWhere('(payment.type IN (:...ts) OR payment.type IS NULL)', { ts: ['PAGO_COMPLETO', 'COMPLETO', 'full_payment'] });
+        query.andWhere("(payment.type = 'PAGO_COMPLETO' OR payment.type = 'COMPLETO' OR payment.type = 'full' OR payment.type IS NULL)");
+      } else {
+        query.andWhere('LOWER(payment.type) = :type', { type: filters.type.toLowerCase() });
       }
     }
 
@@ -647,6 +654,12 @@ export class PaymentService {
               email: customerEmail,
               phone: customerPhone,
             },
+            court: b.court,
+            pricing: b.pricing,
+            date: b.date,
+            startTime: b.startTime,
+            duration: b.duration,
+            bookingReference: (b as any).bookingReference || (p as any).bookingReference,
           }
         : null;
 
@@ -673,11 +686,12 @@ export class PaymentService {
     if (filters.search) {
       const s = filters.search.toLowerCase().trim();
       return formattedList.filter((p) => {
-        const ref = p.booking?.bookingReference?.toLowerCase() || '';
-        const court = p.booking?.court?.name?.toLowerCase() || '';
-        const name = p.booking?.customerInfo?.name?.toLowerCase() || p.user?.name?.toLowerCase() || '';
-        const email = p.booking?.customerInfo?.email?.toLowerCase() || p.user?.email?.toLowerCase() || '';
-        return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s);
+        const ref = (p.bookings?.[0] as any)?.bookingReference?.toLowerCase() || p.booking?.bookingReference?.toLowerCase() || p.id.toLowerCase();
+        const court = p.bookings?.[0]?.court?.name?.toLowerCase() || p.booking?.court?.name?.toLowerCase() || '';
+        const name = p.booking?.customerInfo?.name?.toLowerCase() || (p.bookings?.[0] as any)?.user?.name?.toLowerCase() || p.user?.name?.toLowerCase() || '';
+        const email = p.booking?.customerInfo?.email?.toLowerCase() || (p.bookings?.[0] as any)?.user?.email?.toLowerCase() || p.user?.email?.toLowerCase() || '';
+        const phone = p.booking?.customerInfo?.phone?.toLowerCase() || (p.bookings?.[0] as any)?.user?.phone?.toLowerCase() || '';
+        return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s) || phone.includes(s);
       });
     }
 
@@ -982,7 +996,7 @@ export class PaymentService {
 
           // Liberar los slots ocupados
           try {
-            const rawDate = b.date as any;
+            const rawDate: any = b.date;
             const dateStr = typeof rawDate === 'string' ? rawDate.substring(0, 10) : new Date(rawDate).toISOString().substring(0, 10);
             const times = this.generateTimeSlots(b.startTime, Number(b.duration) || 1);
             const payload = times.map((t) => ({
