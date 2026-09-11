@@ -1,8 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { EditIcon, MapPinIcon, PlusIcon, TrashIcon, CalendarIcon } from "lucide-react"
+import { EditIcon, MapPinIcon, PlusIcon, TrashIcon, CalendarIcon, AlertTriangleIcon, ArrowRightIcon } from "lucide-react"
 import { toast } from "sonner"
+import { useQuery } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +15,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -21,11 +23,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CourtForm } from "@/components/club/court-form"
 import { createCourts, deleteCourts, editCourts, getAllCourtsByClub } from "@/lib/courts"
 import { applyTemplateToCourtSafe, getTemplateByClub } from "@/lib/schedule"
+import { getClubPaymentConfig } from "@/lib/payments"
 
 interface Court {
   id: number
   name: string
-
   type: string
   surface: string
   priceDay: number
@@ -39,33 +41,39 @@ interface Court {
     address: string
     coordinates: { lat: number; lng: number }
   }
-  
 }
 
-
-
-
 export function ClubCourtsContent() {
+  const router = useRouter()
   const [courts, setCourts] = useState<Court[]>([])
-
-  const [templates, setTemplates] = useState<any[]>([]);
-
+  const [templates, setTemplates] = useState<any[]>([])
   const [view, setView] = useState<"grid" | "table">("grid")
-
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingCourt, setEditingCourt] = useState<Court | null>(null)
+
+  // Consultar configuración de pagos del club
+  const { data: paymentConfig } = useQuery({
+    queryKey: ["club-payment-config"],
+    queryFn: () => getClubPaymentConfig(),
+  })
+
+  const hasPaymentConfigured = Boolean(
+    (paymentConfig?.aceptaYape && paymentConfig?.yapeNumero?.trim()) ||
+    (paymentConfig?.aceptaPlin && paymentConfig?.plinNumero?.trim()) ||
+    paymentConfig?.aceptaMercadopago
+  )
 
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
         const data = await getTemplateByClub();
         if (Array.isArray(data)) {
-          setTemplates(data); // si ya es array
+          setTemplates(data);
         } else if (data) {
-          setTemplates([data]); // si es un solo objeto
+          setTemplates([data]);
         } else {
-          setTemplates([]); // si es null/undefined
+          setTemplates([]);
         }
       } catch (err) {
         toast.error("Error al obtener plantillas");
@@ -84,9 +92,8 @@ export function ClubCourtsContent() {
     
     fetchCourts()
     fetchTemplates();
-
   }, [])
-  // Filtrar canchas según la sede seleccionada y búsqueda
+
   const filteredCourts = courts.filter((court) => {
     const matchesSearch =
       court.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -95,25 +102,50 @@ export function ClubCourtsContent() {
     return matchesSearch
   })
 
+  const handleOpenAddDialog = () => {
+    if (!hasPaymentConfigured) {
+      toast.error("Configuración de Pagos Requerida", {
+        description: "Antes de publicar tus canchas, debes configurar tus métodos de cobro y pago (número de Yape, Plin o Mercado Pago) en el módulo 'Pagos y Cobros'.",
+        action: {
+          label: "Ir a Pagos",
+          onClick: () => router.push("/club/payments"),
+        },
+      })
+      return
+    }
+    setIsAddDialogOpen(true)
+  }
+
   const handleAddCourt = async (courtData: any) => {
-    const result = await createCourts(courtData);
-    setCourts((prev) => [...prev, result ])
-    setIsAddDialogOpen(false)
-    toast.success("Cancha creada correctamente")
+    try {
+      const result = await createCourts(courtData);
+      setCourts((prev) => [...prev, result ])
+      setIsAddDialogOpen(false)
+      toast.success("Cancha creada correctamente")
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Error al crear la cancha")
+    }
   }
 
   const handleEditCourt = async(courtData: any) => {
-    const updatedCourt = await editCourts(courtData)
-
-    setCourts((prev) => prev.map((court) => (court.id === courtData.id ? updatedCourt : court)))
-    setEditingCourt(null)
-    toast.success("Cancha actualizada correctamente")
+    try {
+      const updatedCourt = await editCourts(courtData)
+      setCourts((prev) => prev.map((court) => (court.id === courtData.id ? updatedCourt : court)))
+      setEditingCourt(null)
+      toast.success("Cancha actualizada correctamente")
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Error al actualizar la cancha")
+    }
   }
 
   const handleDeleteCourt = async (id: number) => {
-    await deleteCourts(id)
-    setCourts((prev) => prev.filter((court) => court.id !== id))
-    toast.success("Cancha eliminada correctamente")
+    try {
+      await deleteCourts(id)
+      setCourts((prev) => prev.filter((court) => court.id !== id))
+      toast.success("Cancha eliminada correctamente")
+    } catch (err: any) {
+      toast.error("Error al eliminar la cancha")
+    }
   }
 
   const openEditDialog = (court: Court) => {
@@ -131,9 +163,29 @@ export function ClubCourtsContent() {
         <p className="text-muted-foreground">Administra las canchas deportivas de tu club.</p>
       </div>
 
+      {/* Alerta si no tiene métodos de pago configurados */}
+      {paymentConfig !== undefined && !hasPaymentConfigured && (
+        <div className="p-4 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertTriangleIcon className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 animate-pulse" />
+            <div>
+              <p className="font-bold text-sm">Configuración de Métodos de Cobro Requerida</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Para que los jugadores puedan reservar y pagar, debes registrar tus métodos de cobro (número de Yape, Plin o Mercado Pago) en la sección <strong>Pagos y Cobros</strong>.
+              </p>
+            </div>
+          </div>
+          <Link href="/club/payments">
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 text-xs gap-1.5 font-semibold">
+              Configurar Pagos y Cobros
+              <ArrowRightIcon className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
+        </div>
+      )}
+
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex flex-1 items-center gap-4">
-
           <div className="relative flex-1">
             <Input
               placeholder="Buscar canchas..."
@@ -165,13 +217,12 @@ export function ClubCourtsContent() {
             </TabsList>
           </Tabs>
 
+          <Button onClick={handleOpenAddDialog}>
+            <PlusIcon className="mr-2 h-4 w-4" />
+            Agregar Cancha
+          </Button>
+
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <PlusIcon className="mr-2 h-4 w-4" />
-                Agregar Cancha
-              </Button>
-            </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
               <DialogHeader>
                 <DialogTitle>Agregar Nueva Cancha</DialogTitle>

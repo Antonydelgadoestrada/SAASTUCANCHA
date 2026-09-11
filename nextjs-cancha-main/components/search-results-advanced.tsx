@@ -1937,12 +1937,9 @@ export function SearchResults({
                         ? selectedCourt.clubData?.yapeTitular || (selectedCourt as any).yapeTitular
                         : selectedCourt.clubData?.plinTitular || (selectedCourt as any).plinTitular;
                     const phone =
-                      (payMethod === "yape"
+                      payMethod === "yape"
                         ? selectedCourt.clubData?.yapeNumero || selectedCourt.yapeNumero
-                        : selectedCourt.clubData?.plinNumero || selectedCourt.plinNumero) ||
-                      selectedCourt.whatsapp ||
-                      selectedCourt.phone ||
-                      "987654321";
+                        : selectedCourt.clubData?.plinNumero || selectedCourt.plinNumero;
                     const qrUrl =
                       payMethod === "yape"
                         ? selectedCourt.clubData?.yapeQrUrl || selectedCourt.yapeQrUrl
@@ -1973,17 +1970,25 @@ export function SearchResults({
                               Número de {payMethod === "yape" ? "Yape" : "Plin"}:
                             </span>
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-mono font-bold">{phone}</span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs"
-                                onClick={() => handleCopyPhone(phone)}
-                              >
-                                {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                                <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
-                              </Button>
+                              {phone ? (
+                                <>
+                                  <span className="text-sm font-mono font-bold">{phone}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => handleCopyPhone(phone)}
+                                  >
+                                    {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                                    <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 italic">
+                                  No configurado por el club
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -1996,14 +2001,14 @@ export function SearchResults({
                                   type="button"
                                   className="relative group h-12 w-12 rounded-lg border overflow-hidden bg-white p-0.5 shrink-0 shadow-sm"
                                   onClick={() => {
+                                    const payPricing = getEffectivePricing(selectedCourt, selectedTime, duration);
+                                    const amountVal = payOption === "advance" ? payPricing.advanceAmount : payPricing.totalPrice;
                                     setQrModalData({
                                       qrUrl,
                                       walletType: payMethod === "plin" ? "plin" : "yape",
                                       titular,
-                                      phone,
-                                      amount: payOption === "advance"
-                                        ? getEffectivePricing(selectedCourt, selectedTime, duration).advanceAmount
-                                        : getEffectivePricing(selectedCourt, selectedTime, duration).totalPrice,
+                                      phone: phone || "",
+                                      amount: amountVal,
                                     });
                                     setQrModalOpen(true);
                                   }}
@@ -2021,14 +2026,14 @@ export function SearchResults({
                                     size="sm"
                                     className="h-6 px-2 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 justify-start"
                                     onClick={() => {
+                                      const payPricing = getEffectivePricing(selectedCourt, selectedTime, duration);
+                                      const amountVal = payOption === "advance" ? payPricing.advanceAmount : payPricing.totalPrice;
                                       setQrModalData({
                                         qrUrl,
                                         walletType: payMethod === "plin" ? "plin" : "yape",
                                         titular,
-                                        phone,
-                                        amount: payOption === "advance"
-                                          ? getEffectivePricing(selectedCourt, selectedTime, duration).advanceAmount
-                                          : getEffectivePricing(selectedCourt, selectedTime, duration).totalPrice,
+                                        phone: phone || "",
+                                        amount: amountVal,
                                       });
                                       setQrModalOpen(true);
                                     }}
@@ -2044,7 +2049,7 @@ export function SearchResults({
                                     onClick={() =>
                                       downloadImage(
                                         qrUrl,
-                                        `QR-${payMethod}-${phone || "cancha"}.png`
+                                        `QR-${payMethod}-${phone || "reserva"}.png`
                                       )
                                     }
                                   >
@@ -2065,11 +2070,11 @@ export function SearchResults({
                     );
                   })()}
 
-                  {/* Aviso de tiempo límite de 15 minutos */}
+                  {/* Aviso de tiempo límite de 10 minutos */}
                   <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
                     <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
                     <p className="leading-snug">
-                      ⏳ <strong>Tienes 15 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
+                      ⏳ <strong>Tienes 10 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
                     </p>
                   </div>
 

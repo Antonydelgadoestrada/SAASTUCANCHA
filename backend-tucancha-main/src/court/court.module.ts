@@ -7,8 +7,10 @@ import { AwsModule } from '../aws/aws.module';
 import { ScheduleTemplate } from '../schedule/schedule_template.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
 
+import { Club } from '../club/club.entity';
+
 @Module({
-  imports: [TypeOrmModule.forFeature([Court, ScheduleTemplate, CourtScheduleAvailability]), AwsModule],
+  imports: [TypeOrmModule.forFeature([Court, ScheduleTemplate, CourtScheduleAvailability, Club]), AwsModule],
   providers: [CourtService],
   controllers: [CourtController],
   exports: [CourtService],

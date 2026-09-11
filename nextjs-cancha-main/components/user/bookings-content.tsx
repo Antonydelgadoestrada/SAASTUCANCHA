@@ -1115,7 +1115,7 @@ export function UserBookingsContent() {
                     const club = selectedBooking.court?.venue?.club || selectedBooking.court?.club || selectedBooking.club
                     const venue = selectedBooking.court?.venue
                     const titular = payMethod === "yape" ? club?.yapeTitular : club?.plinTitular
-                    const phone = (payMethod === "yape" ? club?.yapeNumero : club?.plinNumero) || club?.whatsapp || venue?.phone || club?.phone || "987654321"
+                    const phone = payMethod === "yape" ? club?.yapeNumero : club?.plinNumero
                     const qrUrl = payMethod === "yape" ? club?.yapeQrUrl : club?.plinQrUrl
 
                     return (
@@ -1141,17 +1141,25 @@ export function UserBookingsContent() {
                           <div className="p-3 bg-muted/40 rounded-xl border space-y-1.5 flex flex-col justify-between">
                             <span className="text-[11px] text-muted-foreground">Número de {payMethod === "yape" ? "Yape" : "Plin"}:</span>
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-mono font-bold">{phone}</span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs"
-                                onClick={() => handleCopyPhone(phone)}
-                              >
-                                {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-                                <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
-                              </Button>
+                              {phone ? (
+                                <>
+                                  <span className="text-sm font-mono font-bold">{phone}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => handleCopyPhone(phone)}
+                                  >
+                                    {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                                    <span className="ml-1 text-xs">{copiedPhone ? "Listo" : "Copiar"}</span>
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 italic">
+                                  No configurado por el club
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -1174,7 +1182,7 @@ export function UserBookingsContent() {
                                       qrUrl,
                                       walletType: payMethod === "plin" ? "plin" : "yape",
                                       titular,
-                                      phone,
+                                      phone: phone || "",
                                       amount: amountVal,
                                     })
                                     setQrModalOpen(true)
@@ -1203,7 +1211,7 @@ export function UserBookingsContent() {
                                         qrUrl,
                                         walletType: payMethod === "plin" ? "plin" : "yape",
                                         titular,
-                                        phone,
+                                        phone: phone || "",
                                         amount: amountVal,
                                       })
                                       setQrModalOpen(true)
@@ -1241,11 +1249,11 @@ export function UserBookingsContent() {
                     )
                   })()}
 
-                  {/* Aviso de tiempo límite de 5 minutos */}
+                  {/* Aviso de tiempo límite de 10 minutos */}
                   <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
                     <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
                     <p className="leading-snug">
-                      ⏳ <strong>Tienes 5 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
+                      ⏳ <strong>Tienes 10 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
                     </p>
                   </div>
 

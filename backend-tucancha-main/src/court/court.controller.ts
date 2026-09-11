@@ -22,9 +22,17 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { User } from '../user/user.entity';
 import { GetUser } from '../auth/get-user.decorator';
 
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Club } from '../club/club.entity';
+
   @Controller('courts')
   export class CourtController {
-    constructor(private readonly service: CourtService) {}
+    constructor(
+      private readonly service: CourtService,
+      @InjectRepository(Club)
+      private readonly clubRepo: Repository<Club>,
+    ) {}
   
     @Get()
     findAll(): Promise<Court[]> {
@@ -77,6 +85,21 @@ import { GetUser } from '../auth/get-user.decorator';
       @UploadedFiles() images: MulterFile[],
       @GetUser() user: User
     ) {
+      if (user?.role === 'CLUB' && user?.club?.id) {
+        // Validar si el club ya configuró sus métodos de cobro
+        const club = await this.clubRepo.findOne({ where: { id: user.club.id } });
+        const hasYape = Boolean(club?.aceptaYape && club?.yapeNumero?.trim());
+        const hasPlin = Boolean(club?.aceptaPlin && club?.plinNumero?.trim());
+        const hasMp = Boolean(club?.aceptaMercadopago && club?.mpAccessToken);
+
+        if (!hasYape && !hasPlin && !hasMp) {
+          throw new BadRequestException(
+            'Antes de publicar tus canchas, debes configurar tus métodos de cobro y pago (número de Yape, Plin o Mercado Pago) en el módulo "Pagos y Cobros".'
+          );
+        }
+        data.club = user.club.id;
+      }
+
       let existingUrls: string[] = [];
       if (data.existingImages) {
         try {
@@ -99,9 +122,6 @@ import { GetUser } from '../auth/get-user.decorator';
       const allImages = [...(Array.isArray(existingUrls) ? existingUrls : []), ...uploadedUrls];
 
       delete data.existingImages;
-      if (user?.club?.id) {
-        data.club = user.club.id;
-      }
       return this.service.create({ ...data, images: allImages });
     }
     
