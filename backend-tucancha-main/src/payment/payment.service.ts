@@ -365,6 +365,9 @@ export class PaymentService {
           paymentRecord.feeAmount = comisionMp + comisionApp;
           paymentRecord.paymentType = paymentType;
           paymentRecord.paymentMethod = paymentMethod;
+          paymentRecord.type = PaymentType.PAGO_COMPLETO;
+          paymentRecord.saldoStatus = 'NO_APLICA';
+          paymentRecord.saldoAmount = 0;
           paymentRecord.gatewayResponse = mpPayment;
           await trxManager.save(Payment, paymentRecord);
         } else {
@@ -379,6 +382,9 @@ export class PaymentService {
             feeAmount: comisionMp + comisionApp,
             paymentType,
             paymentMethod,
+            type: PaymentType.PAGO_COMPLETO,
+            saldoStatus: 'NO_APLICA',
+            saldoAmount: 0,
             gatewayResponse: mpPayment,
           });
           await trxManager.save(Payment, paymentRecord);
@@ -572,37 +578,110 @@ export class PaymentService {
     }
 
     if (filters.status && filters.status !== 'all') {
-      if (filters.status === 'pending') {
-        query.andWhere('payment.status IN (:...ps)', { ps: ['PENDING', 'PENDIENTE'] });
-      } else if (filters.status === 'confirmed' || filters.status === 'completed') {
-        query.andWhere('payment.status IN (:...cs)', { cs: ['PAID', 'CONFIRMADO'] });
-      } else if (filters.status === 'rejected') {
-        query.andWhere('payment.status IN (:...rs)', { rs: ['REJECTED', 'RECHAZADO'] });
+      const st = filters.status.toLowerCase().trim();
+      if (st === 'pending' || st === 'pendiente') {
+        query.andWhere('LOWER(payment.status) IN (:...ps)', { ps: ['pending', 'pendiente'] });
+      } else if (st === 'confirmed' || st === 'confirmado' || st === 'paid' || st === 'completed') {
+        query.andWhere('LOWER(payment.status) IN (:...cs)', { cs: ['paid', 'confirmado', 'confirmed', 'completed', 'approved'] });
+      } else if (st === 'rejected' || st === 'rechazado') {
+        query.andWhere('LOWER(payment.status) IN (:...rs)', { rs: ['rejected', 'rechazado', 'failed'] });
       }
     }
 
     if (filters.method && filters.method !== 'all') {
-      query.andWhere('payment.method = :method', { method: filters.method });
+      const meth = filters.method.toUpperCase().trim();
+      if (meth.includes('MERCADO') || meth === 'MP') {
+        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
+          m: ['MERCADOPAGO', 'MP', 'CARD', 'mercadopago'],
+          pm: '%mercado%',
+        });
+      } else if (meth.includes('YAPE')) {
+        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
+          m: ['YAPE', 'yape'],
+          pm: '%yape%',
+        });
+      } else if (meth.includes('PLIN')) {
+        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
+          m: ['PLIN', 'plin'],
+          pm: '%plin%',
+        });
+      } else if (meth.includes('TRANSFER')) {
+        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
+          m: ['TRANSFERENCIA', 'TRANSFER', 'transferencia', 'transfer'],
+          pm: '%transfer%',
+        });
+      } else if (meth.includes('EFECTIVO') || meth.includes('CASH')) {
+        query.andWhere('(payment.method IN (:...m) OR payment.paymentMethod ILIKE :pm)', {
+          m: ['EFECTIVO', 'CASH', 'efectivo', 'cash'],
+          pm: '%efectivo%',
+        });
+      } else {
+        query.andWhere('payment.method = :method', { method: filters.method });
+      }
     }
 
     if (filters.type && filters.type !== 'all') {
-      query.andWhere('payment.type = :type', { type: filters.type });
+      const tp = filters.type.toUpperCase().trim();
+      if (tp.includes('ADELANTO') || tp.includes('ADVANCE')) {
+        query.andWhere('payment.type IN (:...ts)', { ts: ['ADELANTO', 'advance', 'advance_payment'] });
+      } else if (tp.includes('SALDO')) {
+        query.andWhere('payment.type IN (:...ts)', { ts: ['SALDO', 'saldo', 'balance'] });
+      } else if (tp.includes('COMPLETO') || tp.includes('FULL') || tp.includes('PAGO_COMPLETO')) {
+        query.andWhere('(payment.type IN (:...ts) OR payment.type IS NULL)', { ts: ['PAGO_COMPLETO', 'COMPLETO', 'full_payment'] });
+      }
     }
 
     const rawList = await query.getMany();
 
+    const formattedList = rawList.map((p) => {
+      const b = p.bookings?.[0] || null;
+      const customerName = b?.customerInfo?.name || b?.user?.name || p.user?.name || 'Cliente';
+      const customerEmail = b?.customerInfo?.email || b?.user?.email || p.user?.email || '';
+      const customerPhone = b?.customerInfo?.phone || b?.user?.phone || '';
+
+      const bFormatted = b
+        ? {
+            ...b,
+            customerInfo: {
+              name: customerName,
+              email: customerEmail,
+              phone: customerPhone,
+            },
+          }
+        : null;
+
+      let computedSaldoStatus = p.saldoStatus;
+      let totalPrice = 0;
+      if (b && typeof b.pricing === 'object' && b.pricing !== null) {
+        totalPrice = Number((b.pricing as any).totalPrice ?? (b.pricing as any).basePrice);
+      }
+      if (isNaN(totalPrice) || totalPrice <= 0) {
+        totalPrice = Number(p.amount || 0);
+      }
+
+      if (p.type === PaymentType.PAGO_COMPLETO || Number(p.amount || 0) >= totalPrice - 0.05) {
+        computedSaldoStatus = p.saldoStatus === 'PAGADO' ? 'PAGADO' : 'NO_APLICA';
+      }
+
+      return {
+        ...p,
+        saldoStatus: computedSaldoStatus,
+        booking: bFormatted,
+      };
+    });
+
     if (filters.search) {
-      const s = filters.search.toLowerCase();
-      return rawList.filter((p) => {
-        const ref = (p.bookings?.[0] as any)?.bookingReference?.toLowerCase() || '';
-        const court = p.bookings?.[0]?.court?.name?.toLowerCase() || '';
-        const name = (p.bookings?.[0] as any)?.customerInfo?.name?.toLowerCase() || (p.bookings?.[0] as any)?.user?.name?.toLowerCase() || '';
-        const email = (p.bookings?.[0] as any)?.customerInfo?.email?.toLowerCase() || (p.bookings?.[0] as any)?.user?.email?.toLowerCase() || '';
+      const s = filters.search.toLowerCase().trim();
+      return formattedList.filter((p) => {
+        const ref = p.booking?.bookingReference?.toLowerCase() || '';
+        const court = p.booking?.court?.name?.toLowerCase() || '';
+        const name = p.booking?.customerInfo?.name?.toLowerCase() || p.user?.name?.toLowerCase() || '';
+        const email = p.booking?.customerInfo?.email?.toLowerCase() || p.user?.email?.toLowerCase() || '';
         return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s);
       });
     }
 
-    return rawList;
+    return formattedList;
   }
 
   generateTimeSlots(start: string, duration: number): string[] {
@@ -724,7 +803,10 @@ export class PaymentService {
       if (existing.status === PaymentStatus.PAID) {
         throw new BadRequestException('Esta reserva ya tiene un pago aprobado.');
       }
-      return existing;
+      return {
+        message: 'Esta reserva ya cuenta con un pago en proceso.',
+        payment: existing,
+      };
     }
 
     if (isNaN(safeAmount) || safeAmount < 0) {
@@ -764,6 +846,8 @@ export class PaymentService {
         paymentMethod: safeMethod,
         status: PaymentStatus.PENDING,
         type: safeType,
+        saldoStatus: safeType === PaymentType.PAGO_COMPLETO ? 'NO_APLICA' : 'PENDIENTE',
+        saldoAmount: 0,
         comprobanteUrl: dto.comprobanteUrl,
         pendingAudit: true,
         autoConfirmed: false,
@@ -837,10 +921,20 @@ export class PaymentService {
       payment.confirmadoPor = auditor;
       payment.motivoRechazo = null;
 
-      if (payment.type === PaymentType.PAGO_COMPLETO) {
-        payment.saldoStatus = 'PAGADO';
+      const firstBooking = payment.bookings?.[0];
+      let totalPrice = 0;
+      if (firstBooking && typeof firstBooking.pricing === 'object' && firstBooking.pricing !== null) {
+        totalPrice = Number((firstBooking.pricing as any).totalPrice ?? (firstBooking.pricing as any).basePrice);
+      }
+      if (isNaN(totalPrice) || totalPrice <= 0) {
+        totalPrice = Number(payment.amount || 0);
+      }
+
+      if (payment.type === PaymentType.PAGO_COMPLETO || Number(payment.amount || 0) >= totalPrice - 0.05) {
+        payment.type = PaymentType.PAGO_COMPLETO;
+        payment.saldoStatus = 'NO_APLICA';
         payment.saldoAmount = 0;
-      } else if (payment.type === PaymentType.ADELANTO && !payment.saldoStatus) {
+      } else if (payment.type === PaymentType.ADELANTO && (!payment.saldoStatus || payment.saldoStatus === 'NO_APLICA')) {
         payment.saldoStatus = 'PENDIENTE';
       }
 

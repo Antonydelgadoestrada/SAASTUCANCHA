@@ -102,7 +102,7 @@ export class Payment {
 
   // ─── CONTROL Y LIQUIDACIÓN DE SALDO RESTANTE ───
   // Estado de liquidación del saldo restante
-  @Column({ type: 'varchar', default: 'PENDIENTE', nullable: true })
+  @Column({ type: 'varchar', default: 'NO_APLICA', nullable: true })
   saldoStatus?: string; // 'PENDIENTE' | 'PAGADO' | 'NO_APLICA'
 
   // Monto cobrado al liquidar el saldo restante

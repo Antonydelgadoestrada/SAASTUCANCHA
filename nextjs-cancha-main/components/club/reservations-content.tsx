@@ -42,52 +42,64 @@ function fmt(val: number) {
 }
 
 export function computePaymentDetails(payment: PaymentItem) {
-  const booking = payment.booking
-  const totalBookingPrice = Number(booking?.pricing?.totalPrice ?? (payment.amount || 0))
+  const booking = payment.booking || (payment as any).bookings?.[0]
+  const totalBookingPrice = Number(booking?.pricing?.totalPrice ?? booking?.pricing?.basePrice ?? payment.amount ?? 0)
   const paidInitial = Number(payment.amount || 0)
-  const isAdvance =
-    payment.type === "ADELANTO" ||
-    String(payment.type).toUpperCase().includes("ADELANTO") ||
-    (totalBookingPrice > paidInitial && totalBookingPrice > 0)
-  const isSaldoPaid =
-    payment.saldoStatus === "PAGADO" ||
-    String(payment.saldoStatus).toUpperCase() === "PAGADO" ||
-    String(payment.saldoStatus).toUpperCase() === "PAID"
-  const isComprobanteRejected =
-    String(payment.status).toUpperCase() === "RECHAZADO" ||
-    String(payment.status).toUpperCase() === "REJECTED"
-  
-  // Saldo faltante exacto por pagar
-  const saldoFaltante = (isAdvance && !isSaldoPaid && !isComprobanteRejected)
-    ? Math.max(0, Number((totalBookingPrice - paidInitial).toFixed(2)))
-    : 0
 
-  const saldoSettledAmount = Number(
-    payment.saldoAmount ?? (isSaldoPaid ? Math.max(0, totalBookingPrice - paidInitial) : 0)
-  )
-
-  const totalRecibido = isSaldoPaid 
-    ? paidInitial + saldoSettledAmount
-    : paidInitial
-
-  const normalizedStatus = String(payment.status || "").toUpperCase()
-
-  const isComprobantePending =
-    normalizedStatus === "PENDIENTE" ||
-    normalizedStatus === "PENDING" ||
-    Boolean(payment.pendingAudit) ||
-    Boolean(booking?.pendingAudit) ||
-    Boolean(payment.autoConfirmed) ||
-    Boolean(booking?.autoConfirmed)
+  const normalizedStatus = String(payment.status || "").toUpperCase().trim()
 
   const isComprobanteApproved =
     normalizedStatus === "CONFIRMADO" ||
     normalizedStatus === "CONFIRMED" ||
     normalizedStatus === "PAID" ||
     normalizedStatus === "PAGADO" ||
-    normalizedStatus === "APPROVED"
+    normalizedStatus === "APPROVED" ||
+    normalizedStatus === "APROBADO"
 
-  const normSaldo = String(payment.saldoStatus || "").toUpperCase()
+  const isComprobanteRejected =
+    normalizedStatus === "RECHAZADO" ||
+    normalizedStatus === "REJECTED" ||
+    normalizedStatus === "FAILED"
+
+  const isComprobantePending =
+    (normalizedStatus === "PENDIENTE" || normalizedStatus === "PENDING") &&
+    !isComprobanteApproved &&
+    !isComprobanteRejected
+
+  const normSaldo = String(payment.saldoStatus || "").toUpperCase().trim()
+  const isTypeAdelanto =
+    String(payment.type || "").toUpperCase().includes("ADELANTO") ||
+    String(payment.type || "").toUpperCase().includes("ADVANCE")
+
+  // Si ya se pagó el 100% o el saldoStatus es NO_APLICA o PAGADO, no es adelanto pendiente
+  const isFullyPaidAmount = totalBookingPrice > 0 && paidInitial >= totalBookingPrice - 0.05
+  const isSaldoPaid =
+    normSaldo === "PAGADO" ||
+    normSaldo === "PAID" ||
+    normSaldo === "NO_APLICA" ||
+    isFullyPaidAmount ||
+    (!isTypeAdelanto && isComprobanteApproved)
+
+  // Solo es adelanto si fue registrado como tal Y todavía falta dinero (> 0.05) Y no ha sido marcado como NO_APLICA
+  const isAdvance =
+    isTypeAdelanto &&
+    !isFullyPaidAmount &&
+    normSaldo !== "NO_APLICA" &&
+    totalBookingPrice > paidInitial + 0.05
+
+  // Saldo faltante exacto por pagar
+  const saldoFaltante = (isAdvance && !isSaldoPaid && !isComprobanteRejected)
+    ? Math.max(0, Number((totalBookingPrice - paidInitial).toFixed(2)))
+    : 0
+
+  const saldoSettledAmount = Number(
+    payment.saldoAmount ?? (isSaldoPaid && isAdvance ? Math.max(0, totalBookingPrice - paidInitial) : 0)
+  )
+
+  const totalRecibido = isSaldoPaid 
+    ? (isAdvance ? paidInitial + saldoSettledAmount : paidInitial)
+    : paidInitial
+
   const isSaldoAuditPending =
     isAdvance &&
     !isSaldoPaid &&
@@ -95,7 +107,8 @@ export function computePaymentDetails(payment: PaymentItem) {
     (normSaldo === "PENDIENTE" || normSaldo === "PENDING" || normSaldo === "")
 
   return {
-    totalBookingPrice,
+    booking,
+    totalBookingPrice: totalBookingPrice > 0 ? totalBookingPrice : paidInitial,
     paidInitial,
     isAdvance,
     isSaldoPaid,
@@ -110,7 +123,7 @@ export function computePaymentDetails(payment: PaymentItem) {
 }
 
 function comprobanteBadge(status: string, autoConfirmed?: boolean, pendingAudit?: boolean) {
-  if (autoConfirmed || pendingAudit) {
+  if (autoConfirmed) {
     return (
       <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-300 font-medium text-xs">
         Auto-Confirmado
@@ -155,7 +168,7 @@ function saldoBadge(
   if (isRejected) {
     return <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-slate-300 text-xs">Cancelado</Badge>
   }
-  if (!isAdvance) {
+  if (!isAdvance || saldoFaltante <= 0.01) {
     return (
       <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
         100% Pagado
@@ -186,7 +199,7 @@ function saldoBadge(
   }
   return (
     <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-300 font-semibold text-xs">
-      Saldo Pendiente
+      Saldo Pendiente ({fmt(saldoFaltante)})
     </Badge>
   )
 }
@@ -521,9 +534,10 @@ function PaymentDetailModal({
   const details = computePaymentDetails(payment)
   const isAuditPending = details.isComprobantePending
   const isAutoConfirmed = payment.autoConfirmed || payment.booking?.autoConfirmed
-  const booking = payment.booking
-  const customer = booking?.customerInfo
+  const booking = details.booking || payment.booking || (payment as any).bookings?.[0]
+  const customer = booking?.customerInfo || payment.user
   const customerName = customer?.name || payment.user?.name || "El cliente"
+  const bookingRef = booking?.bookingReference || (booking as any)?.reference || (payment as any)?.bookingReference || payment.id.slice(0, 8).toUpperCase()
 
   const hasSaldoVoucher = Boolean(payment.saldoComprobanteUrl)
   const isSaldoPending = details.isSaldoAuditPending
@@ -599,7 +613,7 @@ function PaymentDetailModal({
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Código de reserva</p>
-              <p className="font-mono text-xs text-foreground font-bold">{booking?.bookingReference || "—"}</p>
+              <p className="font-mono text-xs text-foreground font-bold">{bookingRef}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Fecha de registro</p>
@@ -1112,11 +1126,80 @@ function MetricsAuditTab() {
     staleTime: 30_000,
   })
 
-  const { data: payments = [], isLoading: loadingList } = useQuery<PaymentItem[]>({
+  const { data: rawPayments = [], isLoading: loadingList } = useQuery<PaymentItem[]>({
     queryKey: ["club-payments-list", { status: statusFilter, method: methodFilter, type: typeFilter, search }],
     queryFn: () => getClubPaymentsList({ status: statusFilter, method: methodFilter, type: typeFilter, search }),
     staleTime: 15_000,
   })
+
+  // Filtro reactivo en memoria para máxima robustez
+  const filteredPayments = (rawPayments || []).filter((p) => {
+    const details = computePaymentDetails(p)
+    const booking = details.booking
+    const customer = booking?.customerInfo || p.user
+    const customerName = customer?.name || p.user?.name || ""
+    const bookingRef = booking?.bookingReference || (booking as any)?.reference || (p as any)?.bookingReference || ""
+    const courtName = booking?.court?.name || ""
+    const customerEmail = customer?.email || p.user?.email || ""
+
+    // Filtro de búsqueda por texto
+    if (search.trim()) {
+      const q = search.toLowerCase().trim()
+      const matches =
+        customerName.toLowerCase().includes(q) ||
+        bookingRef.toLowerCase().includes(q) ||
+        courtName.toLowerCase().includes(q) ||
+        customerEmail.toLowerCase().includes(q) ||
+        String(p.id).toLowerCase().includes(q)
+      if (!matches) return false
+    }
+
+    // Filtro por estado
+    if (statusFilter !== "all") {
+      if (statusFilter === "pending") {
+        if (!details.isComprobantePending && !details.isSaldoAuditPending) return false
+      } else if (statusFilter === "confirmed") {
+        if (!details.isComprobanteApproved) return false
+      } else if (statusFilter === "rejected") {
+        if (!details.isComprobanteRejected && String(p.saldoStatus).toUpperCase() !== "RECHAZADO") return false
+      }
+    }
+
+    // Filtro por método
+    if (methodFilter !== "all") {
+      const pMethod = String(p.method || (p as any).paymentMethod || "").toUpperCase()
+      const targetMethod = methodFilter.toUpperCase()
+      if (targetMethod === "MERCADOPAGO" && !pMethod.includes("MERCADO") && !pMethod.includes("MP") && !pMethod.includes("CARD")) {
+        return false
+      } else if (targetMethod === "YAPE" && !pMethod.includes("YAPE")) {
+        return false
+      } else if (targetMethod === "PLIN" && !pMethod.includes("PLIN")) {
+        return false
+      } else if (targetMethod === "TRANSFERENCIA" && !pMethod.includes("TRANSFER")) {
+        return false
+      } else if (targetMethod === "EFECTIVO" && !pMethod.includes("EFECTIVO") && !pMethod.includes("CASH")) {
+        return false
+      }
+    }
+
+    // Filtro por tipo
+    if (typeFilter !== "all") {
+      if (typeFilter === "ADELANTO" && !details.isAdvance) return false
+      if (typeFilter === "SALDO" && String(p.type).toUpperCase() !== "SALDO") return false
+      if (typeFilter === "PAGO_COMPLETO" && details.isAdvance) return false
+    }
+
+    return true
+  })
+
+  const hasActiveFilters = search !== "" || statusFilter !== "all" || methodFilter !== "all" || typeFilter !== "all"
+
+  const clearFilters = () => {
+    setSearch("")
+    setStatusFilter("all")
+    setMethodFilter("all")
+    setTypeFilter("all")
+  }
 
   const openDetail = (p: PaymentItem) => {
     setSelectedPayment(p)
@@ -1174,14 +1257,14 @@ function MetricsAuditTab() {
         <div className="relative flex-1">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/80" />
           <Input
-            placeholder="Buscar cliente, cancha o código de reserva..."
+            placeholder="Buscar por cliente, cancha o código de reserva..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Estado Comprobante" />
           </SelectTrigger>
           <SelectContent>
@@ -1192,7 +1275,7 @@ function MetricsAuditTab() {
           </SelectContent>
         </Select>
         <Select value={methodFilter} onValueChange={setMethodFilter}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Todos los métodos" />
           </SelectTrigger>
           <SelectContent>
@@ -1205,7 +1288,7 @@ function MetricsAuditTab() {
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Tipo de Pago" />
           </SelectTrigger>
           <SelectContent>
@@ -1215,6 +1298,11 @@ function MetricsAuditTab() {
             <SelectItem value="PAGO_COMPLETO">Pago Completo</SelectItem>
           </SelectContent>
         </Select>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground">
+            Limpiar Filtros
+          </Button>
+        )}
       </div>
 
       {/* Bandeja de Transacciones y Comprobantes */}
@@ -1229,7 +1317,7 @@ function MetricsAuditTab() {
             </p>
           </div>
           <Badge variant="outline" className="text-xs font-semibold bg-card dark:bg-slate-800">
-            {payments.length} registro{payments.length !== 1 ? "s" : ""}
+            {filteredPayments.length} registro{filteredPayments.length !== 1 ? "s" : ""}
           </Badge>
         </div>
 
@@ -1237,18 +1325,23 @@ function MetricsAuditTab() {
           <div className="p-6 space-y-3">
             {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
-        ) : payments.length === 0 ? (
+        ) : filteredPayments.length === 0 ? (
           <div className="p-12 flex flex-col items-center gap-3 text-muted-foreground/80">
             <DollarSignIcon className="w-12 h-12 opacity-25" />
             <p className="font-semibold text-sm">No se encontraron pagos con los filtros aplicados</p>
-            <p className="text-xs">Intenta cambiar los filtros de búsqueda.</p>
+            <p className="text-xs">Intenta cambiar los filtros de búsqueda o presiona Limpiar Filtros.</p>
+            {hasActiveFilters && (
+              <Button variant="outline" size="sm" onClick={clearFilters} className="mt-2 text-xs">
+                Restablecer Filtros
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-muted/30 text-xs font-bold text-muted-foreground uppercase tracking-wide border-b">
                 <tr>
-                  <th className="px-4 py-3 text-left">Cliente & Reserva</th>
+                  <th className="px-4 py-3 text-left">Cliente & N° Reserva</th>
                   <th className="px-4 py-3 text-left">1er Pago (Inicial / Adelanto)</th>
                   <th className="px-4 py-3 text-left">2do Pago (Saldo Restante)</th>
                   <th className="px-4 py-3 text-left">Total Reserva</th>
@@ -1257,10 +1350,12 @@ function MetricsAuditTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {payments.map((p) => {
-                  const customer = p.booking?.customerInfo
-                  const customerName = customer?.name || p.user?.name || "Cliente"
+                {filteredPayments.map((p) => {
                   const details = computePaymentDetails(p)
+                  const booking = details.booking
+                  const customer = booking?.customerInfo || p.user
+                  const customerName = customer?.name || p.user?.name || "Cliente"
+                  const bookingRef = booking?.bookingReference || (booking as any)?.reference || (p as any)?.bookingReference || p.id.slice(0, 8).toUpperCase()
                   const isAuditRequired1 = details.isComprobantePending
                   const isAuditRequired2 = details.isSaldoAuditPending
                   const hasPendingBalance = details.isAdvance && !details.isSaldoPaid && !details.isComprobanteRejected
@@ -1272,22 +1367,34 @@ function MetricsAuditTab() {
                         isAuditRequired1 || isAuditRequired2 ? "bg-amber-500/10/30 dark:bg-amber-950/10" : ""
                       }`}
                     >
-                      {/* Cliente & Cancha */}
+                      {/* Cliente & Código de Reserva */}
                       <td className="px-4 py-3">
-                        <p className="font-medium text-foreground">
-                          {customerName}
-                        </p>
-                        <p className="font-semibold text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                          {p.booking?.court?.name || "—"}
-                        </p>
-                        {p.booking?.date && (
-                          <p className="text-[11px] text-muted-foreground">
-                            {format(new Date(p.booking.date), "dd/MM")} • {p.booking.startTime?.slice(0,5)} - {p.booking.endTime?.slice(0,5)}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-foreground text-sm">
+                              {customerName}
+                            </span>
+                            <Badge variant="secondary" className="font-mono text-[11px] font-bold bg-primary/10 text-primary border border-primary/25">
+                              #{bookingRef}
+                            </Badge>
+                          </div>
+                          
+                          <p className="font-medium text-xs text-slate-600 dark:text-slate-300">
+                            {booking?.court?.name || "Cancha"}
                           </p>
-                        )}
-                        {p.booking?.bookingReference && (
-                          <p className="font-mono text-[10px] text-muted-foreground/80">Ref: {p.booking.bookingReference}</p>
-                        )}
+
+                          {booking?.date && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {format(new Date(booking.date), "dd/MM/yyyy")} • {booking.startTime?.slice(0,5)} - {booking.endTime?.slice(0,5)}
+                            </p>
+                          )}
+
+                          {customer?.phone && (
+                            <p className="text-[10px] text-muted-foreground/80">
+                              Tel: {customer.phone}
+                            </p>
+                          )}
+                        </div>
                       </td>
 
                       {/* 1er Pago (Inicial / Adelanto) */}
@@ -1299,7 +1406,7 @@ function MetricsAuditTab() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {comprobanteBadge(p.status, p.autoConfirmed || p.booking?.autoConfirmed, p.pendingAudit || p.booking?.pendingAudit)}
+                            {comprobanteBadge(p.status, p.autoConfirmed || booking?.autoConfirmed, p.pendingAudit || booking?.pendingAudit)}
                           </div>
 
                           {/* Miniatura y Acciones de 1er Comprobante */}
@@ -1312,7 +1419,7 @@ function MetricsAuditTab() {
                                   handleOpenLightbox(
                                     p.comprobanteUrl!,
                                     "1er Comprobante de Pago",
-                                    `${customerName} • ${fmt(p.amount)}`,
+                                    `${customerName} • ${fmt(p.amount)} • #${bookingRef}`,
                                     typeLabel(p.type)
                                   )
                                 }
@@ -1338,7 +1445,7 @@ function MetricsAuditTab() {
                                     handleOpenLightbox(
                                       p.comprobanteUrl!,
                                       "1er Comprobante de Pago",
-                                      `${customerName} • ${fmt(p.amount)}`,
+                                      `${customerName} • ${fmt(p.amount)} • #${bookingRef}`,
                                       typeLabel(p.type)
                                     )
                                   }
@@ -1354,7 +1461,7 @@ function MetricsAuditTab() {
                                   onClick={() =>
                                     downloadImage(
                                       p.comprobanteUrl!,
-                                      `comprobante-1er-pago-${p.booking?.bookingReference || p.id}.png`
+                                      `comprobante-1er-pago-${bookingRef || p.id}.png`
                                     )
                                   }
                                 >
@@ -1424,7 +1531,7 @@ function MetricsAuditTab() {
                                       handleOpenLightbox(
                                         p.saldoComprobanteUrl!,
                                         "2do Comprobante (Saldo)",
-                                        `${customerName} • ${fmt(details.saldoSettledAmount || details.saldoFaltante)}`,
+                                        `${customerName} • ${fmt(details.saldoSettledAmount || details.saldoFaltante)} • #${bookingRef}`,
                                         "Saldo Restante"
                                       )
                                     }
@@ -1450,7 +1557,7 @@ function MetricsAuditTab() {
                                         handleOpenLightbox(
                                           p.saldoComprobanteUrl!,
                                           "2do Comprobante (Saldo)",
-                                          `${customerName} • ${fmt(details.saldoSettledAmount || details.saldoFaltante)}`,
+                                          `${customerName} • ${fmt(details.saldoSettledAmount || details.saldoFaltante)} • #${bookingRef}`,
                                           "Saldo Restante"
                                         )
                                       }
@@ -1466,7 +1573,7 @@ function MetricsAuditTab() {
                                       onClick={() =>
                                         downloadImage(
                                           p.saldoComprobanteUrl!,
-                                          `comprobante-2do-pago-saldo-${p.booking?.bookingReference || p.id}.png`
+                                          `comprobante-2do-pago-saldo-${bookingRef || p.id}.png`
                                         )
                                       }
                                     >
@@ -1520,7 +1627,7 @@ function MetricsAuditTab() {
 
                       {/* Fecha */}
                       <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {format(new Date(p.createdAt), "dd/MM HH:mm")}
+                        {format(new Date(p.createdAt), "dd/MM/yyyy HH:mm")}
                       </td>
 
                       {/* Acciones Generales */}
