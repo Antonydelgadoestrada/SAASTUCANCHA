@@ -869,6 +869,7 @@ export function PaymentSettingsTab() {
                     <span className="font-bold text-sm text-foreground">Configuración Yape</span>
                   </div>
 
+                  <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
                       className={!aceptaYape
@@ -1125,6 +1126,7 @@ export function PaymentSettingsTab() {
                     <span className="font-bold text-sm text-foreground">Configuración Plin</span>
                   </div>
 
+                  <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
                       className={!aceptaPlin
