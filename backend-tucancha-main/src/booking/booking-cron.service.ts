@@ -47,9 +47,9 @@ export class BookingCronService {
    * 3. Con comprobante subido -> Se auto-confirma a las 2 horas si el club no responde (cancha 100% asegurada).
    * 4. Recordatorio automático 30 minutos antes del turno para reducir inasistencias.
    */
-  @Cron('*/2 * * * *')
+  @Cron('*/1 * * * *')
   async handleBookingLifecycle() {
-    this.logger.log('⏰ Ejecutando ciclo de reservas (Yape/Plin sin voucher > 5m, WhatsApp sin confirmar > 2h, Con voucher > 2h, Recordatorios 30m)...');
+    this.logger.log('⏰ Ejecutando ciclo de reservas (Yape/Plin sin voucher > 10m, WhatsApp sin confirmar > 2h, Con voucher > 2h, Recordatorios 30m)...');
     await this.handleUnpaidBookingsAutoCancellation();
     await this.handleWhatsAppUnconfirmedBookingsAutoCancellation();
     await this.handleVoucherUploadedAutoConfirmation();
@@ -57,17 +57,17 @@ export class BookingCronService {
   }
 
   /**
-   * 1) Reservó con método regular (Yape/Plin/Transferencia) pero AÚN NO subió comprobante y pasaron > 5 minutos:
+   * 1) Reservó con método regular (Yape/Plin/Transferencia) pero AÚN NO subió comprobante y pasaron > 10 minutos:
    * Se auto-cancela la reserva y se liberan los horarios en la cancha.
    */
   async handleUnpaidBookingsAutoCancellation() {
-    const fiveMinutesAgo = subMinutes(new Date(), 5);
+    const tenMinutesAgo = subMinutes(new Date(), 10);
 
     try {
       const pendingBookings = await this.bookingRepo.find({
         where: {
           status: BookingStatus.PENDING,
-          createdAt: LessThan(fiveMinutesAgo),
+          createdAt: LessThan(tenMinutesAgo),
           autoCancelled: false,
           autoConfirmed: false,
         },
@@ -94,11 +94,11 @@ export class BookingCronService {
           continue;
         }
 
-        this.logger.log(`⚠️ Cancelando reserva regular expirada sin comprobante (> 5 min): ${booking.bookingReference} (ID: ${booking.id})`);
+        this.logger.log(`⚠️ Cancelando reserva regular expirada sin comprobante (> 10 min): ${booking.bookingReference} (ID: ${booking.id})`);
 
         booking.status = BookingStatus.CANCELLED;
         booking.cancelledAt = new Date();
-        booking.cancellationReason = 'Cancelado automáticamente por falta de pago (tiempo límite de 5 minutos excedido sin comprobante)';
+        booking.cancellationReason = 'Cancelado automáticamente por falta de pago (tiempo límite de 10 minutos excedido sin comprobante)';
         booking.autoCancelled = true;
         booking.paymentStatus = PaymentStatus.FAILED;
 

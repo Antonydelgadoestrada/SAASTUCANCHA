@@ -572,7 +572,7 @@ export function UserBookingsContent() {
                           </div>
                         ) : (
                           <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
-                            ⏱️ <strong>Tolerancia:</strong> Sube tu comprobante dentro de los <strong>15 min</strong> de reservar para asegurar tu horario.
+                            ⏱️ <strong>Tolerancia:</strong> Sube tu comprobante dentro de los <strong>10 min</strong> de reservar para asegurar tu horario.
                           </div>
                         )}
                       </CardContent>

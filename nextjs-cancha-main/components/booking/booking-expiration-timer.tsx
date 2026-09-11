@@ -4,9 +4,20 @@ import React, { useEffect, useState } from "react"
 import { Clock, AlertTriangle, Flame } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-function dateStringHasTimezone(str: string) {
-  // Regex to check if the string ends with a timezone offset like -05:00 or +0200
-  return /[+-]\d{2}:?\d{2}$/.test(str);
+function parseCreationTimestamp(createdAt: string | Date | undefined): number {
+  if (!createdAt) return Date.now()
+  if (createdAt instanceof Date) return createdAt.getTime()
+  if (typeof createdAt === "number") return createdAt
+  
+  const str = String(createdAt).trim()
+  const direct = new Date(str).getTime()
+  if (!isNaN(direct)) return direct
+
+  const iso = str.replace(" ", "T")
+  const parsed = new Date(iso).getTime()
+  if (!isNaN(parsed)) return parsed
+
+  return Date.now()
 }
 
 interface BookingExpirationTimerProps {
@@ -30,23 +41,13 @@ export function BookingExpirationTimer({
     formattedText: string
   } | null>(null)
 
-  const isWhatsApp =
-    paymentMethod?.toLowerCase() === "whatsapp" ||
-    paymentMethod?.toLowerCase() === "solo whatsapp"
-
-  // 120 minutos para WhatsApp, 5 minutos para método regular (Yape/Plin)
-  const limitMinutes = isWhatsApp ? 120 : 5
+  // Tiempo límite estricto de espera: 10 minutos
+  const limitMinutes = 10
 
   useEffect(() => {
     if (!createdAt) return
 
-    let dateStr = typeof createdAt === "string" ? createdAt : new Date(createdAt).toISOString()
-    if (typeof dateStr === "string" && !dateStr.endsWith("Z") && !dateStr.includes("+") && !dateStringHasTimezone(dateStr)) {
-      dateStr += "Z"
-    }
-    const createdTime = new Date(dateStr).getTime()
-    if (isNaN(createdTime)) return
-
+    const createdTime = parseCreationTimestamp(createdAt)
     const expiryTime = createdTime + limitMinutes * 60 * 1000
 
     const updateTimer = () => {
@@ -64,16 +65,9 @@ export function BookingExpirationTimer({
         return
       }
 
-      const hours = Math.floor(diffSec / 3600)
-      const minutes = Math.floor((diffSec % 3600) / 60)
+      const minutes = Math.floor(diffSec / 60)
       const seconds = diffSec % 60
-
-      let formatted = ""
-      if (hours > 0) {
-        formatted = `${hours}h ${minutes}m ${seconds.toString().padStart(2, "0")}s`
-      } else {
-        formatted = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")} min`
-      }
+      const formatted = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")} min`
 
       setTimeLeft({
         totalSeconds: diffSec,
@@ -165,7 +159,7 @@ export function BookingExpirationTimer({
           <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
         )}
         <span>
-          {isWhatsApp ? "Tiempo de coordinación:" : "Tiempo para adjuntar comprobante:"}
+          Tiempo para adjuntar comprobante:
         </span>
       </div>
       <div className="flex items-center gap-1">
