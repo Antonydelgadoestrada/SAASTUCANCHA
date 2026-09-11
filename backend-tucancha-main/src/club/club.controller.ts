@@ -77,9 +77,42 @@ import { UpdateClubPaymentConfigDto } from './dto/update-club-payment-config.dto
       return this.service.getPaymentConfig(id);
     }
 
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/config-pagos')
+    async updateConfigPagos(
+      @Param('id') id: string,
+      @Body() dto: UpdateClubPaymentConfigDto,
+      @GetUser() user: User,
+    ) {
+      return this.service.updatePaymentConfig(id, dto, user);
+    }
+
     @Get(':id/payment-config')
     async getPaymentConfig(@Param('id') id: string) {
       return this.service.getPaymentConfig(id);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/payment-config')
+    async updatePaymentConfig(
+      @Param('id') id: string,
+      @Body() dto: UpdateClubPaymentConfigDto,
+      @GetUser() user: User,
+    ) {
+      return this.service.updatePaymentConfig(id, dto, user);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post(':id/upload-qr')
+    @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+    async uploadQrById(
+      @Param('id') id: string,
+      @UploadedFile() file: MulterFile,
+      @GetUser() user: User,
+      @Query('type') type: 'yape' | 'plin' = 'yape',
+    ) {
+      const walletType: 'yape' | 'plin' = type === 'plin' ? 'plin' : 'yape';
+      return this.service.uploadQr(file, user, walletType);
     }
   
     @Get(':id')
