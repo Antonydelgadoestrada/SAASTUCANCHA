@@ -90,30 +90,32 @@ export function ReservationsContent() {
     const searchMatch =
       (reservation.customerInfo?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (reservation.customerInfo?.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reservation.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (reservation.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (reservation.court?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
 
     // Filtro por estado
     const statusMatch = statusFilter === "all" || reservation.status === statusFilter
 
-
     // Filtro por cancha
     const courtMatch =
-      courtFilter === "all" || reservation.court.name === courts.find((c) => c.id.toString() === courtFilter)?.name
-    // Convert the UTC midnight to Local midnight
-    const utcDate = new Date(reservation.date)
-    reservation.date = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate())
+      courtFilter === "all" || reservation.court?.name === courts.find((c) => c.id.toString() === courtFilter)?.name
+
+    // Convert the UTC midnight to Local midnight without mutating reservation.date
+    const rawDate = reservation.date ? new Date(reservation.date) : new Date()
+    const localDate = new Date(rawDate.getUTCFullYear(), rawDate.getUTCMonth(), rawDate.getUTCDate())
 
     // Filtro por fecha
     const dateMatch =
-      (!dateRange.from || reservation.date >= dateRange.from) && (!dateRange.to || reservation.date <= dateRange.to)
+      (!dateRange.from || localDate >= dateRange.from) && (!dateRange.to || localDate <= dateRange.to)
 
     // Filtro por pestaña activa
     let tabMatch = true
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
     if (activeTab === "upcoming") {
-      tabMatch = reservation.date >= new Date() && reservation.status !== "cancelled"
+      tabMatch = localDate >= today && reservation.status !== "cancelled"
     } else if (activeTab === "past") {
-      tabMatch = reservation.date < new Date() || reservation.status === "completed"
+      tabMatch = localDate < today || reservation.status === "completed"
     } else if (activeTab === "cancelled") {
       tabMatch = reservation.status === "cancelled"
     }

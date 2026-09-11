@@ -256,7 +256,10 @@ export function UserBookingsContent() {
   const handlePayment = (booking: any) => {
     setSelectedBooking(booking)
     setPaymentMode("INITIAL")
-    setPayMethod("yape")
+    const yapeOk = booking?.court?.club?.aceptaYape !== false && booking?.court?.clubData?.aceptaYape !== false
+    const plinOk = booking?.court?.club?.aceptaPlin !== false && booking?.court?.clubData?.aceptaPlin !== false
+    const mpOk = booking?.court?.club?.aceptaMercadopago === true || booking?.court?.clubData?.aceptaMercadopago === true
+    setPayMethod(yapeOk ? "yape" : plinOk ? "plin" : mpOk ? "mercadopago" : "yape")
     setReceiptFile(null)
     setReceiptPreview(null)
     setIsPaymentDialogOpen(true)
@@ -265,7 +268,10 @@ export function UserBookingsContent() {
   const handlePaySaldo = (booking: any) => {
     setSelectedBooking(booking)
     setPaymentMode("SALDO")
-    setPayMethod("yape")
+    const yapeOk = booking?.court?.club?.aceptaYape !== false && booking?.court?.clubData?.aceptaYape !== false
+    const plinOk = booking?.court?.club?.aceptaPlin !== false && booking?.court?.clubData?.aceptaPlin !== false
+    const mpOk = booking?.court?.club?.aceptaMercadopago === true || booking?.court?.clubData?.aceptaMercadopago === true
+    setPayMethod(yapeOk ? "yape" : plinOk ? "plin" : mpOk ? "mercadopago" : "efectivo")
     setReceiptFile(null)
     setReceiptPreview(null)
     setIsPaymentDialogOpen(true)
@@ -1018,45 +1024,51 @@ export function UserBookingsContent() {
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   MÉTODO DE PAGO:
                 </label>
-                <div className={`grid ${paymentMode === "SALDO" ? "grid-cols-4" : "grid-cols-3"} gap-2`}>
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod("yape")}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-center transition-all ${
-                      payMethod === "yape"
-                        ? "border-[#720e9e] bg-[#720e9e]/10 font-bold text-[#720e9e] dark:text-purple-300 shadow-sm"
-                        : "border-border hover:border-muted-foreground/40 bg-card"
-                    }`}
-                  >
-                    <Smartphone className="h-4 w-4 mb-1 text-[#720e9e] dark:text-purple-400" />
-                    <span className="text-xs">Yape</span>
-                  </button>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {selectedBooking?.court?.club?.aceptaYape !== false && selectedBooking?.court?.clubData?.aceptaYape !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setPayMethod("yape")}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-center transition-all ${
+                        payMethod === "yape"
+                          ? "border-[#720e9e] bg-[#720e9e]/10 font-bold text-[#720e9e] dark:text-purple-300 shadow-sm"
+                          : "border-border hover:border-muted-foreground/40 bg-card"
+                      }`}
+                    >
+                      <Smartphone className="h-4 w-4 mb-1 text-[#720e9e] dark:text-purple-400" />
+                      <span className="text-xs">Yape</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod("plin")}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-center transition-all ${
-                      payMethod === "plin"
-                        ? "border-[#00bcd4] bg-[#00bcd4]/10 font-bold text-[#008ba3] dark:text-cyan-300 shadow-sm"
-                        : "border-border hover:border-muted-foreground/40 bg-card"
-                    }`}
-                  >
-                    <Smartphone className="h-4 w-4 mb-1 text-[#00bcd4]" />
-                    <span className="text-xs">Plin</span>
-                  </button>
+                  {selectedBooking?.court?.club?.aceptaPlin !== false && selectedBooking?.court?.clubData?.aceptaPlin !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setPayMethod("plin")}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-center transition-all ${
+                        payMethod === "plin"
+                          ? "border-[#00bcd4] bg-[#00bcd4]/10 font-bold text-[#008ba3] dark:text-cyan-300 shadow-sm"
+                          : "border-border hover:border-muted-foreground/40 bg-card"
+                      }`}
+                    >
+                      <Smartphone className="h-4 w-4 mb-1 text-[#00bcd4]" />
+                      <span className="text-xs">Plin</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod("mercadopago")}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-center transition-all ${
-                      payMethod === "mercadopago"
-                        ? "border-sky-500 bg-sky-500/10 font-bold text-sky-600 dark:text-sky-400 shadow-sm"
-                        : "border-border hover:border-muted-foreground/40 bg-card"
-                    }`}
-                  >
-                    <CreditCardIcon className="h-4 w-4 mb-1 text-sky-500" />
-                    <span className="text-xs">Mercado Pago</span>
-                  </button>
+                  {(selectedBooking?.court?.club?.aceptaMercadopago === true || selectedBooking?.court?.clubData?.aceptaMercadopago === true) && (
+                    <button
+                      type="button"
+                      onClick={() => setPayMethod("mercadopago")}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-center transition-all ${
+                        payMethod === "mercadopago"
+                          ? "border-sky-500 bg-sky-500/10 font-bold text-sky-600 dark:text-sky-400 shadow-sm"
+                          : "border-border hover:border-muted-foreground/40 bg-card"
+                      }`}
+                    >
+                      <CreditCardIcon className="h-4 w-4 mb-1 text-sky-500" />
+                      <span className="text-xs">Mercado Pago</span>
+                    </button>
+                  )}
 
                   {paymentMode === "SALDO" && (
                     <button

@@ -18,7 +18,6 @@ import { MailerService } from '../mailer/mailer.service';
 import { Booking } from '../booking/booking.entity';
 import { S3Service } from '../aws/s3.service';
 import { CourtService } from '../court/court.service';
-import { BookingStatus } from '../booking/booking-status.enum';
 
 @Injectable()
 export class PaymentService {
@@ -388,13 +387,14 @@ export class PaymentService {
         for (let booking of bookings) {
           booking.paymentStatus = targetPaymentStatus;
           booking.status = targetBookingStatus;
-          // Actualizamos los montos netos solo si es una sola reserva para no complicar el split
+          // Preservar precio total de la reserva y registrar monto pagado
           if (bookings.length === 1) {
+            const currentTotal = (booking.pricing as any)?.totalPrice;
             booking.pricing = {
               ...booking.pricing,
-              basePrice: netoVendedor,
-              totalPrice: totalPagado,
-            };
+              basePrice: (booking.pricing as any)?.basePrice ?? netoVendedor,
+              totalPrice: currentTotal && Number(currentTotal) > 0 ? Number(currentTotal) : totalPagado,
+            } as any;
           }
           booking.payment = paymentRecord;
           await trxManager.save(Booking, booking);
@@ -569,41 +569,95 @@ export class PaymentService {
       .orderBy('payment.createdAt', 'DESC');
 
     if (clubId) {
-      query.where('booking.clubId = :clubId', { clubId });
+      query.where('(booking.clubId = :clubId OR court.clubId = :clubId OR payment.clubId = :clubId)', { clubId });
     }
 
     if (filters.status && filters.status !== 'all') {
-      if (filters.status === 'pending') {
-        query.andWhere('payment.status IN (:...ps)', { ps: ['PENDING', 'PENDIENTE'] });
-      } else if (filters.status === 'confirmed' || filters.status === 'completed') {
-        query.andWhere('payment.status IN (:...cs)', { cs: ['PAID', 'CONFIRMADO'] });
-      } else if (filters.status === 'rejected') {
-        query.andWhere('payment.status IN (:...rs)', { rs: ['REJECTED', 'RECHAZADO'] });
+      const st = filters.status.toLowerCase();
+      if (st === 'pending' || st === 'pendiente') {
+        query.andWhere('(LOWER(payment.status) IN (:...ps) OR payment.pendingAudit = true)', { ps: ['pending', 'pendiente'] });
+      } else if (st === 'pending_audit') {
+        query.andWhere('payment.pendingAudit = true');
+      } else if (st === 'confirmed' || st === 'completed' || st === 'paid' || st === 'confirmado') {
+        query.andWhere('LOWER(payment.status) IN (:...cs)', { cs: ['paid', 'confirmado', 'confirmed', 'completed'] });
+      } else if (st === 'rejected' || st === 'rechazado') {
+        query.andWhere('LOWER(payment.status) IN (:...rs)', { rs: ['rejected', 'rechazado'] });
+      } else {
+        query.andWhere('LOWER(payment.status) = :st', { st });
       }
     }
 
     if (filters.method && filters.method !== 'all') {
-      query.andWhere('payment.method = :method', { method: filters.method });
+      const m = filters.method.toLowerCase();
+      let methodPatterns: string[] = [m];
+      if (m.includes('mercado') || m.includes('card') || m.includes('mp')) {
+        methodPatterns = ['mercadopago', 'card', 'mp', 'credit_card', 'debit_card'];
+      } else if (m.includes('yape')) {
+        methodPatterns = ['yape'];
+      } else if (m.includes('plin')) {
+        methodPatterns = ['plin'];
+      } else if (m.includes('transfer')) {
+        methodPatterns = ['transferencia', 'transfer', 'bank_transfer'];
+      } else if (m.includes('efectivo') || m.includes('cash')) {
+        methodPatterns = ['efectivo', 'cash'];
+      }
+
+      query.andWhere(
+        '(LOWER(payment.method) IN (:...methods) OR LOWER(payment.paymentMethod) IN (:...methods))',
+        { methods: methodPatterns },
+      );
     }
 
     if (filters.type && filters.type !== 'all') {
-      query.andWhere('payment.type = :type', { type: filters.type });
+      const t = filters.type.toUpperCase();
+      if (t === 'ADELANTO') {
+        query.andWhere("(payment.type = 'ADELANTO' OR payment.type = 'advance' OR payment.type IS NULL)");
+      } else if (t === 'PAGO_COMPLETO') {
+        query.andWhere("(payment.type = 'PAGO_COMPLETO' OR payment.type = 'full' OR payment.type = 'COMPLETO')");
+      } else if (t === 'SALDO') {
+        query.andWhere("(payment.type = 'SALDO' OR payment.type = 'balance')");
+      } else {
+        query.andWhere('LOWER(payment.type) = :type', { type: filters.type.toLowerCase() });
+      }
     }
 
     const rawList = await query.getMany();
 
+    // Mapear cada pago asociándole el objeto booking individual para el frontend
+    const mappedList = rawList.map((p) => {
+      const firstBooking = p.bookings?.[0];
+      if (firstBooking) {
+        (p as any).booking = {
+          ...firstBooking,
+          customerInfo: firstBooking.customerInfo || (firstBooking.user ? {
+            name: firstBooking.user.name,
+            email: firstBooking.user.email,
+            phone: firstBooking.user.phone,
+          } : undefined),
+          court: firstBooking.court,
+          pricing: firstBooking.pricing,
+          date: firstBooking.date,
+          startTime: firstBooking.startTime,
+          duration: firstBooking.duration,
+          bookingReference: (firstBooking as any).bookingReference || (p as any).bookingReference,
+        };
+      }
+      return p;
+    });
+
     if (filters.search) {
       const s = filters.search.toLowerCase();
-      return rawList.filter((p) => {
-        const ref = (p.bookings?.[0] as any)?.bookingReference?.toLowerCase() || '';
-        const court = p.bookings?.[0]?.court?.name?.toLowerCase() || '';
-        const name = (p.bookings?.[0] as any)?.customerInfo?.name?.toLowerCase() || (p.bookings?.[0] as any)?.user?.name?.toLowerCase() || '';
-        const email = (p.bookings?.[0] as any)?.customerInfo?.email?.toLowerCase() || (p.bookings?.[0] as any)?.user?.email?.toLowerCase() || '';
-        return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s);
+      return mappedList.filter((p) => {
+        const ref = (p.bookings?.[0] as any)?.bookingReference?.toLowerCase() || (p as any).booking?.bookingReference?.toLowerCase() || p.id.toLowerCase();
+        const court = p.bookings?.[0]?.court?.name?.toLowerCase() || (p as any).booking?.court?.name?.toLowerCase() || '';
+        const name = (p.bookings?.[0] as any)?.customerInfo?.name?.toLowerCase() || (p.bookings?.[0] as any)?.user?.name?.toLowerCase() || (p as any).payer?.name?.toLowerCase() || '';
+        const email = (p.bookings?.[0] as any)?.customerInfo?.email?.toLowerCase() || (p.bookings?.[0] as any)?.user?.email?.toLowerCase() || (p as any).payer?.email?.toLowerCase() || '';
+        const phone = (p.bookings?.[0] as any)?.customerInfo?.phone?.toLowerCase() || (p.bookings?.[0] as any)?.user?.phone?.toLowerCase() || (p as any).payer?.phone?.toLowerCase() || '';
+        return ref.includes(s) || court.includes(s) || name.includes(s) || email.includes(s) || phone.includes(s);
       });
     }
 
-    return rawList;
+    return mappedList;
   }
 
   generateTimeSlots(start: string, duration: number): string[] {
@@ -889,7 +943,8 @@ export class PaymentService {
 
           // Liberar los slots ocupados
           try {
-            const dateStr = typeof b.date === 'string' ? b.date.substring(0, 10) : new Date(b.date).toISOString().substring(0, 10);
+            const rawDate: any = b.date;
+            const dateStr = typeof rawDate === 'string' ? rawDate.substring(0, 10) : new Date(rawDate).toISOString().substring(0, 10);
             const times = this.generateTimeSlots(b.startTime, Number(b.duration) || 1);
             const payload = times.map((t) => ({
               courtId: b.court.id,

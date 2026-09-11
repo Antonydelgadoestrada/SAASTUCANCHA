@@ -17,6 +17,7 @@ import {
   Clock,
   RefreshCw,
   Tag,
+  CheckCircle2,
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -25,9 +26,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getHourlyOccupancyDemand } from "@/lib/dashboard"
+import { editCourts, getAllCourtsByClub } from "@/lib/courts"
 
 export function HourlyOccupancyView() {
   const [loading, setLoading] = useState(true)
@@ -36,6 +48,86 @@ export function HourlyOccupancyView() {
   const [timePreset, setTimePreset] = useState<string>("30days")
   const [data, setData] = useState<any>(null)
   const [hoveredCell, setHoveredCell] = useState<{ day: number; hour: number } | null>(null)
+
+  // Estado para Modal de Configuración de Promoción Personalizada
+  const [promoModalOpen, setPromoModalOpen] = useState(false)
+  const [promoCourtId, setPromoCourtId] = useState<string>("all")
+  const [promoDayPrice, setPromoDayPrice] = useState<string>("")
+  const [promoNightPrice, setPromoNightPrice] = useState<string>("")
+  const [promoTimeRange, setPromoTimeRange] = useState<string>("")
+  const [promoDayLabel, setPromoDayLabel] = useState<string>("")
+  const [isSavingPromo, setIsSavingPromo] = useState(false)
+  const [clubCourts, setClubCourts] = useState<any[]>([])
+
+  // Cargar canchas del club para el modal
+  useEffect(() => {
+    getAllCourtsByClub()
+      .then((res) => {
+        if (Array.isArray(res)) setClubCourts(res)
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleOpenPromoModal = (params: {
+    timeRange?: string
+    courtId?: string
+    dayLabel?: string
+    suggestedPromoDay?: number
+    suggestedPromoNight?: number
+  }) => {
+    setPromoTimeRange(params.timeRange || "Horario seleccionado")
+    setPromoDayLabel(params.dayLabel || "Todos los días aplicables")
+    setPromoCourtId(params.courtId || selectedCourtId || "all")
+
+    const target = clubCourts.find((c) => c.id?.toString() === (params.courtId || selectedCourtId))
+    if (target) {
+      setPromoDayPrice(target.promoDay ? String(target.promoDay) : target.priceDay ? String(Math.round(target.priceDay * 0.75)) : "")
+      setPromoNightPrice(target.promoNight ? String(target.promoNight) : target.priceNight ? String(Math.round(target.priceNight * 0.8)) : "")
+    } else {
+      setPromoDayPrice(params.suggestedPromoDay ? String(params.suggestedPromoDay) : "")
+      setPromoNightPrice(params.suggestedPromoNight ? String(params.suggestedPromoNight) : "")
+    }
+
+    setPromoModalOpen(true)
+  }
+
+  const handleSavePromo = async () => {
+    if (!promoDayPrice && !promoNightPrice) {
+      toast.error("Por favor ingresa al menos un precio promocional diurno o nocturno")
+      return
+    }
+
+    setIsSavingPromo(true)
+    try {
+      const courtsToUpdate = promoCourtId === "all"
+        ? clubCourts
+        : clubCourts.filter((c) => c.id?.toString() === promoCourtId)
+
+      if (courtsToUpdate.length === 0 && clubCourts.length > 0) {
+        courtsToUpdate.push(clubCourts[0])
+      }
+
+      for (const court of courtsToUpdate) {
+        await editCourts({
+          ...court,
+          promoDay: promoDayPrice ? Number(promoDayPrice) : null,
+          promoNight: promoNightPrice ? Number(promoNightPrice) : null,
+        })
+      }
+
+      toast.success("¡Promoción personalizada configurada exitosamente!", {
+        description: `Se aplicó precio promo a ${courtsToUpdate.length} cancha(s) para la franja ${promoTimeRange}.`,
+      })
+      setPromoModalOpen(false)
+      fetchData()
+    } catch (err: any) {
+      toast.error("Error al guardar la promoción", {
+        description: err.response?.data?.message || err.message,
+      })
+    } finally {
+      setIsSavingPromo(false)
+    }
+  }
 
   // Obtener fechas según preset
   const dateRange = useMemo(() => {
@@ -389,6 +481,11 @@ export function HourlyOccupancyView() {
                             <Tooltip key={day}>
                               <TooltipTrigger asChild>
                                 <div
+                                  onClick={() => handleOpenPromoModal({
+                                    timeRange: `${hourLabel} - ${nextHourLabel}`,
+                                    dayLabel: dayName,
+                                    courtId: selectedCourtId,
+                                  })}
                                   onMouseEnter={() => setHoveredCell({ day, hour })}
                                   onMouseLeave={() => setHoveredCell(null)}
                                   className={`h-9 rounded-lg border flex items-center justify-center text-xs cursor-pointer transition-all duration-150 hover:scale-105 hover:z-10 hover:shadow-md ${getCellColor(
@@ -437,8 +534,8 @@ export function HourlyOccupancyView() {
                                   </div>
                                 </div>
                                 {cell.occupancyRate < 20 && (
-                                  <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded border border-amber-200 dark:border-amber-900 mt-1">
-                                    💡 <em>Sugerencia:</em> Franja vacía. Considera habilitar precio promocional para captar clientes.
+                                  <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded border border-amber-200 dark:border-amber-900 mt-1 cursor-pointer">
+                                    💡 <em>Haz clic en este bloque para configurar precio promocional aquí.</em>
                                   </p>
                                 )}
                                 {cell.occupancyRate >= 75 && (
@@ -503,10 +600,17 @@ export function HourlyOccupancyView() {
                     <span className="text-[10px] text-slate-500 font-medium">
                       Capacidad ociosa: ~{block.lostSlotsEstimate} turnos
                     </span>
-                    <Button variant="ghost" size="sm" asChild className="h-6 text-[11px] text-primary p-0 hover:bg-transparent">
-                      <Link href="/club/schedules">
-                        Configurar precio promo <ArrowRight className="h-3 w-3 ml-1" />
-                      </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenPromoModal({
+                        timeRange: block.timeRange,
+                        courtId: selectedCourtId,
+                      })}
+                      className="h-7 text-xs text-primary font-semibold hover:bg-primary/10 gap-1 px-2.5"
+                    >
+                      <Tag className="h-3.5 w-3.5" />
+                      Configurar promoción <ArrowRight className="h-3 w-3 ml-0.5" />
                     </Button>
                   </div>
                 </div>
@@ -563,6 +667,108 @@ export function HourlyOccupancyView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* MODAL CONFIGURAR PROMOCIÓN DIRECTA */}
+      <Dialog open={promoModalOpen} onOpenChange={setPromoModalOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-5 w-5 text-amber-500" />
+              Configurar Promoción para Horario Muerto
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Establece tarifas promocionales con descuento para incentivar reservas en los horarios de baja afluencia.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="p-3 rounded-lg bg-muted/60 border text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Franja Horaria:</span>
+                <span className="font-bold text-foreground">{promoTimeRange}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Día / Período:</span>
+                <span className="font-medium text-foreground">{promoDayLabel}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Aplicar a la Cancha:</Label>
+              <Select value={promoCourtId} onValueChange={setPromoCourtId}>
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Seleccionar cancha" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🏟️ Todas las Canchas del Club</SelectItem>
+                  {clubCourts.map((c) => (
+                    <SelectItem key={c.id} value={c.id.toString()}>
+                      {c.name} ({c.sport || c.type || "Cancha"})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Precio Promo Día (S/)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground">S/</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Ej. 35"
+                    className="pl-8 text-xs font-semibold"
+                    value={promoDayPrice}
+                    onChange={(e) => setPromoDayPrice(e.target.value)}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">Antes de las 18:00</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Precio Promo Noche (S/)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground">S/</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Ej. 50"
+                    className="pl-8 text-xs font-semibold"
+                    value={promoNightPrice}
+                    onChange={(e) => setPromoNightPrice(e.target.value)}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">A partir de las 18:00</p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded border border-amber-200 dark:border-amber-900 flex items-start gap-1.5">
+              <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                Esta tarifa promocional se reflejará directamente en el calendario y durante la búsqueda de los clientes. Deja en blanco para no aplicar promo a ese turno.
+              </span>
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setPromoModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleSavePromo} disabled={isSavingPromo} className="gap-1.5">
+              {isSavingPromo ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              )}
+              {isSavingPromo ? "Guardando..." : "Guardar Promoción"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

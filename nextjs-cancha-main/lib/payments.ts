@@ -19,6 +19,8 @@ export type PaymentStatusEnum =
 
 export interface ClubPaymentConfig {
   aceptaMercadopago: boolean
+  aceptaYape?: boolean
+  aceptaPlin?: boolean
   whatsapp?: string | null
   yapeNumero?: string | null
   yapeQrUrl?: string | null

@@ -43,7 +43,32 @@ function fmt(val: number) {
 
 export function computePaymentDetails(payment: PaymentItem) {
   const booking = payment.booking
-  const totalBookingPrice = Number(booking?.pricing?.totalPrice ?? (payment.amount || 0))
+  
+  // Extraer precio total real de la reserva
+  let totalBookingPrice = 0
+  if (booking?.pricing) {
+    if (typeof booking.pricing === "object") {
+      totalBookingPrice = Number((booking.pricing as any).totalPrice ?? (booking.pricing as any).basePrice)
+    } else if (typeof booking.pricing === "string") {
+      try {
+        const parsed = JSON.parse(booking.pricing)
+        totalBookingPrice = Number(parsed?.totalPrice ?? parsed?.basePrice)
+      } catch {}
+    }
+  }
+
+  if (isNaN(totalBookingPrice) || totalBookingPrice <= 0) {
+    const courtPrice = Number(booking?.court?.priceDay || booking?.court?.priceNight || 0)
+    const dur = Number(booking?.duration || 1)
+    if (courtPrice > 0) {
+      totalBookingPrice = courtPrice * dur * 2
+    }
+  }
+
+  if (isNaN(totalBookingPrice) || totalBookingPrice <= 0) {
+    totalBookingPrice = Number(payment.amount || 0)
+  }
+
   const paidInitial = Number(payment.amount || 0)
   const isAdvance =
     payment.type === "ADELANTO" ||

@@ -150,6 +150,8 @@ export function PaymentSettingsTab() {
 
   // Estados de formulario
   const [aceptaMercadopago, setAceptaMercadopago] = useState(false)
+  const [aceptaYape, setAceptaYape] = useState(true)
+  const [aceptaPlin, setAceptaPlin] = useState(true)
   const [whatsapp, setWhatsapp] = useState("")
   const [yapeNumero, setYapeNumero] = useState("")
   const [yapeQrUrl, setYapeQrUrl] = useState("")
@@ -227,6 +229,8 @@ export function PaymentSettingsTab() {
   useEffect(() => {
     if (config) {
       setAceptaMercadopago(config.aceptaMercadopago ?? false)
+      setAceptaYape(config.aceptaYape ?? true)
+      setAceptaPlin(config.aceptaPlin ?? true)
       setWhatsapp(config.whatsapp || "")
       setYapeNumero(config.yapeNumero || "")
       setYapeQrUrl(config.yapeQrUrl || "")
@@ -308,16 +312,20 @@ export function PaymentSettingsTab() {
     })
   }
 
-  const handleSaveYape = () => {
+  const handleSaveYape = (nuevoAceptaYape?: boolean) => {
+    const estado = typeof nuevoAceptaYape === "boolean" ? nuevoAceptaYape : aceptaYape
     handleSaveSection("yape", {
+      aceptaYape: estado,
       yapeNumero: yapeNumero.trim() || null,
       yapeQrUrl: yapeQrUrl.trim() || null,
       yapeTitular: yapeTitular.trim() || null,
     })
   }
 
-  const handleSavePlin = () => {
+  const handleSavePlin = (nuevoAceptaPlin?: boolean) => {
+    const estado = typeof nuevoAceptaPlin === "boolean" ? nuevoAceptaPlin : aceptaPlin
     handleSaveSection("plin", {
+      aceptaPlin: estado,
       plinNumero: plinNumero.trim() || null,
       plinQrUrl: plinQrUrl.trim() || null,
       plinTitular: plinTitular.trim() || null,
@@ -326,6 +334,8 @@ export function PaymentSettingsTab() {
 
   const handleSaveBothWallets = () => {
     handleSaveSection("wallets", {
+      aceptaYape,
+      aceptaPlin,
       yapeNumero: yapeNumero.trim() || null,
       yapeQrUrl: yapeQrUrl.trim() || null,
       yapeTitular: yapeTitular.trim() || null,
@@ -345,6 +355,8 @@ export function PaymentSettingsTab() {
   const handleSaveAll = () => {
     handleSaveSection("all", {
       aceptaMercadopago,
+      aceptaYape,
+      aceptaPlin,
       whatsapp: whatsapp.trim() || null,
       yapeNumero: yapeNumero.trim() || null,
       yapeQrUrl: yapeQrUrl.trim() || null,
@@ -365,6 +377,7 @@ export function PaymentSettingsTab() {
   }
 
   const handleCancelYape = () => {
+    setAceptaYape(config?.aceptaYape ?? true)
     setYapeNumero(config?.yapeNumero || "")
     setYapeQrUrl(config?.yapeQrUrl || "")
     setYapeTitular(config?.yapeTitular || "")
@@ -372,6 +385,7 @@ export function PaymentSettingsTab() {
   }
 
   const handleCancelPlin = () => {
+    setAceptaPlin(config?.aceptaPlin ?? true)
     setPlinNumero(config?.plinNumero || "")
     setPlinQrUrl((config as any)?.plinQrUrl || "")
     setPlinTitular(config?.plinTitular || "")
@@ -843,11 +857,13 @@ export function PaymentSettingsTab() {
                   <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
-                      className={hasYapeConfigured
+                      className={!aceptaYape
+                        ? "bg-slate-100 text-slate-500 border-slate-300 text-[11px] font-semibold"
+                        : hasYapeConfigured
                         ? "bg-purple-50 text-[#732282] border-purple-200 text-[11px] font-semibold"
                         : "bg-slate-50 text-slate-500 border-slate-200 text-[11px]"}
                     >
-                      {hasYapeConfigured ? "Activo" : "Sin Configurar"}
+                      {!aceptaYape ? "Desactivado" : hasYapeConfigured ? "Activo" : "Sin Configurar"}
                     </Badge>
 
                     {!isEditingYape && hasYapeConfigured && (
@@ -863,6 +879,26 @@ export function PaymentSettingsTab() {
                       </Button>
                     )}
                   </div>
+                </div>
+
+                {/* Toggle Activar/Desactivar Yape */}
+                <div className="flex items-center justify-between p-3 mt-3 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/40 dark:bg-purple-950/20">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="toggle-yape" className="text-xs font-semibold cursor-pointer text-slate-800 dark:text-slate-200">
+                      Aceptar pagos con Yape
+                    </Label>
+                    <p className="text-[11px] text-slate-500">
+                      {aceptaYape ? "Yape habilitado para reservas de clientes." : "Yape deshabilitado temporalmente."}
+                    </p>
+                  </div>
+                  <Switch
+                    id="toggle-yape"
+                    checked={aceptaYape}
+                    onCheckedChange={(checked) => {
+                      setAceptaYape(checked)
+                      handleSaveYape(checked)
+                    }}
+                  />
                 </div>
 
                 {/* Contenido Yape */}
@@ -1078,11 +1114,13 @@ export function PaymentSettingsTab() {
                   <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
-                      className={hasPlinConfigured
+                      className={!aceptaPlin
+                        ? "bg-slate-100 text-slate-500 border-slate-300 text-[11px] font-semibold"
+                        : hasPlinConfigured
                         ? "bg-teal-50 text-teal-700 border-teal-200 text-[11px] font-semibold"
                         : "bg-slate-50 text-slate-500 border-slate-200 text-[11px]"}
                     >
-                      {hasPlinConfigured ? "Activo" : "Sin Configurar"}
+                      {!aceptaPlin ? "Desactivado" : hasPlinConfigured ? "Activo" : "Sin Configurar"}
                     </Badge>
 
                     {!isEditingPlin && hasPlinConfigured && (
@@ -1098,6 +1136,26 @@ export function PaymentSettingsTab() {
                       </Button>
                     )}
                   </div>
+                </div>
+
+                {/* Toggle Activar/Desactivar Plin */}
+                <div className="flex items-center justify-between p-3 mt-3 rounded-xl border border-teal-100 dark:border-teal-900/40 bg-teal-50/40 dark:bg-teal-950/20">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="toggle-plin" className="text-xs font-semibold cursor-pointer text-slate-800 dark:text-slate-200">
+                      Aceptar pagos con Plin
+                    </Label>
+                    <p className="text-[11px] text-slate-500">
+                      {aceptaPlin ? "Plin habilitado para reservas de clientes." : "Plin deshabilitado temporalmente."}
+                    </p>
+                  </div>
+                  <Switch
+                    id="toggle-plin"
+                    checked={aceptaPlin}
+                    onCheckedChange={(checked) => {
+                      setAceptaPlin(checked)
+                      handleSavePlin(checked)
+                    }}
+                  />
                 </div>
 
                 {/* Contenido Plin */}

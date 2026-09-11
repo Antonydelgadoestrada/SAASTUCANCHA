@@ -118,6 +118,8 @@ export class ClubService {
     if (!club) throw new NotFoundException('Club no encontrado');
     return {
       aceptaMercadopago: club.aceptaMercadopago ?? false,
+      aceptaYape: club.aceptaYape ?? true,
+      aceptaPlin: club.aceptaPlin ?? true,
       whatsapp: club.whatsapp || null,
       yapeNumero: club.yapeNumero,
       yapeQrUrl: club.yapeQrUrl,
@@ -142,6 +144,8 @@ export class ClubService {
 
     if (dto.whatsapp !== undefined) club.whatsapp = dto.whatsapp?.trim() || null;
     if (dto.aceptaMercadopago !== undefined) club.aceptaMercadopago = Boolean(dto.aceptaMercadopago);
+    if (dto.aceptaYape !== undefined) club.aceptaYape = Boolean(dto.aceptaYape);
+    if (dto.aceptaPlin !== undefined) club.aceptaPlin = Boolean(dto.aceptaPlin);
     if (dto.yapeNumero !== undefined) club.yapeNumero = dto.yapeNumero?.trim() || null;
     if (dto.yapeQrUrl !== undefined) club.yapeQrUrl = dto.yapeQrUrl?.trim() || null;
     if (dto.yapeTitular !== undefined) club.yapeTitular = dto.yapeTitular?.trim() || null;
@@ -160,6 +164,8 @@ export class ClubService {
     const saved = await this.repo.save(club);
     return {
       aceptaMercadopago: saved.aceptaMercadopago,
+      aceptaYape: saved.aceptaYape ?? true,
+      aceptaPlin: saved.aceptaPlin ?? true,
       whatsapp: saved.whatsapp || null,
       yapeNumero: saved.yapeNumero || null,
       yapeQrUrl: saved.yapeQrUrl || null,

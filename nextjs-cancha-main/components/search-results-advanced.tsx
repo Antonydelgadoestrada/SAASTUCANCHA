@@ -537,7 +537,11 @@ export function SearchResults({
       });
       return;
     }
-    setPayMethod("yape");
+    const yapeOk = selectedCourt?.clubData?.aceptaYape !== false;
+    const plinOk = selectedCourt?.clubData?.aceptaPlin !== false;
+    const mpOk = selectedCourt?.clubData?.aceptaMercadopago === true;
+    const defaultM = yapeOk ? "yape" : plinOk ? "plin" : mpOk ? "mercadopago" : "whatsapp";
+    setPayMethod(defaultM);
     setPayOption("advance");
     setReceiptFile(null);
     setReceiptPreview(null);
@@ -1839,44 +1843,50 @@ export function SearchResults({
                   MÉTODO DE PAGO / RESERVA:
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod("yape")}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
-                      payMethod === "yape"
-                        ? "border-[#720e9e] bg-[#720e9e]/10 font-bold text-[#720e9e] dark:text-purple-300 shadow-sm"
-                        : "border-border hover:border-muted-foreground/40 bg-card"
-                    }`}
-                  >
-                    <Smartphone className="h-4 w-4 mb-1 text-[#720e9e] dark:text-purple-400" />
-                    <span className="text-xs">Yape</span>
-                  </button>
+                  {selectedCourt?.clubData?.aceptaYape !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setPayMethod("yape")}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
+                        payMethod === "yape"
+                          ? "border-[#720e9e] bg-[#720e9e]/10 font-bold text-[#720e9e] dark:text-purple-300 shadow-sm"
+                          : "border-border hover:border-muted-foreground/40 bg-card"
+                      }`}
+                    >
+                      <Smartphone className="h-4 w-4 mb-1 text-[#720e9e] dark:text-purple-400" />
+                      <span className="text-xs">Yape</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod("plin")}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
-                      payMethod === "plin"
-                        ? "border-[#00bcd4] bg-[#00bcd4]/10 font-bold text-[#008ba3] dark:text-cyan-300 shadow-sm"
-                        : "border-border hover:border-muted-foreground/40 bg-card"
-                    }`}
-                  >
-                    <Smartphone className="h-4 w-4 mb-1 text-[#00bcd4]" />
-                    <span className="text-xs">Plin</span>
-                  </button>
+                  {selectedCourt?.clubData?.aceptaPlin !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setPayMethod("plin")}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
+                        payMethod === "plin"
+                          ? "border-[#00bcd4] bg-[#00bcd4]/10 font-bold text-[#008ba3] dark:text-cyan-300 shadow-sm"
+                          : "border-border hover:border-muted-foreground/40 bg-card"
+                      }`}
+                    >
+                      <Smartphone className="h-4 w-4 mb-1 text-[#00bcd4]" />
+                      <span className="text-xs">Plin</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod("mercadopago")}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
-                      payMethod === "mercadopago"
-                        ? "border-sky-500 bg-sky-500/10 font-bold text-sky-600 dark:text-sky-400 shadow-sm"
-                        : "border-border hover:border-muted-foreground/40 bg-card"
-                    }`}
-                  >
-                    <CreditCardIcon className="h-4 w-4 mb-1 text-sky-500" />
-                    <span className="text-xs">Mercado Pago</span>
-                  </button>
+                  {selectedCourt?.clubData?.aceptaMercadopago === true && (
+                    <button
+                      type="button"
+                      onClick={() => setPayMethod("mercadopago")}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center transition-all ${
+                        payMethod === "mercadopago"
+                          ? "border-sky-500 bg-sky-500/10 font-bold text-sky-600 dark:text-sky-400 shadow-sm"
+                          : "border-border hover:border-muted-foreground/40 bg-card"
+                      }`}
+                    >
+                      <CreditCardIcon className="h-4 w-4 mb-1 text-sky-500" />
+                      <span className="text-xs">Mercado Pago</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
