@@ -25,11 +25,11 @@ import { zodResolver } from "@hookform/resolvers/zod"
 export const reservationSchema = z.object({
 
   courtId: z.string().min(1, { message: "Selecciona una cancha." }),
-  date: z.date({ invalid_type_error: "Selecciona una fecha válida." }),
+  date: z.date({ message: "Selecciona una fecha válida." }),
   duration: z.string().min(1, { message: "Selecciona duración." }),
   startTime: z.string().min(1, { message: "Selecciona una hora." }),
   userEmail: z.string().email({ message: "Correo no válido." }),
-  price: z.coerce.number().positive({ message: "Precio inválido." }),
+  price: z.number().positive({ message: "Precio inválido." }),
   proof: z
   .any()
   .refine(
@@ -91,7 +91,7 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string, 
 
 export function ReservationForm({ courts, onSubmit, isSubmitting }: ReservationFormProps) {
   const form = useForm<ReservationFormValues>({
-    resolver: zodResolver(reservationSchema),
+    resolver: zodResolver(reservationSchema) as any,
     defaultValues: {
 
       courtId: "",

@@ -34,7 +34,7 @@ interface QrUploaderProps {
   walletType: "yape" | "plin"
   qrUrl: string
   isUploading: boolean
-  fileInputRef: React.RefObject<HTMLInputElement>
+  fileInputRef: React.RefObject<HTMLInputElement | null>
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onClear: () => void
   accentColor: string
@@ -1095,7 +1095,7 @@ export function PaymentSettingsTab() {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={handleSaveYape}
+                    onClick={() => handleSaveYape()}
                     disabled={savingSection === "yape"}
                     className="bg-[#732282] hover:bg-[#5a1966] text-white text-xs font-semibold h-8 px-3 shadow-sm"
                   >
@@ -1352,7 +1352,7 @@ export function PaymentSettingsTab() {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={handleSavePlin}
+                    onClick={() => handleSavePlin()}
                     disabled={savingSection === "plin"}
                     className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold h-8 px-3 shadow-sm"
                   >

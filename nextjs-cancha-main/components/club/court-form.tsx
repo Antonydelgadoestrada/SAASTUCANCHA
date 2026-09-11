@@ -24,7 +24,6 @@ import {
 import { ScheduleTemplateForm } from "@/components/club/schedule-template-form"
 import { createSchedule } from "@/lib/schedule"
 import { sportTypes } from "@/lib/sports"
-import { VenueDTO } from "./courts-content"
 
 const durationOptions = [
   { value: "1", label: "1 hora" },

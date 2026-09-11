@@ -29,7 +29,7 @@ import { getAllCourtsByClub } from "@/lib/courts"
 
 export function ScheduleManagement() {
   const [date, setDate] = useState<Date>(new Date())
-  const [courts, setCourts] = useState([])
+  const [courts, setCourts] = useState<any[]>([])
   const [scheduleChanges, setScheduleChanges] = useState<{[key: string]: any}>({})
   const [selectedCourt, setSelectedCourt] = useState<string>("all")
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
@@ -72,7 +72,7 @@ export function ScheduleManagement() {
         setScheduleChanges({})
         toast.success("Horarios guardados correctamente")
         // Invalidar caché para recargar datos automáticamente
-        queryClient.invalidateQueries(['court-schedule'])
+        queryClient.invalidateQueries({ queryKey: ['court-schedule'] })
       } else {
         toast.info("No hay cambios para guardar")
       }
@@ -229,7 +229,7 @@ export function ScheduleManagement() {
                     const dateStr = format(day, 'yyyy-MM-dd');
                     const timeStr = `${hour}:00`;
                     const changeKey = `${dateStr}-${timeStr}`;
-                    const slot = courtSchedule?.find(s => 
+                    const slot = courtSchedule?.find((s: any) => 
                       s.date === dateStr && s.time === timeStr
                     )
                     const currentStatus = scheduleChanges[changeKey]?.status || slot?.status || "available";

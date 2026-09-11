@@ -241,17 +241,6 @@ const getValidStartTimes = (availableTimes: string[], selectedDuration: string, 
   return validStartTimes
 }
 
-export  const handleClearFilters = () => {
-    setSearchQuery("")
-    setSelectedSport("")
-    setSelectedTeamSize("")
-    setSelectedClub("")
-    setSelectedPriceRange("")
-    setSelectedDate(undefined)
-    setCurrentLocation(null)
-    setUseLocation(false)
-  }
-
 export function SearchResults({
   searchQuery,
   selectedSport,

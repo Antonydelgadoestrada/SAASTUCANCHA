@@ -85,25 +85,27 @@ const courts = [
 
 const formSchema = z.object({
   courtId: z.string(),
-  basePrice: z.coerce.number().min(0, "El precio base no puede ser negativo"),
-  morningPrice: z.coerce.number().min(0, "El precio matutino no puede ser negativo"),
-  eveningPrice: z.coerce.number().min(0, "El precio nocturno no puede ser negativo"),
-  weekendPrice: z.coerce.number().min(0, "El precio de fin de semana no puede ser negativo"),
+  basePrice: z.number().min(0, "El precio base no puede ser negativo"),
+  morningPrice: z.number().min(0, "El precio matutino no puede ser negativo"),
+  eveningPrice: z.number().min(0, "El precio nocturno no puede ser negativo"),
+  weekendPrice: z.number().min(0, "El precio de fin de semana no puede ser negativo"),
   hasPromotion: z.boolean().default(false),
-  promotionPrice: z.coerce.number().min(0, "El precio promocional no puede ser negativo").optional().nullable(),
+  promotionPrice: z.number().min(0, "El precio promocional no puede ser negativo").optional().nullable(),
   promotionDays: z.array(z.string()).optional(),
   promotionHours: z.array(z.string()).optional(),
 })
+
+type FormValues = z.infer<typeof formSchema>
 
 export function ClubPricingContent() {
   const [activeTab, setActiveTab] = useState("standard")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedCourt, setSelectedCourt] = useState<any | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [courtsList, setCourtsList] = useState(courts)
+  const [courtsList, setCourtsList] = useState<any[]>(courts)
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       courtId: "",
       basePrice: 0,
@@ -272,7 +274,7 @@ export function ClubPricingContent() {
                       <div>
                         <h4 className="mb-2 text-sm font-medium">Días de promoción</h4>
                         <div className="flex flex-wrap gap-1">
-                          {court.promotionDays.map((day) => (
+                          {court.promotionDays.map((day: string) => (
                             <span
                               key={day}
                               className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
@@ -285,7 +287,7 @@ export function ClubPricingContent() {
                       <div>
                         <h4 className="mb-2 text-sm font-medium">Horas de promoción</h4>
                         <div className="flex flex-wrap gap-1">
-                          {court.promotionHours.map((hour) => (
+                          {court.promotionHours.map((hour: string) => (
                             <span
                               key={hour}
                               className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
