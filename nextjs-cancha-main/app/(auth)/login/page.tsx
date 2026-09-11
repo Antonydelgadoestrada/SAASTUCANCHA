@@ -1,8 +1,6 @@
 import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
-import { Quote, Star } from "lucide-react"
-
 import { LoginForm } from "@/components/auth/login-form"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -51,30 +49,55 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        {/* Cita de Testimonio y Confianza */}
-        <div className="relative z-10 mt-auto space-y-6">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
-            <Quote className="h-6 w-6" />
+        {/* Sección de Recomendaciones para el uso adecuado de la plataforma */}
+        <div className="relative z-10 mt-auto space-y-4">
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">
+            <span>💡 Recomendaciones de uso</span>
           </div>
 
-          <blockquote className="space-y-4">
-            <p className="text-xl font-medium leading-relaxed text-zinc-100">
-              &ldquo;Esta plataforma ha revolucionado la forma en que gestionamos nuestras canchas deportivas. Ahora es mucho más fácil para nuestros clientes reservar y para nosotros administrar.&rdquo;
-            </p>
-            <footer className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-primary">
-                CD
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-zinc-200">Club Deportivo Ejemplo</p>
-                <div className="flex items-center gap-0.5 mt-0.5 text-amber-500">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} className="h-3 w-3 fill-current" />
-                  ))}
+          <div className="space-y-3">
+            <h2 className="text-lg font-bold text-zinc-100 tracking-tight">
+              Consejos para aprovechar al máximo TuCancha
+            </h2>
+            
+            <div className="space-y-2.5 text-xs text-zinc-300">
+              <div className="flex items-start gap-2.5 bg-zinc-900/60 border border-zinc-800/80 p-2.5 rounded-xl backdrop-blur-sm">
+                <div className="mt-0.5 h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold text-[10px]">
+                  ✓
                 </div>
+                <p>
+                  <strong className="text-zinc-100">Disponibilidad en vivo:</strong> Consulta los horarios actualizados en tiempo real antes de reservar para asegurar tu cancha favorita.
+                </p>
               </div>
-            </footer>
-          </blockquote>
+
+              <div className="flex items-start gap-2.5 bg-zinc-900/60 border border-zinc-800/80 p-2.5 rounded-xl backdrop-blur-sm">
+                <div className="mt-0.5 h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold text-[10px]">
+                  ✓
+                </div>
+                <p>
+                  <strong className="text-zinc-100">Comprobantes legibles:</strong> Si pagas con Yape o Transferencia, sube tu comprobante nítido con el código de operación visible para una rápida validación.
+                </p>
+              </div>
+
+              <div className="flex items-start gap-2.5 bg-zinc-900/60 border border-zinc-800/80 p-2.5 rounded-xl backdrop-blur-sm">
+                <div className="mt-0.5 h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold text-[10px]">
+                  ✓
+                </div>
+                <p>
+                  <strong className="text-zinc-100">Llega con anticipación:</strong> Preséntate de 10 a 15 minutos antes de tu horario pactado para el ingreso a la cancha.
+                </p>
+              </div>
+
+              <div className="flex items-start gap-2.5 bg-zinc-900/60 border border-zinc-800/80 p-2.5 rounded-xl backdrop-blur-sm">
+                <div className="mt-0.5 h-4 w-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold text-[10px]">
+                  ✓
+                </div>
+                <p>
+                  <strong className="text-zinc-100">Revisa tu correo:</strong> Te enviaremos el comprobante, código de reserva y recordatorios antes de tu partido.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
