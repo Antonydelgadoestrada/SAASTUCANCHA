@@ -249,8 +249,12 @@ export class BookingService implements OnModuleInit {
     }
 
     if (createdBookings.length > 0) {
-      // Por ahora enviamos notificación basada en la primera reserva
-      await this.mailerService.sendBookingReservationNotifications(createdBookings[0]);
+      try {
+        const fullBooking = await this.findOneComplete(createdBookings[0].id);
+        await this.mailerService.sendBookingReservationNotifications(fullBooking || createdBookings[0]);
+      } catch (mailErr: any) {
+        console.warn('⚠️ Error al enviar correo de notificación de reserva:', mailErr?.message);
+      }
     }
     
     // Si solo hay una, retornamos el objeto para no romper flujos que esperen un solo objeto
@@ -382,7 +386,10 @@ export class BookingService implements OnModuleInit {
   }
 
   findOneComplete(id: string) {
-    return this.bookingRepo.findOne({ where: { id }, relations: ['user', 'court', 'club', 'payment']});
+    return this.bookingRepo.findOne({
+      where: { id },
+      relations: ['user', 'court', 'court.club', 'court.club.owner', 'club', 'club.owner', 'payment'],
+    });
   }
 
   findOneByClub(id: string) {

@@ -1011,6 +1011,16 @@ export class PaymentService {
       }
     }
 
+    // Disparar notificaciones por correo al Club y al Usuario (sin bloquear el response)
+    try {
+      const fullBooking = await this.bookingService.findOneComplete(booking.id);
+      const targetBooking = fullBooking || booking;
+      await this.mailerService.sendPaymentReceiptUploadedClubNotificationEmail(targetBooking, savedPayment);
+      await this.mailerService.sendPaymentReceiptUploadedUserNotificationEmail(targetBooking, savedPayment);
+    } catch (mailErr: any) {
+      console.warn('⚠️ Error al enviar correos de auditoría de pago:', mailErr?.message);
+    }
+
     return {
       message: safeType === PaymentType.SALDO 
         ? 'Comprobante de saldo restante enviado exitosamente. El club validará tu pago.'
@@ -1194,6 +1204,31 @@ export class PaymentService {
     }
 
     const saved = await this.paymentRepo.save(payment);
+
+    // Disparar notificaciones por correo de auditoría finalizada (sin bloquear el response)
+    try {
+      if (saved.bookings && saved.bookings.length > 0) {
+        for (const b of saved.bookings) {
+          const fullBooking = await this.bookingService.findOneComplete(b.id);
+          const targetBooking = fullBooking || b;
+
+          if (action === 'CONFIRMAR') {
+            await this.mailerService.sendBookingPaidNotifications(targetBooking);
+          } else {
+            const userEmail = this.mailerService.getUserTargetEmail(targetBooking);
+            if (userEmail) {
+              await this.mailerService.sendBookingCancelledEmail(
+                userEmail,
+                targetBooking,
+                motivoRechazo || 'Comprobante de pago rechazado tras auditoría del club',
+              );
+            }
+          }
+        }
+      }
+    } catch (mailErr: any) {
+      console.warn('⚠️ Error al enviar correos tras auditoría de pago:', mailErr?.message);
+    }
 
     return {
       status: saved.status,
