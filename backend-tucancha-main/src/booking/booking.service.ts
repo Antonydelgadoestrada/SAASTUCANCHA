@@ -322,6 +322,52 @@ export class BookingService implements OnModuleInit {
     const initialBookingStatus = isUnpaid ? BookingStatus.PENDING : BookingStatus.CONFIRMED;
     const initialPaymentStatus = isFullPaid ? PaymentStatus.PAID : PaymentStatus.PENDING;
 
+    // Parsear customerInfo defensivamente si viene como string JSON u objeto
+    let parsedCustomerInfo = dto.customerInfo;
+    if (typeof parsedCustomerInfo === 'string') {
+      try {
+        parsedCustomerInfo = JSON.parse(parsedCustomerInfo);
+      } catch (e) {
+        parsedCustomerInfo = {};
+      }
+    }
+
+    const customerPhone =
+      parsedCustomerInfo?.phone ||
+      dto.phone ||
+      dto['customerInfo[phone]'] ||
+      userReservation.phone ||
+      '';
+
+    const customerName =
+      parsedCustomerInfo?.name ||
+      dto.name ||
+      dto['customerInfo[name]'] ||
+      userReservation.name ||
+      '';
+
+    const customerEmail =
+      parsedCustomerInfo?.email ||
+      dto.email ||
+      dto['customerInfo[email]'] ||
+      userReservation.email;
+
+    const customerNotes =
+      parsedCustomerInfo?.notes ||
+      dto.notes ||
+      dto['customerInfo[notes]'] ||
+      '';
+
+    // Si el cliente no tenía teléfono registrado en su perfil y ahora se ingresó uno, actualizar su perfil
+    if (customerPhone && (!userReservation.phone || userReservation.phone.trim() === '')) {
+      try {
+        userReservation.phone = customerPhone;
+        await this.userService.update(userReservation.id, { phone: customerPhone });
+      } catch (err) {
+        // No bloquear la reserva si falla la actualización del perfil
+      }
+    }
+
     for (let currentdate of datesToBook) {
       let slots = await this.checkAvailability(dto.courtId, currentdate, dto.startTime, parsedDuration);
       const booking = this.bookingRepo.create({
@@ -333,10 +379,10 @@ export class BookingService implements OnModuleInit {
         endTime: dto.endTime,
         duration: parsedDuration,
         customerInfo: {
-          name: dto.customerInfo?.name || userReservation.name,
-          email: dto.customerInfo?.email || userReservation.email,
-          phone: dto.customerInfo?.phone || userReservation.phone,
-          notes: dto.customerInfo?.notes || '',
+          name: customerName,
+          email: customerEmail,
+          phone: customerPhone,
+          notes: customerNotes,
         },
         pricing: finalPricing,
         status: initialBookingStatus,

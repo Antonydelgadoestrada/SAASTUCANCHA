@@ -1048,15 +1048,15 @@ export function ClubSchedulesContent() {
             <div className="space-y-4 py-4 text-sm">
               <div className="flex justify-between border-b pb-2">
                 <span className="font-semibold text-muted-foreground text-xs uppercase">Cliente</span>
-                <span className="font-bold text-foreground">{selectedItemDetails.data.customerInfo?.name || "N/A"}</span>
+                <span className="font-bold text-foreground">{selectedItemDetails.data.customerInfo?.name || selectedItemDetails.data.user?.name || "N/A"}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
                 <span className="font-semibold text-muted-foreground text-xs uppercase">Email</span>
-                <span className="font-medium text-foreground">{selectedItemDetails.data.customerInfo?.email || "N/A"}</span>
+                <span className="font-medium text-foreground">{selectedItemDetails.data.customerInfo?.email || selectedItemDetails.data.user?.email || "N/A"}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
                 <span className="font-semibold text-muted-foreground text-xs uppercase">Teléfono</span>
-                <span className="font-medium text-foreground">{selectedItemDetails.data.customerInfo?.phone || "N/A"}</span>
+                <span className="font-medium text-foreground">{selectedItemDetails.data.customerInfo?.phone || selectedItemDetails.data.user?.phone || "N/A"}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
                 <span className="font-semibold text-muted-foreground text-xs uppercase">Fecha</span>

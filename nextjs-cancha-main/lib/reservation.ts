@@ -33,19 +33,17 @@ export const getAllReservationByUser = async ()=>{
     return result.data 
 }
 
-const createFormData= (data:any)=>{
+const createFormData = (data: any) => {
     const formData = new FormData()
 
     for (const key in data) {
-      if (key === 'id') continue
-  
+      if (key === 'id' || data[key] === undefined || data[key] === null) continue
+
       if (key === 'image') {
         formData.append('image', data.image)
-      } 
-      else if (key =='pricing') {
-        formData.append('pricing', JSON.stringify(data.pricing))
-      } 
-      else if(data[key]) {
+      } else if (typeof data[key] === 'object') {
+        formData.append(key, JSON.stringify(data[key]))
+      } else {
         formData.append(key, data[key])
       }
     }
