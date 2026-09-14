@@ -63,11 +63,18 @@ export function UserUpcomingBookings({ bookings }: UserUpcomingBookingsProps) {
                 <div className="flex flex-col items-end gap-1">
                   <BookingStatusBadge status={booking.status} />
                   {booking.status === "pending" && (
-                    <BookingExpirationTimer
-                      compact
-                      createdAt={booking.createdAt}
-                      paymentMethod={booking.paymentMethod || booking.payment?.method}
-                    />
+                    Boolean(booking.proofOfPaymentUrl || booking.payment?.comprobanteUrl || booking.payment?.pendingAudit) ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 dark:text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+                        <ClockIcon className="h-3 w-3 shrink-0 text-sky-600 animate-spin" />
+                        <span>Espere confirmación</span>
+                      </span>
+                    ) : (
+                      <BookingExpirationTimer
+                        compact
+                        createdAt={booking.createdAt}
+                        paymentMethod={booking.paymentMethod || booking.payment?.method}
+                      />
+                    )
                   )}
                 </div>
               </div>

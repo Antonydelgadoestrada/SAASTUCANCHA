@@ -87,9 +87,8 @@ export function computePaymentDetails(payment: PaymentItem) {
   const isFullyPaidAmount = totalBookingPrice > 0 && paidInitial >= totalBookingPrice - 0.05
   const isSaldoPaid =
     !isCancelled &&
-    (normSaldo === "PAGADO" ||
-      normSaldo === "PAID" ||
-      normSaldo === "NO_APLICA" ||
+    ((normSaldo === "PAGADO" || normSaldo === "PAID") ||
+      (normSaldo === "NO_APLICA" && isComprobanteApproved) ||
       (isFullyPaidAmount && isComprobanteApproved) ||
       (!isTypeAdelanto && isComprobanteApproved))
 
@@ -116,10 +115,8 @@ export function computePaymentDetails(payment: PaymentItem) {
 
   const totalRecibido = isCancelled
     ? 0
-    : isSaldoPaid
-    ? isAdvance
-      ? paidInitial + saldoSettledAmount
-      : paidInitial
+    : isAdvance
+    ? (isComprobanteApproved ? paidInitial : 0) + (isSaldoPaid ? saldoSettledAmount : 0)
     : isComprobanteApproved
     ? paidInitial
     : 0
@@ -198,12 +195,20 @@ function saldoBadge(
   isRejected?: boolean,
   saldoStatus?: string | null,
   saldoComprobanteUrl?: string | null,
-  isCancelled?: boolean
+  isCancelled?: boolean,
+  isComprobanteApproved?: boolean
 ) {
   if (isCancelled || isRejected) {
     return <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300 font-medium text-xs">Reserva Cancelada</Badge>
   }
   if (!isAdvance || saldoFaltante <= 0.01) {
+    if (!isComprobanteApproved) {
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-300 font-medium text-xs">
+          1er Pago Pendiente
+        </Badge>
+      )
+    }
     return (
       <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
         100% Pagado
@@ -621,13 +626,22 @@ function PaymentDetailModal({
                 El usuario completó el 1er pago ({fmt(details.paidInitial)}) y el saldo restante ({fmt(details.saldoSettledAmount)}) mediante <strong>{payment.saldoMethod || "Efectivo"}</strong>.
               </p>
             </div>
-          ) : (
+          ) : details.isComprobanteApproved ? (
             <div className="p-3.5 bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
               <p className="font-bold flex items-center gap-1.5 text-sm">
-                 Pago Completo (100%)
+                ✓ Pago Completo Aprobado (100%)
               </p>
               <p>
-                El usuario <strong>{customerName}</strong> realizó el pago completo por <strong>{fmt(details.paidInitial)}</strong>.
+                El usuario <strong>{customerName}</strong> tiene el pago completo confirmado por <strong>{fmt(details.paidInitial)}</strong>.
+              </p>
+            </div>
+          ) : (
+            <div className="p-3.5 bg-amber-500/10 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-sm">
+                ⏳ Pago Completo Registrado — Pendiente de Confirmación
+              </p>
+              <p>
+                El usuario <strong>{customerName}</strong> registró una reserva por el total de <strong>{fmt(details.paidInitial || details.totalBookingPrice)}</strong>. {payment.comprobanteUrl ? "Audita el comprobante adjunto para confirmar el ingreso." : "Aún no se ha adjuntado ni verificado comprobante de pago."}
               </p>
             </div>
           )}
@@ -902,7 +916,8 @@ function PaymentDetailModal({
                 details.isComprobanteRejected,
                 payment.saldoStatus,
                 payment.saldoComprobanteUrl,
-                details.isCancelled
+                details.isCancelled,
+                details.isComprobanteApproved
               )}
             </div>
 
@@ -913,8 +928,14 @@ function PaymentDetailModal({
               </div>
             ) : !details.isAdvance ? (
               <div className="p-4 bg-muted/30 rounded-xl text-center text-xs text-muted-foreground">
-                <p className="font-semibold text-foreground">No aplica saldo pendiente</p>
-                <p className="text-[11px] text-muted-foreground/80 mt-0.5">La reserva fue pagada al 100% en el primer pago inicial.</p>
+                <p className="font-semibold text-foreground">
+                  {details.isComprobanteApproved ? "100% Pagado - No aplica saldo" : "Pago Único - 1er Pago Pendiente de Auditoría"}
+                </p>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                  {details.isComprobanteApproved
+                    ? "La reserva fue pagada y confirmada al 100% en el primer pago inicial."
+                    : "La reserva fue registrada por el monto total pero el primer pago aún está pendiente de confirmación por el club."}
+                </p>
               </div>
             ) : (
               <>
@@ -1556,9 +1577,15 @@ function MetricsAuditTab() {
                             </div>
                           ) : !details.isAdvance ? (
                             <div className="space-y-0.5">
-                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
-                                100% Pagado
-                              </Badge>
+                              {details.isComprobanteApproved ? (
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
+                                  100% Pagado
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-300 font-medium text-xs">
+                                  {p.comprobanteUrl ? "1er Pago por Auditar" : "1er Pago Pendiente"}
+                                </Badge>
+                              )}
                               <p className="text-[10px] text-muted-foreground/80">No aplica saldo</p>
                             </div>
                           ) : (
@@ -1581,7 +1608,8 @@ function MetricsAuditTab() {
                                   details.isComprobanteRejected,
                                   p.saldoStatus,
                                   p.saldoComprobanteUrl,
-                                  details.isCancelled
+                                  details.isCancelled,
+                                  details.isComprobanteApproved
                                 )}
                               </div>
 

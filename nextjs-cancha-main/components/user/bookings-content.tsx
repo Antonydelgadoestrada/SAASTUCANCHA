@@ -68,6 +68,9 @@ export function getBookingPaymentDetails(booking: any) {
       hasPendingSaldo: false,
       saldoRemaining: 0,
       isFullyPaid: false,
+      isPendingAudit: false,
+      hasVoucher: false,
+      isPaymentApproved: false,
       paymentMethodName: "No especificado",
     }
   }
@@ -88,18 +91,64 @@ export function getBookingPaymentDetails(booking: any) {
     normPaymentStatus === "CANCELADO" ||
     normPaymentStatus === "CANCELLED" ||
     normPaymentStatus === "FAILED"
-  
-  // Es adelanto si el tipo es ADELANTO o si se pagó un monto menor al total y mayor a 0
-  const isAdvance = !isCancelled && (payment?.type === "ADELANTO" || (paidAmount > 0 && paidAmount < totalPrice))
-  const isSaldoPaid = !isCancelled && payment?.saldoStatus === "PAGADO"
-  const isSaldoPendingVerification = !isCancelled && payment?.saldoStatus === "PENDIENTE" && !!payment?.saldoComprobanteUrl
-  
-  // Saldo pendiente
-  const hasPendingSaldo = !isCancelled && ((isAdvance && !isSaldoPaid) || (booking.status === "confirmed" && paidAmount < totalPrice && paidAmount > 0 && !isSaldoPaid))
-  const saldoRemaining = hasPendingSaldo ? Math.max(0, Number((totalPrice - paidAmount).toFixed(2))) : 0
-  const isFullyPaid = !isCancelled && (isSaldoPaid || (paidAmount >= totalPrice && paidAmount > 0 && !isAdvance))
 
-  const paymentMethodName = payment?.method || payment?.paymentMethod || booking.paymentMethod || "Yape / Plin"
+  const isPaymentApproved =
+    !isCancelled &&
+    (normPaymentStatus === "APPROVED" ||
+      normPaymentStatus === "APROBADO" ||
+      normPaymentStatus === "PAID" ||
+      normPaymentStatus === "PAGADO" ||
+      normPaymentStatus === "CONFIRMADO" ||
+      normPaymentStatus === "CONFIRMED" ||
+      payment?.autoConfirmed === true)
+
+  const hasVoucher = Boolean(
+    booking.proofOfPaymentUrl ||
+      payment?.comprobanteUrl ||
+      (payment?.saldoComprobanteUrl && payment?.type === "SALDO")
+  )
+
+  const isPendingAudit =
+    !isCancelled &&
+    !isPaymentApproved &&
+    (payment?.pendingAudit === true || hasVoucher)
+
+  // Es adelanto si el tipo es ADELANTO o si se pagó un monto menor al total y mayor a 0
+  const isAdvance =
+    !isCancelled &&
+    (payment?.type === "ADELANTO" || (paidAmount > 0 && paidAmount < totalPrice))
+  const isSaldoPaid =
+    !isCancelled &&
+    (payment?.saldoStatus === "PAGADO" || payment?.saldoStatus === "PAID")
+  const isSaldoPendingVerification =
+    !isCancelled &&
+    payment?.saldoStatus === "PENDIENTE" &&
+    Boolean(payment?.saldoComprobanteUrl)
+
+  // Saldo pendiente
+  const hasPendingSaldo =
+    !isCancelled &&
+    isPaymentApproved &&
+    ((isAdvance && !isSaldoPaid) ||
+      (booking.status === "confirmed" &&
+        paidAmount < totalPrice &&
+        paidAmount > 0 &&
+        !isSaldoPaid))
+  const saldoRemaining = hasPendingSaldo
+    ? Math.max(0, Number((totalPrice - paidAmount).toFixed(2)))
+    : 0
+
+  // Totalmente pagado SOLO si el pago inicial fue aprobado
+  const isFullyPaid =
+    !isCancelled &&
+    isPaymentApproved &&
+    (isSaldoPaid || (paidAmount >= totalPrice && paidAmount > 0 && !isAdvance))
+
+  const paymentMethodName =
+    payment?.method ||
+    payment?.paymentMethod ||
+    booking.paymentMethod ||
+    "Yape / Plin"
 
   return {
     totalPrice,
@@ -110,6 +159,9 @@ export function getBookingPaymentDetails(booking: any) {
     hasPendingSaldo,
     saldoRemaining,
     isFullyPaid,
+    isPendingAudit,
+    hasVoucher,
+    isPaymentApproved,
     paymentMethodName,
   }
 }
@@ -391,6 +443,12 @@ export function UserBookingsContent() {
                               ✓ 100% Pagado
                             </Badge>
                           </div>
+                        ) : fin.isPendingAudit ? (
+                          <div className="absolute top-2 right-2">
+                            <Badge className="bg-sky-600 hover:bg-sky-700 text-white font-bold shadow animate-pulse">
+                              ⏳ Esperando confirmación
+                            </Badge>
+                          </div>
                         ) : null}
                       </div>
 
@@ -451,6 +509,14 @@ export function UserBookingsContent() {
                             </span>
                             <span className="font-bold">S/ {fin.totalPrice.toFixed(2)}</span>
                           </div>
+                        ) : fin.isPendingAudit ? (
+                          <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs text-sky-800 dark:text-sky-300 flex items-center justify-between font-medium">
+                            <span className="flex items-center gap-1.5">
+                              <ClockIcon className="h-4 w-4 text-sky-600 animate-spin" />
+                              Espere confirmación del club
+                            </span>
+                            <span className="font-bold">S/ {fin.paidAmount || fin.totalPrice}</span>
+                          </div>
                         ) : (
                           <div className="font-medium text-xs">Precio Total: S/ {fin.totalPrice.toFixed(2)}</div>
                         )}
@@ -479,21 +545,13 @@ export function UserBookingsContent() {
                         <Button variant="outline" className="flex-1 text-xs" onClick={() => handleViewDetails(booking)}>
                           Ver detalles
                         </Button>
-                        {fin.hasPendingSaldo ? (
+                        {fin.hasPendingSaldo && (
                           <Button
                             className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1 shadow-sm"
                             onClick={() => handlePaySaldo(booking)}
                           >
                             <Banknote className="h-3.5 w-3.5" />
                             Pagar Saldo (S/ {fin.saldoRemaining})
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            className="text-xs text-destructive hover:bg-destructive/10"
-                            onClick={() => { setSelectedBooking(booking); handleCancelBooking() }}
-                          >
-                            Cancelar
                           </Button>
                         )}
                       </CardFooter>
@@ -529,6 +587,7 @@ export function UserBookingsContent() {
                 const totalPrice = getBookingTotalPrice(booking)
                 const club = booking.court?.venue?.club || booking.court?.club || booking.club
                 const clubPhone = club?.whatsapp || club?.phone || booking.court?.venue?.phone
+                const fin = getBookingPaymentDetails(booking)
 
                 return (
                   <Card key={booking.id} className="overflow-hidden flex flex-col justify-between border shadow-sm">
@@ -547,12 +606,21 @@ export function UserBookingsContent() {
                             <CardDescription>{venueName}</CardDescription>
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            {getStatusBadge(booking.status)}
-                            <BookingExpirationTimer
-                              compact
-                              createdAt={booking.createdAt}
-                              paymentMethod={booking.paymentMethod || booking.payment?.method || booking.payment?.metodo}
-                            />
+                            {fin.isPendingAudit ? (
+                              <Badge variant="outline" className="flex items-center gap-1.5 font-semibold text-xs border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400">
+                                <ClockIcon className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                                <span>Espere confirmación</span>
+                              </Badge>
+                            ) : (
+                              <>
+                                {getStatusBadge(booking.status)}
+                                <BookingExpirationTimer
+                                  compact
+                                  createdAt={booking.createdAt}
+                                  paymentMethod={booking.paymentMethod || booking.payment?.method || booking.payment?.metodo}
+                                />
+                              </>
+                            )}
                           </div>
                         </div>
                       </CardHeader>
@@ -573,20 +641,29 @@ export function UserBookingsContent() {
                         </div>
                         <div className="font-semibold text-sm">Precio Total: S/ {totalPrice}</div>
 
-                        {/* Temporizador destacado de tiempo restante antes de liberar la cancha */}
-                        <BookingExpirationTimer
-                          createdAt={booking.createdAt}
-                          paymentMethod={booking.paymentMethod || booking.payment?.method || booking.payment?.metodo}
-                        />
-
-                        {booking.paymentMethod?.toLowerCase() === "whatsapp" || booking.payment?.metodo?.toLowerCase() === "whatsapp" || booking.payment?.method?.toLowerCase() === "whatsapp" ? (
-                          <div className="p-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300">
-                            💬 <strong>Coordinación WhatsApp:</strong> Horario bloqueado por <strong>2 horas</strong>. El administrador confirmará tu reserva manualmente desde su panel.
+                        {/* Estado según si adjuntó voucher o no */}
+                        {fin.isPendingAudit ? (
+                          <div className="p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-xs text-sky-900 dark:text-sky-200 flex items-center justify-between font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <ClockIcon className="h-4 w-4 text-sky-600 shrink-0 animate-spin" />
+                              <span>Espere confirmación por el club</span>
+                            </div>
+                            <Badge variant="outline" className="bg-sky-100 text-sky-800 text-[10px] font-semibold border-sky-200">
+                              Comprobante en revisión
+                            </Badge>
                           </div>
                         ) : (
-                          <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
-                            ⏱️ <strong>Tolerancia:</strong> Sube tu comprobante dentro de los <strong>10 min</strong> de reservar para asegurar tu horario.
-                          </div>
+                          <>
+                            {booking.paymentMethod?.toLowerCase() === "whatsapp" || booking.payment?.metodo?.toLowerCase() === "whatsapp" || booking.payment?.method?.toLowerCase() === "whatsapp" ? (
+                              <div className="p-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300">
+                                💬 <strong>Coordinación WhatsApp:</strong> Horario bloqueado por <strong>2 horas</strong>. El administrador confirmará tu reserva manualmente desde su panel.
+                              </div>
+                            ) : (
+                              <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
+                                ⏱️ <strong>Tolerancia:</strong> Tienes <strong>10 min</strong> para subir tu comprobante de pago y asegurar tu horario antes de que se libere la cancha.
+                              </div>
+                            )}
+                          </>
                         )}
                       </CardContent>
                     </div>
@@ -613,7 +690,7 @@ export function UserBookingsContent() {
                           Ver detalles
                         </Button>
                         <Button className="flex-1 text-xs bg-primary" onClick={() => handlePayment(booking)}>
-                          Pagar ahora
+                          {fin.isPendingAudit ? "Ver / Cambiar comprobante" : "Pagar ahora"}
                         </Button>
                       </CardFooter>
                     </div>
@@ -753,10 +830,28 @@ export function UserBookingsContent() {
                 </div>
 
                 {selectedBooking.status === "pending" && (
-                  <BookingExpirationTimer
-                    createdAt={selectedBooking.createdAt}
-                    paymentMethod={selectedBooking.paymentMethod || selectedBooking.payment?.method || selectedBooking.payment?.metodo}
-                  />
+                  (() => {
+                    const fin = getBookingPaymentDetails(selectedBooking)
+                    if (fin.isPendingAudit) {
+                      return (
+                        <div className="p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-xs text-sky-900 dark:text-sky-200 flex items-center justify-between font-medium">
+                          <div className="flex items-center gap-1.5">
+                            <ClockIcon className="h-4 w-4 text-sky-600 shrink-0 animate-spin" />
+                            <span>Espere confirmación por el club</span>
+                          </div>
+                          <Badge variant="outline" className="bg-sky-100 text-sky-800 text-[10px] font-semibold border-sky-200">
+                            Comprobante en revisión
+                          </Badge>
+                        </div>
+                      )
+                    }
+                    return (
+                      <BookingExpirationTimer
+                        createdAt={selectedBooking.createdAt}
+                        paymentMethod={selectedBooking.paymentMethod || selectedBooking.payment?.method || selectedBooking.payment?.metodo}
+                      />
+                    )
+                  })()
                 )}
 
                 <div>
@@ -797,6 +892,11 @@ export function UserBookingsContent() {
                         <div className="flex items-center justify-between text-xs pt-1.5 border-t text-emerald-600 font-bold">
                           <span>Estado del Saldo:</span>
                           <span>✓ 100% Liquidado</span>
+                        </div>
+                      ) : fin.isPendingAudit ? (
+                        <div className="flex items-center justify-between text-xs pt-1.5 border-t text-sky-600 dark:text-sky-400 font-bold">
+                          <span>Estado del Pago:</span>
+                          <span>⏳ En Revisión por el Club</span>
                         </div>
                       ) : null}
                     </div>

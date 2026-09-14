@@ -323,7 +323,7 @@ export class BookingService implements OnModuleInit {
     const initialPaymentStatus = isFullPaid ? PaymentStatus.PAID : PaymentStatus.PENDING;
 
     // Parsear customerInfo defensivamente si viene como string JSON u objeto
-    let parsedCustomerInfo = dto.customerInfo;
+    let parsedCustomerInfo: any = dto.customerInfo;
     if (typeof parsedCustomerInfo === 'string') {
       try {
         parsedCustomerInfo = JSON.parse(parsedCustomerInfo);
@@ -332,30 +332,31 @@ export class BookingService implements OnModuleInit {
       }
     }
 
+    const rawDto = dto as any;
     const customerPhone =
       parsedCustomerInfo?.phone ||
-      dto.phone ||
-      dto['customerInfo[phone]'] ||
+      rawDto.phone ||
+      rawDto['customerInfo[phone]'] ||
       userReservation.phone ||
       '';
 
     const customerName =
       parsedCustomerInfo?.name ||
-      dto.name ||
-      dto['customerInfo[name]'] ||
+      rawDto.name ||
+      rawDto['customerInfo[name]'] ||
       userReservation.name ||
       '';
 
     const customerEmail =
       parsedCustomerInfo?.email ||
-      dto.email ||
-      dto['customerInfo[email]'] ||
+      rawDto.email ||
+      rawDto['customerInfo[email]'] ||
       userReservation.email;
 
     const customerNotes =
       parsedCustomerInfo?.notes ||
-      dto.notes ||
-      dto['customerInfo[notes]'] ||
+      rawDto.notes ||
+      rawDto['customerInfo[notes]'] ||
       '';
 
     // Si el cliente no tenía teléfono registrado en su perfil y ahora se ingresó uno, actualizar su perfil
