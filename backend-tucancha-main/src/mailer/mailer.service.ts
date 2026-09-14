@@ -44,7 +44,7 @@ export class MailerService {
   }
 
   private get fromEmail(): string {
-    return process.env.RESEND_FROM_EMAIL || process.env.SMTP_FROM || 'TuCancha <onboarding@resend.dev>';
+    return process.env.RESEND_FROM_EMAIL || process.env.SMTP_FROM || 'TuCancha <notificaciones@tucancha.com.pe>';
   }
 
   private get webUrl(): string {
