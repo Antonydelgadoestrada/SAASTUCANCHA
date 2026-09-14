@@ -9,7 +9,7 @@ import {
   CheckCircle2Icon, XCircleIcon, EyeIcon, RefreshCwIcon,
   SearchIcon, ReceiptIcon, BanknoteIcon, ArrowRightIcon,
   UploadIcon, AlertCircleIcon, ShieldCheckIcon, DownloadIcon,
-  Maximize2Icon, FileTextIcon, ExternalLinkIcon
+  Maximize2Icon, FileTextIcon, ExternalLinkIcon, PlusCircleIcon
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -32,6 +32,8 @@ import {
   confirmSaldoPayment, settlePaymentSaldo, uploadPaymentReceipt,
   downloadImage, PaymentItem, PaymentMetrics, PaymentMethodEnum
 } from "@/lib/payments"
+import { getAllCourtsByClub } from "@/lib/courts"
+import { ManualBookingModal } from "@/components/club/manual-booking-modal"
 
 import { ReceiptLightboxModal } from "@/components/ui/receipt-lightbox-modal"
 
@@ -1748,10 +1750,17 @@ function MetricsAuditTab() {
 
 export function ReservationsContent() {
   const queryClient = useQueryClient()
+  const [isNewReservationOpen, setIsNewReservationOpen] = useState<boolean>(false)
+
+  const { data: courts = [] } = useQuery({
+    queryKey: ["club-courts"],
+    queryFn: getAllCourtsByClub,
+  })
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["club-payment-metrics"] })
     queryClient.invalidateQueries({ queryKey: ["club-payments-list"] })
+    queryClient.invalidateQueries({ queryKey: ["club-courts"] })
     toast.info("Datos actualizados")
   }
 
@@ -1767,14 +1776,31 @@ export function ReservationsContent() {
             Audita comprobantes, monitorea ingresos y gestiona la liquidación de saldos en tiempo real.
           </p>
         </div>
-        <Button variant="outline" onClick={handleRefresh} className="gap-2 shrink-0">
-          <RefreshCwIcon className="w-4 h-4" />
-          Actualizar Datos
-        </Button>
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <Button
+            onClick={() => setIsNewReservationOpen(true)}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md hover:shadow-lg transition-all"
+          >
+            <PlusCircleIcon className="w-4 h-4" />
+            NUEVA RESERVA
+          </Button>
+          <Button variant="outline" onClick={handleRefresh} className="gap-2">
+            <RefreshCwIcon className="w-4 h-4" />
+            Actualizar Datos
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
       <MetricsAuditTab />
+
+      {/* Modal de Nueva Reserva Manual para el Club */}
+      <ManualBookingModal
+        open={isNewReservationOpen}
+        onOpenChange={setIsNewReservationOpen}
+        courts={courts}
+        onSuccess={handleRefresh}
+      />
     </div>
   )
 }

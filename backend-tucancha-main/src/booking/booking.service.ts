@@ -18,6 +18,8 @@ import { Court } from '../court/court.entity';
 import { S3Service } from '../aws/s3.service';
 import { MailerService } from '../mailer/mailer.service';
 import { isNight } from '../helpers/helpers';
+import { Payment, PaymentType } from '../payment/payment.entity';
+import { PaymentMethod } from '../payment/payment-method.enum';
 
 function generateTimeSlots(start: string, duration: number): string[] {
   const [hours, minutes] = start.split(':').map(Number);
@@ -55,6 +57,8 @@ export class BookingService implements OnModuleInit {
   constructor(
     @InjectRepository(Booking)
     private readonly bookingRepo: Repository<Booking>,
+    @InjectRepository(Payment)
+    private readonly paymentRepo: Repository<Payment>,
     private readonly scheduleTemplateService: ScheduleTemplateService,
     private readonly courtService: CourtService,
     private readonly mercadoPagoService: MercadoPagoService,
@@ -264,15 +268,15 @@ export class BookingService implements OnModuleInit {
 
   async createManualBooking(dto: CreateManualBookingDto, user: User) {
     const userReservation = await this.userService.findByEmail(dto.userEmail);
-    const pricing = dto.pricing ? JSON.parse(dto.pricing) : null;
-    if(!userReservation) throw new NotFoundException(`email: ${dto.userEmail} no encontrado`)
+    const pricing = dto.pricing ? (typeof dto.pricing === 'string' ? JSON.parse(dto.pricing) : dto.pricing) : null;
+    if (!userReservation) throw new NotFoundException(`El correo "${dto.userEmail}" no se encuentra registrado en el sistema`);
     const parsedDuration = Number(dto.duration) || 1;
     let datesToBook: Date[] = [];
     if (dto.dates && dto.dates.length > 0) {
       if (typeof dto.dates === 'string') {
-        datesToBook = (dto.dates as string).split(',').map(d => new Date(d));
+        datesToBook = (dto.dates as string).split(',').map((d) => new Date(d));
       } else {
-        datesToBook = dto.dates.map(d => new Date(d));
+        datesToBook = dto.dates.map((d) => new Date(d));
       }
     } else if (dto.date) {
       datesToBook = [new Date(dto.date)];
@@ -280,51 +284,111 @@ export class BookingService implements OnModuleInit {
       throw new BadRequestException('Se requiere una fecha o un arreglo de fechas');
     }
 
-    const court: any = await this.courtService.findOne(dto.courtId , ['club']);
+    const court: any = await this.courtService.findOne(dto.courtId, ['club', 'club.owner']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
-    
+
     const createdBookings = [];
-    const finalPricing = pricing ? {
-      ...pricing,
-      totalPrice: pricing.totalPrice / datesToBook.length,
-      basePrice: pricing.basePrice / datesToBook.length
-    } : null;
+    const finalPricing = pricing
+      ? {
+          ...pricing,
+          totalPrice: pricing.totalPrice / datesToBook.length,
+          basePrice: (pricing.basePrice || pricing.totalPrice) / datesToBook.length,
+        }
+      : null;
+
+    const singleTotalPrice = Number(finalPricing?.totalPrice ?? dto.price ?? 0);
+
+    // Mapear método de pago seguro
+    const rawMethod = (dto.paymentMethod || 'efectivo').toString().toUpperCase();
+    let safeMethod: PaymentMethod = PaymentMethod.EFECTIVO;
+    if (rawMethod.includes('YAPE')) safeMethod = PaymentMethod.YAPE;
+    else if (rawMethod.includes('PLIN')) safeMethod = PaymentMethod.PLIN;
+    else if (rawMethod.includes('TRANSFER')) safeMethod = PaymentMethod.TRANSFERENCIA;
+    else if (rawMethod.includes('CASH') || rawMethod.includes('EFECTIVO')) safeMethod = PaymentMethod.EFECTIVO;
+    else if (rawMethod.includes('MERCADO')) safeMethod = PaymentMethod.MERCADOPAGO;
+
+    // Determinar si es pago completo, adelanto o pendiente
+    const rawAmountPaid =
+      dto.amountPaid !== undefined && dto.amountPaid !== null && String(dto.amountPaid).trim() !== ''
+        ? Number(dto.amountPaid)
+        : singleTotalPrice;
+
+    const amountPaidPerBooking = isNaN(rawAmountPaid) ? 0 : rawAmountPaid / datesToBook.length;
+
+    const isFullPaid = singleTotalPrice > 0 && amountPaidPerBooking >= singleTotalPrice - 0.05;
+    const isPartialPaid = !isFullPaid && amountPaidPerBooking > 0;
+    const isUnpaid = !isFullPaid && !isPartialPaid;
+
+    const initialBookingStatus = isUnpaid ? BookingStatus.PENDING : BookingStatus.CONFIRMED;
+    const initialPaymentStatus = isFullPaid ? PaymentStatus.PAID : PaymentStatus.PENDING;
 
     for (let currentdate of datesToBook) {
       let slots = await this.checkAvailability(dto.courtId, currentdate, dto.startTime, parsedDuration);
       const booking = this.bookingRepo.create({
-        user:userReservation,
+        user: userReservation,
         court,
-        club: user.club,
+        club: user.club || court.club,
         date: currentdate,
         startTime: dto.startTime,
         endTime: dto.endTime,
         duration: parsedDuration,
-        customerInfo:{
-          name: userReservation.name,
-          email: userReservation.email,
-          phone: userReservation.phone,
+        customerInfo: {
+          name: dto.customerInfo?.name || userReservation.name,
+          email: dto.customerInfo?.email || userReservation.email,
+          phone: dto.customerInfo?.phone || userReservation.phone,
+          notes: dto.customerInfo?.notes || '',
         },
         pricing: finalPricing,
-        status: BookingStatus.PENDING,
-        paymentMethod:'manual',
-        paymentStatus: PaymentStatus.PENDING,
-        bookingReference: `REF-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+        status: initialBookingStatus,
+        paymentMethod: safeMethod.toLowerCase(),
+        paymentStatus: initialPaymentStatus,
+        bookingReference: `REF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       });
-      const result = await this.bookingRepo.save(booking);
-      slots = slots.map((slot)=>(Object.assign(slot, { status: 'on-hold' })))
+      const savedBooking = await this.bookingRepo.save(booking);
+
+      // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
+      if (!isUnpaid) {
+        const payment = this.paymentRepo.create({
+          bookings: [savedBooking],
+          user: userReservation,
+          amount: amountPaidPerBooking,
+          currency: 'PEN',
+          method: safeMethod,
+          paymentMethod: safeMethod,
+          status: PaymentStatus.PAID,
+          type: isFullPaid ? PaymentType.PAGO_COMPLETO : PaymentType.ADELANTO,
+          saldoStatus: isFullPaid ? 'NO_APLICA' : 'PENDIENTE',
+          saldoAmount: isFullPaid ? 0 : Math.max(0, Number((singleTotalPrice - amountPaidPerBooking).toFixed(2))),
+          pendingAudit: false,
+          confirmadoPor: user,
+          fechaConfirmacion: new Date(),
+        });
+        const savedPayment = await this.paymentRepo.save(payment);
+        savedBooking.payment = savedPayment;
+        await this.bookingRepo.save(savedBooking);
+      }
+
+      // Ocupar o retener slots en el calendario
+      slots = slots.map((slot) => Object.assign(slot, { status: isUnpaid ? 'on-hold' : 'occupied' }));
       await this.scheduleTemplateService.bulkUpdate(slots);
-      createdBookings.push(result);
+      createdBookings.push(savedBooking);
     }
-    
-    for (const booking of createdBookings) {
+
+    // Despachar notificaciones correspondientes
+    for (const b of createdBookings) {
       try {
-        await this.mailerService.sendBookingConfirmationEmail(booking.customerInfo.email, booking);
-      } catch (e) {
-        console.warn(`Error al enviar correo para reserva ${booking.id}:`, e);
+        const fullBooking = await this.findOneComplete(b.id);
+        const targetBooking = fullBooking || b;
+        if (isFullPaid) {
+          await this.mailerService.sendBookingPaidNotifications(targetBooking);
+        } else {
+          await this.mailerService.sendBookingReservationNotifications(targetBooking);
+        }
+      } catch (e: any) {
+        console.warn(`Error al enviar correo para reserva manual ${b.id}:`, e?.message);
       }
     }
-    
+
     return createdBookings.length === 1 ? createdBookings[0] : createdBookings;
   }
 

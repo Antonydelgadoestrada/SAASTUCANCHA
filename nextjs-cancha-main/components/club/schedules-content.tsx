@@ -55,6 +55,7 @@ import { getAllCourtsByClub } from "@/lib/courts";
 import { FormSidebar } from "@/components/ui/form-sidebar";
 import { ScheduleTemplateForm } from "./schedule-template-form";
 import { getAllReservation, createReservationManual } from "@/lib/reservation";
+import { ManualBookingModal } from "./manual-booking-modal";
 import {
   Dialog,
   DialogContent,
@@ -103,11 +104,6 @@ export function ClubSchedulesContent() {
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
   const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
 
-  // Formulario de reserva manual
-  const [bookingUserEmail, setBookingUserEmail] = useState("");
-  const [bookingDuration, setBookingDuration] = useState("1");
-  const [bookingPrice, setBookingPrice] = useState("");
-  const [isBookingSaving, setIsBookingSaving] = useState(false);
 
   const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(false);
   const [editionTemplate, setEditionTemplate] = useState(false);
@@ -386,75 +382,6 @@ export function ClubSchedulesContent() {
     return courts.find(c => String(c.id) === String(selectedCourt));
   }, [courts, selectedCourt]);
 
-  // Calcular precio sugerido al cambiar duración o cancha
-  useEffect(() => {
-    if (!selectedSlotForAction || !activeCourtObj) return;
-    const hourPrice = Number(activeCourtObj.priceDay || 0);
-    const total = hourPrice * Number(bookingDuration);
-    setBookingPrice(String(total));
-  }, [bookingDuration, selectedSlotForAction, activeCourtObj]);
-
-  const handleSaveManualBooking = async () => {
-    if (!selectedSlotForAction) return;
-    if (!bookingUserEmail.trim()) {
-      toast.error("El email del usuario es obligatorio");
-      return;
-    }
-
-    setIsBookingSaving(true);
-    try {
-      const [h, m] = selectedSlotForAction.time.split(":").map(Number);
-      const totalMinutesToAdd = Number(bookingDuration) * 60;
-      const d = new Date();
-      d.setHours(h, m, 0, 0);
-      d.setMinutes(d.getMinutes() + totalMinutesToAdd);
-      const endHours = d.getHours().toString().padStart(2, "0");
-      const endMinutes = d.getMinutes().toString().padStart(2, "0");
-      const endTime = `${endHours}:${endMinutes}`;
-
-      const payload = {
-        courtId: selectedCourt,
-        date: format(selectedSlotForAction.date, "yyyy-MM-dd"),
-        startTime: selectedSlotForAction.time,
-        endTime,
-        duration: Number(bookingDuration),
-        price: bookingPrice,
-        userEmail: bookingUserEmail,
-        pricing: JSON.stringify({
-          basePrice: Number(bookingPrice) / Number(bookingDuration),
-          discounts: 0,
-          taxes: 0,
-          totalPrice: Number(bookingPrice)
-        })
-      };
-
-      await createReservationManual(payload);
-
-      // Limpiar los slots que abarca la reserva de la lista local de pendientes por guardar (timeSlotsToUpdate)
-      const bookingSlots = getBookingSlots(selectedSlotForAction.time, Number(bookingDuration));
-      const dateStr = format(selectedSlotForAction.date, "yyyy-MM-dd");
-      setTimeSlotsToUpdate((prev) => {
-        const next = new Map(prev);
-        bookingSlots.forEach((slotTime) => {
-          next.delete(`${dateStr}-${slotTime}`);
-        });
-        return next;
-      });
-
-      toast.success("Reserva manual registrada exitosamente");
-      setIsBookingFormOpen(false);
-      setSelectedSlotForAction(null);
-      setBookingUserEmail("");
-      setBookingDuration("1");
-      await refetchWeekCalendar();
-    } catch (err: any) {
-      console.error(err);
-      const msg = err.response?.data?.message || "Error al crear la reserva. Verifica que el email ingresado pertenezca a un usuario registrado.";
-      toast.error(msg);
-    } finally {
-      setIsBookingSaving(false);
-    }
-  };
 
 
   useEffect(() => {
@@ -1258,73 +1185,22 @@ export function ClubSchedulesContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal para formulario de reserva manual */}
-      <Dialog open={isBookingFormOpen} onOpenChange={setIsBookingFormOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Registrar Reserva Manual</DialogTitle>
-            <DialogDescription>
-              Completa los detalles para reservar la cancha {activeCourtObj?.name} el día{" "}
-              {selectedSlotForAction && format(selectedSlotForAction.date, "EEEE d 'de' MMMM", { locale: es })} a las{" "}
-              {selectedSlotForAction?.time}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="userEmail">Email del Cliente (Debe estar registrado)</Label>
-              <Input
-                id="userEmail"
-                type="email"
-                placeholder="ejemplo@usuario.com"
-                value={bookingUserEmail}
-                onChange={(e) => setBookingUserEmail(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="duration">Duración de la Reserva</Label>
-              <Select value={bookingDuration} onValueChange={setBookingDuration}>
-                <SelectTrigger id="duration">
-                  <SelectValue placeholder="Selecciona duración" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0.5">30 minutos</SelectItem>
-                  <SelectItem value="1.0">1 hora</SelectItem>
-                  <SelectItem value="1.5">1.5 horas</SelectItem>
-                  <SelectItem value="2.0">2 horas</SelectItem>
-                  <SelectItem value="2.5">2.5 horas</SelectItem>
-                  <SelectItem value="3.0">3 horas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="price">Costo sugerido de la reserva (S/)</Label>
-              <Input
-                id="price"
-                type="number"
-                value={bookingPrice}
-                onChange={(e) => setBookingPrice(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              disabled={isBookingSaving}
-              onClick={() => {
-                setIsBookingFormOpen(false);
-                setSelectedSlotForAction(null);
-                setBookingUserEmail("");
-                setBookingDuration("1");
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button disabled={isBookingSaving} onClick={handleSaveManualBooking}>
-              {isBookingSaving ? "Guardando..." : "Guardar Reserva"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Modal para formulario de reserva manual con cálculo 30 min y pagos */}
+      <ManualBookingModal
+        open={isBookingFormOpen}
+        onOpenChange={(val) => {
+          setIsBookingFormOpen(val);
+          if (!val) setSelectedSlotForAction(null);
+        }}
+        courts={courts}
+        initialCourtId={selectedCourt && selectedCourt !== "all" ? String(selectedCourt) : undefined}
+        initialDate={selectedSlotForAction?.date}
+        initialTime={selectedSlotForAction?.time || "08:00"}
+        onSuccess={async () => {
+          setSelectedSlotForAction(null);
+          await refetchWeekCalendar();
+        }}
+      />
     </div>
   );
 }

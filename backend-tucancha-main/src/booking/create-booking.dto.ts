@@ -126,11 +126,12 @@ export class CreateManualBookingDto {
 
   @ValidateNested()
   @IsOptional()
-  pricing:string
-  // pricing: {
-  //   basePrice: number;
-  //   discounts: number;
-  //   taxes: number;
-  //   totalPrice: number;
-  // }
+  pricing: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
+  amountPaid?: number | string;
 }
