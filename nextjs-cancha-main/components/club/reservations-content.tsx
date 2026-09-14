@@ -47,24 +47,34 @@ export function computePaymentDetails(payment: PaymentItem) {
   const paidInitial = Number(payment.amount || 0)
 
   const normalizedStatus = String(payment.status || "").toUpperCase().trim()
+  const normalizedBookingStatus = String(booking?.status || "").toUpperCase().trim()
 
-  const isComprobanteApproved =
-    normalizedStatus === "CONFIRMADO" ||
-    normalizedStatus === "CONFIRMED" ||
-    normalizedStatus === "PAID" ||
-    normalizedStatus === "PAGADO" ||
-    normalizedStatus === "APPROVED" ||
-    normalizedStatus === "APROBADO"
-
-  const isComprobanteRejected =
+  const isCancelled =
+    normalizedStatus === "CANCELADO" ||
+    normalizedStatus === "CANCELLED" ||
     normalizedStatus === "RECHAZADO" ||
     normalizedStatus === "REJECTED" ||
-    normalizedStatus === "FAILED"
+    normalizedStatus === "FAILED" ||
+    normalizedBookingStatus === "CANCELLED" ||
+    normalizedBookingStatus === "CANCELADO" ||
+    normalizedBookingStatus === "REJECTED" ||
+    normalizedBookingStatus === "RECHAZADO"
+
+  const isComprobanteApproved =
+    !isCancelled &&
+    (normalizedStatus === "CONFIRMADO" ||
+      normalizedStatus === "CONFIRMED" ||
+      normalizedStatus === "PAID" ||
+      normalizedStatus === "PAGADO" ||
+      normalizedStatus === "APPROVED" ||
+      normalizedStatus === "APROBADO")
+
+  const isComprobanteRejected = isCancelled
 
   const isComprobantePending =
+    !isCancelled &&
     (normalizedStatus === "PENDIENTE" || normalizedStatus === "PENDING") &&
-    !isComprobanteApproved &&
-    !isComprobanteRejected
+    !isComprobanteApproved
 
   const normSaldo = String(payment.saldoStatus || "").toUpperCase().trim()
   const isTypeAdelanto =
@@ -74,33 +84,46 @@ export function computePaymentDetails(payment: PaymentItem) {
   // Si ya se pagó el 100% o el saldoStatus es NO_APLICA o PAGADO, no es adelanto pendiente
   const isFullyPaidAmount = totalBookingPrice > 0 && paidInitial >= totalBookingPrice - 0.05
   const isSaldoPaid =
-    normSaldo === "PAGADO" ||
-    normSaldo === "PAID" ||
-    normSaldo === "NO_APLICA" ||
-    isFullyPaidAmount ||
-    (!isTypeAdelanto && isComprobanteApproved)
+    !isCancelled &&
+    (normSaldo === "PAGADO" ||
+      normSaldo === "PAID" ||
+      normSaldo === "NO_APLICA" ||
+      (isFullyPaidAmount && isComprobanteApproved) ||
+      (!isTypeAdelanto && isComprobanteApproved))
 
   // Solo es adelanto si fue registrado como tal Y todavía falta dinero (> 0.05) Y no ha sido marcado como NO_APLICA
   const isAdvance =
+    !isCancelled &&
     isTypeAdelanto &&
     !isFullyPaidAmount &&
     normSaldo !== "NO_APLICA" &&
     totalBookingPrice > paidInitial + 0.05
 
   // Saldo faltante exacto por pagar
-  const saldoFaltante = (isAdvance && !isSaldoPaid && !isComprobanteRejected)
-    ? Math.max(0, Number((totalBookingPrice - paidInitial).toFixed(2)))
+  const saldoFaltante =
+    isAdvance && !isSaldoPaid && !isCancelled
+      ? Math.max(0, Number((totalBookingPrice - paidInitial).toFixed(2)))
+      : 0
+
+  const saldoSettledAmount = isCancelled
+    ? 0
+    : Number(
+        payment.saldoAmount ??
+          (isSaldoPaid && isAdvance ? Math.max(0, totalBookingPrice - paidInitial) : 0)
+      )
+
+  const totalRecibido = isCancelled
+    ? 0
+    : isSaldoPaid
+    ? isAdvance
+      ? paidInitial + saldoSettledAmount
+      : paidInitial
+    : isComprobanteApproved
+    ? paidInitial
     : 0
 
-  const saldoSettledAmount = Number(
-    payment.saldoAmount ?? (isSaldoPaid && isAdvance ? Math.max(0, totalBookingPrice - paidInitial) : 0)
-  )
-
-  const totalRecibido = isSaldoPaid 
-    ? (isAdvance ? paidInitial + saldoSettledAmount : paidInitial)
-    : paidInitial
-
   const isSaldoAuditPending =
+    !isCancelled &&
     isAdvance &&
     !isSaldoPaid &&
     Boolean(payment.saldoComprobanteUrl) &&
@@ -118,19 +141,27 @@ export function computePaymentDetails(payment: PaymentItem) {
     isComprobantePending,
     isComprobanteApproved,
     isComprobanteRejected,
+    isCancelled,
     isSaldoAuditPending,
   }
 }
 
 function comprobanteBadge(status: string, autoConfirmed?: boolean, pendingAudit?: boolean) {
-  if (autoConfirmed) {
+  const normalized = String(status || "").toUpperCase().trim()
+  const isRejectedOrCancelled =
+    normalized === "RECHAZADO" ||
+    normalized === "REJECTED" ||
+    normalized === "CANCELADO" ||
+    normalized === "CANCELLED" ||
+    normalized === "FAILED"
+
+  if (autoConfirmed && !isRejectedOrCancelled) {
     return (
       <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-300 font-medium text-xs">
         Auto-Confirmado
       </Badge>
     )
   }
-  const normalized = String(status || "").toUpperCase().trim()
   const map: Record<string, { label: string; className: string }> = {
     PENDIENTE:  { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
     PENDING:    { label: "Pendiente", className: "bg-amber-100 text-amber-700 border-amber-300" },
@@ -142,8 +173,9 @@ function comprobanteBadge(status: string, autoConfirmed?: boolean, pendingAudit?
     APROBADO:   { label: "Aprobado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
     RECHAZADO:  { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
     REJECTED:   { label: "Rechazado ✗", className: "bg-red-100 text-red-700 border-red-300" },
-    CANCELADO:  { label: "Cancelado", className: "bg-muted/50 text-slate-600 border-slate-300" },
-    CANCELLED:  { label: "Cancelado", className: "bg-muted/50 text-slate-600 border-slate-300" },
+    CANCELADO:  { label: "Cancelado", className: "bg-red-100 text-red-700 border-red-300" },
+    CANCELLED:  { label: "Cancelado", className: "bg-red-100 text-red-700 border-red-300" },
+    FAILED:     { label: "Fallido", className: "bg-red-100 text-red-700 border-red-300" },
   }
   const v = map[normalized] || { label: "Confirmado ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-300" }
   return <Badge variant="outline" className={`${v.className} font-medium text-xs`}>{v.label}</Badge>
@@ -163,10 +195,11 @@ function saldoBadge(
   saldoMethod?: string | null,
   isRejected?: boolean,
   saldoStatus?: string | null,
-  saldoComprobanteUrl?: string | null
+  saldoComprobanteUrl?: string | null,
+  isCancelled?: boolean
 ) {
-  if (isRejected) {
-    return <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-slate-300 text-xs">Cancelado</Badge>
+  if (isCancelled || isRejected) {
+    return <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300 font-medium text-xs">Reserva Cancelada</Badge>
   }
   if (!isAdvance || saldoFaltante <= 0.01) {
     return (
@@ -554,7 +587,16 @@ function PaymentDetailModal({
 
         <div className="space-y-5 text-sm pt-1">
           {/* Banner de Estado General */}
-          {details.isAdvance && !details.isSaldoPaid && !details.isComprobanteRejected ? (
+          {details.isCancelled ? (
+            <div className="p-3.5 bg-red-500/10 dark:bg-red-950/30 border border-red-300 dark:border-red-800 rounded-xl text-xs text-red-900 dark:text-red-200 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-sm text-red-700 dark:text-red-400">
+                ✕ Reserva Cancelada / Rechazada
+              </p>
+              <p>
+                Esta reserva se encuentra cancelada o rechazada. No aplica cobro ni liquidación de saldo.
+              </p>
+            </div>
+          ) : details.isAdvance && !details.isSaldoPaid && !details.isComprobanteRejected ? (
             <div className="p-3.5 bg-amber-500/10 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
               <div className="flex items-center justify-between">
                 <p className="font-bold flex items-center gap-1.5 text-sm">
@@ -834,7 +876,13 @@ function PaymentDetailModal({
               <div className="flex items-center gap-2">
                 <span
                   className={`w-3 h-3 rounded-full shrink-0 ${
-                    details.isSaldoPaid ? "bg-emerald-500" : details.isAdvance ? "bg-amber-500" : "bg-slate-400"
+                    details.isCancelled
+                      ? "bg-red-500"
+                      : details.isSaldoPaid
+                      ? "bg-emerald-500"
+                      : details.isAdvance
+                      ? "bg-amber-500"
+                      : "bg-slate-400"
                   }`}
                 ></span>
                 <div>
@@ -851,11 +899,17 @@ function PaymentDetailModal({
                 payment.saldoMethod,
                 details.isComprobanteRejected,
                 payment.saldoStatus,
-                payment.saldoComprobanteUrl
+                payment.saldoComprobanteUrl,
+                details.isCancelled
               )}
             </div>
 
-            {!details.isAdvance ? (
+            {details.isCancelled ? (
+              <div className="p-4 bg-red-50 dark:bg-red-950/20 rounded-xl text-center text-xs text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/30">
+                <p className="font-semibold">Reserva Cancelada</p>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">Esta reserva ha sido cancelada o rechazada. No aplica cobro ni liquidación de saldo.</p>
+              </div>
+            ) : !details.isAdvance ? (
               <div className="p-4 bg-muted/30 rounded-xl text-center text-xs text-muted-foreground">
                 <p className="font-semibold text-foreground">No aplica saldo pendiente</p>
                 <p className="text-[11px] text-muted-foreground/80 mt-0.5">La reserva fue pagada al 100% en el primer pago inicial.</p>
@@ -1491,7 +1545,14 @@ function MetricsAuditTab() {
                       {/* 2do Pago (Saldo Restante) */}
                       <td className="px-4 py-3">
                         <div className="space-y-1.5">
-                          {!details.isAdvance ? (
+                          {details.isCancelled ? (
+                            <div className="space-y-0.5">
+                              <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300 font-medium text-xs">
+                                Reserva Cancelada
+                              </Badge>
+                              <p className="text-[10px] text-muted-foreground/80">Cancelada</p>
+                            </div>
+                          ) : !details.isAdvance ? (
                             <div className="space-y-0.5">
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-300 font-medium text-xs">
                                 100% Pagado
@@ -1517,7 +1578,8 @@ function MetricsAuditTab() {
                                   p.saldoMethod,
                                   details.isComprobanteRejected,
                                   p.saldoStatus,
-                                  p.saldoComprobanteUrl
+                                  p.saldoComprobanteUrl,
+                                  details.isCancelled
                                 )}
                               </div>
 

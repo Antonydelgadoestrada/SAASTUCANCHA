@@ -85,6 +85,7 @@ export interface PaymentItem {
     }
     court?: { id: string; name: string }
     customerInfo?: { name: string; email: string; phone?: string }
+    status?: string
     autoConfirmed?: boolean
     pendingAudit?: boolean
   }

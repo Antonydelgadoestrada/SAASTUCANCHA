@@ -75,16 +75,29 @@ export function getBookingPaymentDetails(booking: any) {
   const totalPrice = getBookingTotalPrice(booking)
   const payment = booking.payment
   const paidAmount = payment?.amount ? Number(payment.amount) : 0
+
+  const normBookingStatus = String(booking.status || "").toLowerCase().trim()
+  const normPaymentStatus = String(payment?.status || "").toUpperCase().trim()
+  const isCancelled =
+    normBookingStatus === "cancelled" ||
+    normBookingStatus === "cancelado" ||
+    normBookingStatus === "rejected" ||
+    normBookingStatus === "rechazado" ||
+    normPaymentStatus === "RECHAZADO" ||
+    normPaymentStatus === "REJECTED" ||
+    normPaymentStatus === "CANCELADO" ||
+    normPaymentStatus === "CANCELLED" ||
+    normPaymentStatus === "FAILED"
   
   // Es adelanto si el tipo es ADELANTO o si se pagó un monto menor al total y mayor a 0
-  const isAdvance = payment?.type === "ADELANTO" || (paidAmount > 0 && paidAmount < totalPrice)
-  const isSaldoPaid = payment?.saldoStatus === "PAGADO"
-  const isSaldoPendingVerification = payment?.saldoStatus === "PENDIENTE" && !!payment?.saldoComprobanteUrl
+  const isAdvance = !isCancelled && (payment?.type === "ADELANTO" || (paidAmount > 0 && paidAmount < totalPrice))
+  const isSaldoPaid = !isCancelled && payment?.saldoStatus === "PAGADO"
+  const isSaldoPendingVerification = !isCancelled && payment?.saldoStatus === "PENDIENTE" && !!payment?.saldoComprobanteUrl
   
   // Saldo pendiente
-  const hasPendingSaldo = (isAdvance && !isSaldoPaid) || (booking.status === "confirmed" && paidAmount < totalPrice && paidAmount > 0 && !isSaldoPaid)
+  const hasPendingSaldo = !isCancelled && ((isAdvance && !isSaldoPaid) || (booking.status === "confirmed" && paidAmount < totalPrice && paidAmount > 0 && !isSaldoPaid))
   const saldoRemaining = hasPendingSaldo ? Math.max(0, Number((totalPrice - paidAmount).toFixed(2))) : 0
-  const isFullyPaid = isSaldoPaid || (paidAmount >= totalPrice && paidAmount > 0 && !isAdvance)
+  const isFullyPaid = !isCancelled && (isSaldoPaid || (paidAmount >= totalPrice && paidAmount > 0 && !isAdvance))
 
   const paymentMethodName = payment?.method || payment?.paymentMethod || booking.paymentMethod || "Yape / Plin"
 
