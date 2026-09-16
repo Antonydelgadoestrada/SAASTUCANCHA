@@ -1,18 +1,50 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 import { Booking } from '../booking/booking.entity';
 
 @Injectable()
 export class MailerService {
   private readonly logger = new Logger(MailerService.name);
   private resend: Resend;
+  private transporter: nodemailer.Transporter | null = null;
 
   constructor() {
     this.resend = new Resend(process.env.RESEND_API_KEY || 're_dummy');
+    this.initTransporter();
+  }
+
+  private initTransporter() {
+    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.MAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_PASS || process.env.GMAIL_APP_PASSWORD || process.env.MAIL_PASS;
+
+    if (smtpUser && smtpPass) {
+      const isGmail = smtpUser.includes('@gmail.com') || (process.env.SMTP_HOST && process.env.SMTP_HOST.includes('gmail'));
+      this.transporter = nodemailer.createTransport(
+        isGmail
+          ? {
+              service: 'gmail',
+              auth: {
+                user: smtpUser,
+                pass: smtpPass.replace(/\s+/g, ''),
+              },
+            }
+          : {
+              host: process.env.SMTP_HOST || 'smtp.gmail.com',
+              port: Number(process.env.SMTP_PORT) || 465,
+              secure: process.env.SMTP_SECURE === 'true' || (!process.env.SMTP_PORT || process.env.SMTP_PORT === '465'),
+              auth: {
+                user: smtpUser,
+                pass: smtpPass,
+              },
+            },
+      );
+      this.logger.log(`📧 [MailerService] Servidor SMTP configurado para: ${smtpUser}`);
+    }
   }
 
   private get fromEmail(): string {
-    return process.env.RESEND_FROM_EMAIL || 'TuCancha <onboarding@resend.dev>';
+    return process.env.RESEND_FROM_EMAIL || process.env.SMTP_FROM || 'TuCancha <notificaciones@tucancha.com.pe>';
   }
 
   private get webUrl(): string {
@@ -115,6 +147,26 @@ export class MailerService {
       return { success: false, error: 'Email inválido o ausente' };
     }
 
+    // 1. Intentar primero con SMTP / Gmail si está configurado (no tiene restricción de dominio)
+    if (this.transporter) {
+      try {
+        const smtpFrom = process.env.SMTP_FROM || process.env.GMAIL_USER || process.env.MAIL_USER || this.fromEmail;
+        const fromHeader = smtpFrom.includes('<') ? smtpFrom : `TuCancha <${smtpFrom}>`;
+        const info = await this.transporter.sendMail({
+          from: fromHeader,
+          to,
+          subject,
+          html,
+        });
+        this.logger.log(`📧 [MailerService] (SMTP/Gmail) Correo enviado exitosamente a "${to}" [${subject}] (ID: ${info.messageId})`);
+        return { success: true };
+      } catch (smtpErr: any) {
+        this.logger.error(`❌ [MailerService] Error enviando vía SMTP a "${to}": ${smtpErr?.message}`);
+        // Si falla SMTP, continuará intentando con Resend abajo
+      }
+    }
+
+    // 2. Intentar con Resend
     try {
       if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_dummy') {
         const { data, error } = await this.resend.emails.send({
@@ -128,14 +180,23 @@ export class MailerService {
           this.logger.error(
             `❌ [MailerService] Error de entrega Resend a "${to}" [${subject}]: ${JSON.stringify(error)}`,
           );
+          if (
+            error.message?.includes('testing emails to your own email address') ||
+            error.message?.includes('validation_error') ||
+            (error as any).statusCode === 403
+          ) {
+            this.logger.warn(
+              `💡 [MailerService] AVISO IMPORTANTE: Tu clave de Resend está en modo prueba ('onboarding@resend.dev') y Resend NO permite enviar a "${to}" hasta que verifiques un dominio en https://resend.com/domains. Para enviar correos a cualquier persona sin comprar dominio, puedes configurar en tu archivo .env las variables GMAIL_USER y GMAIL_APP_PASSWORD (o SMTP_USER y SMTP_PASS).`,
+            );
+          }
           return { success: false, error: error.message };
         }
 
-        this.logger.log(`📧 [MailerService] Correo enviado exitosamente a "${to}" [${subject}] (ID: ${data?.id})`);
+        this.logger.log(`📧 [MailerService] (Resend) Correo enviado exitosamente a "${to}" [${subject}] (ID: ${data?.id})`);
         return { success: true };
       } else {
-        this.logger.warn(`⚠️ [MailerService] RESEND_API_KEY no configurada o en modo dummy. Destino: ${to}`);
-        return { success: false, error: 'RESEND_API_KEY no configurada' };
+        this.logger.warn(`⚠️ [MailerService] Ni SMTP ni RESEND_API_KEY configuradas. No se pudo enviar correo a: ${to}`);
+        return { success: false, error: 'Servicio de correo no configurado' };
       }
     } catch (err: any) {
       this.logger.error(`❌ [MailerService] Excepción al enviar correo a "${to}": ${err?.message || err}`);
