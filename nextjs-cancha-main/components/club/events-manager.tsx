@@ -331,15 +331,21 @@ export function EventsManager({
         toast.error("Selecciona al menos un día de la semana")
         return null
       }
+      let limitDate: string | undefined = undefined
+      if (formData.fechaLimite) {
+        limitDate = typeof formData.fechaLimite === "string" 
+          ? (formData.fechaLimite as string).substring(0, 10) 
+          : format(new Date(formData.fechaLimite), "yyyy-MM-dd")
+      }
       return {
         courtId: eventCourtId,
-        templateId: templateId ?? null,
+        templateId: templateId || undefined,
         name: formData.nombre.trim(),
         description: formData.descripcion.trim() || undefined,
         recurrenceType: "weekly",
         recurrenceConfig: {
           weekdays: formData.diasSemana.map((id) => SPANISH_DAY_TO_EN[id]).filter(Boolean),
-          limitDate: formData.fechaLimite ? format(formData.fechaLimite, "yyyy-MM-dd") : undefined,
+          limitDate,
         },
         timeRanges,
         price: formData.precio ? parseFloat(formData.precio) : 0,
@@ -348,15 +354,21 @@ export function EventsManager({
     }
 
     if (formData.tipoBloqueo === "mes") {
+      let limitDate: string | undefined = undefined
+      if (formData.fechaLimite) {
+        limitDate = typeof formData.fechaLimite === "string" 
+          ? (formData.fechaLimite as string).substring(0, 10) 
+          : format(new Date(formData.fechaLimite), "yyyy-MM-dd")
+      }
       return {
         courtId: eventCourtId,
-        templateId: templateId ?? null,
+        templateId: templateId || undefined,
         name: formData.nombre.trim(),
         description: formData.descripcion.trim() || undefined,
         recurrenceType: "monthly",
         recurrenceConfig: { 
           dayOfMonth: formData.diaMes,
-          limitDate: formData.fechaLimite ? format(formData.fechaLimite, "yyyy-MM-dd") : undefined,
+          limitDate,
         },
         timeRanges,
         price: formData.precio ? parseFloat(formData.precio) : 0,
@@ -364,14 +376,30 @@ export function EventsManager({
       }
     }
 
-    if (formData.fechasEspecificas.length === 0) {
+    if (!formData.fechasEspecificas || formData.fechasEspecificas.length === 0) {
       toast.error("Selecciona al menos una fecha")
       return null
     }
-    const dates = formData.fechasEspecificas.map((d) => format(d, "yyyy-MM-dd"))
+    const dates = formData.fechasEspecificas
+      .map((d: any) => {
+        if (!d) return null
+        if (typeof d === "string") return d.substring(0, 10)
+        try {
+          return format(new Date(d), "yyyy-MM-dd")
+        } catch {
+          return null
+        }
+      })
+      .filter((x): x is string => Boolean(x))
+
+    if (dates.length === 0) {
+      toast.error("Selecciona al menos una fecha válida")
+      return null
+    }
+
     return {
       courtId: eventCourtId,
-      templateId: templateId ?? null,
+      templateId: templateId || undefined,
       name: formData.nombre.trim(),
       description: formData.descripcion.trim() || undefined,
       recurrenceType: "custom",
@@ -383,11 +411,17 @@ export function EventsManager({
   }
 
   const handleCreateEvent = async () => {
-    if (!formData.nombre.trim()) return
-    const payload = buildPayload()
-    if (!payload) return
+    if (!formData.nombre.trim()) {
+      toast.error("Por favor ingresa un nombre para el evento")
+      return
+    }
     setSaving(true)
     try {
+      const payload = buildPayload()
+      if (!payload) {
+        setSaving(false)
+        return
+      }
       if (editingEventId) {
         await updateCourtScheduleEvent(editingEventId, payload)
         toast.success("Evento actualizado")
