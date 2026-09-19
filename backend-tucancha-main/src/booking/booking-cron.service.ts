@@ -300,22 +300,28 @@ export class BookingCronService {
           continue;
         }
 
-        const dateObj = new Date(booking.date);
+        // Extraer año, mes y día de manera segura sin desfase de zona horaria
+        const rawDate: any = booking.date;
+        let y: number, m: number, d: number;
+        if (typeof rawDate === 'string') {
+          const parts = rawDate.substring(0, 10).split('-').map(Number);
+          y = parts[0];
+          m = parts[1] - 1;
+          d = parts[2];
+        } else {
+          const dt = new Date(rawDate);
+          y = dt.getFullYear();
+          m = dt.getMonth();
+          d = dt.getDate();
+        }
+
         const [hours, minutes] = (booking.startTime || '').split(':').map(Number);
-        if (isNaN(hours) || isNaN(minutes)) {
+        if (isNaN(hours) || isNaN(minutes) || isNaN(y) || isNaN(m) || isNaN(d)) {
           continue;
         }
 
-        // Construir fecha y hora del turno
-        const matchStartTime = new Date(
-          dateObj.getFullYear(),
-          dateObj.getMonth(),
-          dateObj.getDate(),
-          hours,
-          minutes,
-          0,
-          0,
-        );
+        // Construir fecha y hora exacta del turno
+        const matchStartTime = new Date(y, m, d, hours, minutes, 0, 0);
 
         const diffMinutes = Math.round(
           (matchStartTime.getTime() - now.getTime()) / (1000 * 60),
