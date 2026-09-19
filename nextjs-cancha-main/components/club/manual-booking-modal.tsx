@@ -150,7 +150,17 @@ export function ManualBookingModal({
 
   // Cálculo de precio según tarifa de 30 min y duración
   const calculatedPricing = useMemo(() => {
-    if (!selectedCourt) return { unitSlotPrice: 0, totalPrice: 0, isNight: false, hasPromo: false, slotCount: 0 }
+    if (!selectedCourt) {
+      return {
+        unitSlotPrice: 0,
+        totalPrice: 0,
+        regularSlotPrice: 0,
+        promoSlotPrice: 0,
+        isNight: false,
+        hasPromo: false,
+        slotCount: 0,
+      }
+    }
     const [h] = (startTime || "08:00").split(":").map(Number)
     const isNight = !isNaN(h) ? h >= 18 : false
 
