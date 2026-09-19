@@ -924,38 +924,79 @@ export class PaymentService {
       safeType = PaymentType.PAGO_COMPLETO;
     }
 
+    if (isNaN(safeAmount) || safeAmount < 0) {
+      safeAmount = 0;
+    }
+
+    const isSaldoPayment = safeType === PaymentType.SALDO || rawType.includes('SALDO');
+
     let savedPayment: Payment;
     const existing = booking.payment || await this.paymentRepo.findOne({
       where: { bookings: { id: dto.bookingId } },
       relations: ['bookings', 'user'],
     });
 
-    if (existing && existing.status !== PaymentStatus.REJECTED) {
-      if (existing.status === PaymentStatus.PAID) {
-        throw new BadRequestException('Esta reserva ya tiene un pago aprobado.');
-      }
-      return {
-        message: 'Esta reserva ya cuenta con un pago en proceso.',
-        payment: existing,
-      };
-    }
+    if (isSaldoPayment) {
+      if (existing) {
+        const normSaldo = String(existing.saldoStatus || '').toUpperCase().trim();
+        if (normSaldo === 'PAGADO' || normSaldo === 'PAID') {
+          throw new BadRequestException('El saldo de esta reserva ya ha sido cancelado y aprobado por el club.');
+        }
 
-    if (isNaN(safeAmount) || safeAmount < 0) {
-      safeAmount = 0;
-    }
-
-    if (existing) {
-      // Si la reserva ya tiene un registro de pago asociado
-      if (safeType === PaymentType.SALDO || rawType.includes('SALDO')) {
-        // Es la cancelación o comprobante del saldo restante
+        // Es la cancelación o comprobante del saldo restante (2do pago)
         existing.saldoAmount = safeAmount;
         existing.saldoMethod = safeMethod;
         existing.saldoComprobanteUrl = dto.comprobanteUrl;
         existing.saldoStatus = 'PENDIENTE';
         existing.saldoNotas = 'Comprobante de saldo enviado por el cliente';
         existing.saldoFechaConfirmacion = new Date();
+        savedPayment = await this.paymentRepo.save(existing);
       } else {
-        // Actualización de comprobante inicial
+        // En caso improbable de no contar con un pago previo registrado
+        const payment = this.paymentRepo.create({
+          bookings: [booking],
+          user,
+          amount: safeAmount,
+          currency: dto.currency || 'PEN',
+          method: safeMethod,
+          paymentMethod: safeMethod,
+          status: PaymentStatus.PENDING,
+          type: PaymentType.SALDO,
+          saldoStatus: 'PENDIENTE',
+          saldoAmount: safeAmount,
+          saldoMethod: safeMethod,
+          saldoComprobanteUrl: dto.comprobanteUrl,
+          comprobanteUrl: dto.comprobanteUrl,
+          pendingAudit: true,
+          autoConfirmed: false,
+        });
+        savedPayment = await this.paymentRepo.save(payment);
+      }
+    } else {
+      // Flujo de Pago Inicial (Adelanto o Pago Completo)
+      if (existing && existing.status !== PaymentStatus.REJECTED) {
+        if (existing.status === PaymentStatus.PAID) {
+          throw new BadRequestException('Esta reserva ya tiene un pago aprobado.');
+        }
+        // Si está pendiente y el usuario re-envía comprobante para corregirlo
+        if (dto.comprobanteUrl) {
+          existing.amount = safeAmount;
+          existing.method = safeMethod;
+          existing.paymentMethod = safeMethod;
+          existing.status = PaymentStatus.PENDING;
+          existing.type = safeType;
+          existing.comprobanteUrl = dto.comprobanteUrl;
+          existing.pendingAudit = true;
+          existing.autoConfirmed = false;
+          savedPayment = await this.paymentRepo.save(existing);
+        } else {
+          return {
+            message: 'Esta reserva ya cuenta con un pago en proceso.',
+            payment: existing,
+          };
+        }
+      } else if (existing && existing.status === PaymentStatus.REJECTED) {
+        // Actualización tras rechazo previo
         existing.amount = safeAmount;
         existing.method = safeMethod;
         existing.paymentMethod = safeMethod;
@@ -964,36 +1005,37 @@ export class PaymentService {
         existing.comprobanteUrl = dto.comprobanteUrl;
         existing.pendingAudit = true;
         existing.autoConfirmed = false;
+        existing.motivoRechazo = undefined;
+        savedPayment = await this.paymentRepo.save(existing);
+      } else {
+        // Crear nuevo pago inicial
+        const payment = this.paymentRepo.create({
+          bookings: [booking],
+          user,
+          amount: safeAmount,
+          currency: dto.currency || 'PEN',
+          method: safeMethod,
+          paymentMethod: safeMethod,
+          status: PaymentStatus.PENDING,
+          type: safeType,
+          saldoStatus: safeType === PaymentType.PAGO_COMPLETO ? 'NO_APLICA' : 'PENDIENTE',
+          saldoAmount: 0,
+          comprobanteUrl: dto.comprobanteUrl,
+          pendingAudit: true,
+          autoConfirmed: false,
+        });
+        savedPayment = await this.paymentRepo.save(payment);
       }
-      savedPayment = await this.paymentRepo.save(existing);
-    } else {
-      // Crear nuevo pago
-      const payment = this.paymentRepo.create({
-        bookings: [booking],
-        user,
-        amount: safeAmount,
-        currency: dto.currency || 'PEN',
-        method: safeMethod,
-        paymentMethod: safeMethod,
-        status: PaymentStatus.PENDING,
-        type: safeType,
-        saldoStatus: safeType === PaymentType.PAGO_COMPLETO ? 'NO_APLICA' : 'PENDIENTE',
-        saldoAmount: 0,
-        comprobanteUrl: dto.comprobanteUrl,
-        pendingAudit: true,
-        autoConfirmed: false,
-      });
-      savedPayment = await this.paymentRepo.save(payment);
     }
 
     // Actualizar estado de la reserva
     booking.payment = savedPayment;
     booking.paymentMethod = 'manual';
-    if (safeType !== PaymentType.SALDO) {
+    if (!isSaldoPayment) {
       booking.paymentStatus = PaymentStatus.PENDING;
-    }
-    if (dto.comprobanteUrl) {
-      booking.proofOfPaymentUrl = dto.comprobanteUrl;
+      if (dto.comprobanteUrl) {
+        booking.proofOfPaymentUrl = dto.comprobanteUrl;
+      }
     }
     await this.bookingRepo.save(booking);
 

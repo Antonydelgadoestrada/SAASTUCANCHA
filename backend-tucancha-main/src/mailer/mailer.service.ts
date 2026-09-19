@@ -387,14 +387,23 @@ export class MailerService {
       timeZone: 'UTC',
     });
 
-    const amount = payment?.amount ?? booking.pricing?.totalPrice ?? '0.00';
-    const method = payment?.method || payment?.paymentMethod || booking.paymentMethod || 'Yape / Plin';
+    const isSaldo =
+      payment?.type === 'SALDO' ||
+      Boolean(payment?.saldoComprobanteUrl && (payment?.status === 'PAID' || payment?.saldoAmount > 0));
+    const amount = isSaldo ? (payment?.saldoAmount ?? payment?.amount) : (payment?.amount ?? booking.pricing?.totalPrice ?? '0.00');
+    const method = (isSaldo ? payment?.saldoMethod : null) || payment?.method || payment?.paymentMethod || booking.paymentMethod || 'Yape / Plin';
     const clubBookingsUrl = `${this.webUrl}/club/bookings`;
 
     const html = this.getEmailTemplate({
-      title: '🔔 Comprobante de Pago Subido - Auditoría Requerida',
+      title: isSaldo
+        ? '🔔 Comprobante de 2do Pago (Saldo) - Auditoría Requerida'
+        : '🔔 Comprobante de Pago Subido - Auditoría Requerida',
       greeting: `Hola ${club?.name || 'Administrador del Club'},`,
-      message: `
+      message: isSaldo
+        ? `
+        Un cliente ha adjuntado el comprobante de liquidación del <strong>saldo restante (2do abono)</strong> y se encuentra esperando tu validación en el panel de club para completar la liquidación.
+      `
+        : `
         Un cliente ha adjuntado su comprobante de pago y se encuentra <strong>esperando tu auditoría y validación</strong> para confirmar su reserva de cancha.
       `,
       bookingDetailsHtml: `
@@ -411,7 +420,7 @@ export class MailerService {
             </tr>
             <tr>
               <td style="color: #64748b;"><strong>Monto Reportado:</strong></td>
-              <td style="color: #1e293b; font-weight: bold; font-size: 14px;">S/ ${amount} (${method})</td>
+              <td style="color: #1e293b; font-weight: bold; font-size: 14px;">S/ ${amount} (${method}) ${isSaldo ? '(Saldo Restante)' : ''}</td>
             </tr>
             <tr>
               <td style="color: #64748b;"><strong>Código de Reserva:</strong></td>
@@ -437,7 +446,9 @@ export class MailerService {
 
     return this.sendEmail({
       to: clubEmail,
-      subject: `🔔 [Auditoría de Pago] Comprobante subido para reserva #${bookingReference} - ${court?.name || 'TuCancha'}`,
+      subject: isSaldo
+        ? `🔔 [Auditoría de Saldo] Comprobante de 2do pago subido para reserva #${bookingReference} - ${court?.name || 'TuCancha'}`
+        : `🔔 [Auditoría de Pago] Comprobante subido para reserva #${bookingReference} - ${court?.name || 'TuCancha'}`,
       html,
     });
   }
@@ -460,13 +471,22 @@ export class MailerService {
       timeZone: 'UTC',
     });
 
-    const amount = payment?.amount ?? booking.pricing?.totalPrice ?? '0.00';
+    const isSaldo =
+      payment?.type === 'SALDO' ||
+      Boolean(payment?.saldoComprobanteUrl && (payment?.status === 'PAID' || payment?.saldoAmount > 0));
+    const amount = isSaldo ? (payment?.saldoAmount ?? payment?.amount) : (payment?.amount ?? booking.pricing?.totalPrice ?? '0.00');
     const myBookingsUrl = `${this.webUrl}/user/bookings`;
 
     const html = this.getEmailTemplate({
-      title: '⏳ Comprobante Recibido - En Auditoría',
+      title: isSaldo
+        ? '⏳ Comprobante de Saldo Recibido - En Auditoría'
+        : '⏳ Comprobante Recibido - En Auditoría',
       greeting: `Hola ${clientName},`,
-      message: `
+      message: isSaldo
+        ? `
+        Hemos recibido tu comprobante de saldo restante con éxito. En este momento el <strong>club está verificando tu segundo abono</strong> para completar la liquidación de tu reserva.
+      `
+        : `
         Hemos recibido tu comprobante de pago con éxito. En este momento el <strong>club está auditando tu pago</strong> para confirmar definitivamente tu reserva.
       `,
       bookingDetailsHtml: `
@@ -477,7 +497,7 @@ export class MailerService {
             <li><strong>Club:</strong> ${club?.name || 'Club'}</li>
             <li><strong>Fecha:</strong> ${formattedDate}</li>
             <li><strong>Horario:</strong> ${startTime} - ${endTime}</li>
-            <li><strong>Monto a verificar:</strong> S/ ${amount}</li>
+            <li><strong>Monto a verificar:</strong> S/ ${amount} ${isSaldo ? '(Saldo Restante)' : ''}</li>
             <li><strong>Código de Reserva:</strong> <span style="font-family: monospace; font-weight: bold;">${bookingReference}</span></li>
           </ul>
         </div>

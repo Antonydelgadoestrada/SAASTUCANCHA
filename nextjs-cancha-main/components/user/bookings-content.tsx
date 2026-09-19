@@ -551,7 +551,9 @@ export function UserBookingsContent() {
                             onClick={() => handlePaySaldo(booking)}
                           >
                             <Banknote className="h-3.5 w-3.5" />
-                            Pagar Saldo (S/ {fin.saldoRemaining})
+                            {fin.isSaldoPendingVerification
+                              ? `Ver / Re-subir Saldo (S/ ${fin.saldoRemaining})`
+                              : `Pagar Saldo (S/ ${fin.saldoRemaining})`}
                           </Button>
                         )}
                       </CardFooter>
@@ -1362,13 +1364,22 @@ export function UserBookingsContent() {
                     )
                   })()}
 
-                  {/* Aviso de tiempo límite de 10 minutos */}
-                  <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
-                    <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
-                    <p className="leading-snug">
-                      ⏳ <strong>Tienes 10 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
-                    </p>
-                  </div>
+                  {/* Aviso de tiempo límite / estado de la reserva */}
+                  {paymentMode === "SALDO" ? (
+                    <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 text-xs">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5 sm:mt-0" />
+                      <p className="leading-snug">
+                        ✅ <strong>Tu reserva ya está confirmada y asegurada.</strong> Sube el comprobante del saldo restante (S/ {getBookingPaymentDetails(selectedBooking).saldoRemaining.toFixed(2)}) para que el club valide tu liquidación final.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-start sm:items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
+                      <ClockIcon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
+                      <p className="leading-snug">
+                        ⏳ <strong>Tienes 10 min</strong> para subir tu comprobante, o el horario se libera automáticamente para otros jugadores.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Subida de Comprobante */}
                   <div className="space-y-1.5 pt-1">
@@ -1402,17 +1413,40 @@ export function UserBookingsContent() {
                         </Button>
                       </div>
                     ) : (
-                      <label className="border-2 border-dashed border-muted-foreground/30 hover:border-primary/60 hover:bg-primary/5 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors text-center">
-                        <Upload className="h-5 w-5 text-primary mb-1" />
-                        <span className="text-xs font-medium text-primary">Subir comprobante de pago</span>
-                        <span className="text-[10px] text-muted-foreground mt-0.5">Formatos: PNG, JPG, WEBP (Máx. 10MB)</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleFileChange}
-                        />
-                      </label>
+                      <div className="space-y-2">
+                        {paymentMode === "SALDO" && selectedBooking?.payment?.saldoComprobanteUrl && (
+                          <div className="p-2.5 rounded-xl border bg-muted/40 flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <img
+                                src={selectedBooking.payment.saldoComprobanteUrl}
+                                alt="Comprobante previo"
+                                className="h-9 w-9 rounded-lg object-cover border"
+                              />
+                              <span className="text-[11px] text-muted-foreground truncate">Comprobante de saldo actual</span>
+                            </div>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                              En revisión
+                            </span>
+                          </div>
+                        )}
+                        <label className="border-2 border-dashed border-muted-foreground/30 hover:border-primary/60 hover:bg-primary/5 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors text-center">
+                          <Upload className="h-5 w-5 text-primary mb-1" />
+                          <span className="text-xs font-medium text-primary">
+                            {paymentMode === "SALDO" && selectedBooking?.payment?.saldoComprobanteUrl
+                              ? "Cambiar / Subir nuevo comprobante de saldo"
+                              : paymentMode === "SALDO"
+                              ? "Subir comprobante del saldo restante"
+                              : "Subir comprobante de pago"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground mt-0.5">Formatos: PNG, JPG, WEBP (Máx. 10MB)</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleFileChange}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
                 </div>
