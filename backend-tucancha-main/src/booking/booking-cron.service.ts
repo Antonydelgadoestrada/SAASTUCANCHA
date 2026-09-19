@@ -106,7 +106,14 @@ export class BookingCronService {
 
         // Liberar slots en el calendario de la cancha
         if (booking.court?.id && booking.date && booking.startTime && booking.duration) {
-          const dateStr = format(new Date(booking.date), 'yyyy-MM-dd');
+          const rawDate: any = booking.date;
+          const dateStr = typeof rawDate === 'string'
+            ? rawDate.substring(0, 10)
+            : (rawDate instanceof Date
+                ? (rawDate.getUTCHours() === 0 && rawDate.getUTCMinutes() === 0
+                    ? rawDate.toISOString().substring(0, 10)
+                    : format(rawDate, 'yyyy-MM-dd'))
+                : format(new Date(rawDate), 'yyyy-MM-dd'));
           const times = generateTimeSlots(booking.startTime, booking.duration);
           const slotsToRelease = times.map((t) => ({
             courtId: booking.court.id,
@@ -181,7 +188,14 @@ export class BookingCronService {
 
         // Liberar slots en el calendario de la cancha
         if (booking.court?.id && booking.date && booking.startTime && booking.duration) {
-          const dateStr = format(new Date(booking.date), 'yyyy-MM-dd');
+          const rawDate: any = booking.date;
+          const dateStr = typeof rawDate === 'string'
+            ? rawDate.substring(0, 10)
+            : (rawDate instanceof Date
+                ? (rawDate.getUTCHours() === 0 && rawDate.getUTCMinutes() === 0
+                    ? rawDate.toISOString().substring(0, 10)
+                    : format(rawDate, 'yyyy-MM-dd'))
+                : format(new Date(rawDate), 'yyyy-MM-dd'));
           const times = generateTimeSlots(booking.startTime, booking.duration);
           const slotsToRelease = times.map((t) => ({
             courtId: booking.court.id,
@@ -250,7 +264,14 @@ export class BookingCronService {
 
         // Asegurar que los slots queden marcados como ocupados
         if (booking.court?.id && booking.date && booking.startTime && booking.duration) {
-          const dateStr = format(new Date(booking.date), 'yyyy-MM-dd');
+          const rawDate: any = booking.date;
+          const dateStr = typeof rawDate === 'string'
+            ? rawDate.substring(0, 10)
+            : (rawDate instanceof Date
+                ? (rawDate.getUTCHours() === 0 && rawDate.getUTCMinutes() === 0
+                    ? rawDate.toISOString().substring(0, 10)
+                    : format(rawDate, 'yyyy-MM-dd'))
+                : format(new Date(rawDate), 'yyyy-MM-dd'));
           const times = generateTimeSlots(booking.startTime, booking.duration);
           const slotsToOccupy = times.map((t) => ({
             courtId: booking.court.id,

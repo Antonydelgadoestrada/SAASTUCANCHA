@@ -34,6 +34,7 @@ import {
 } from "@/lib/payments"
 import { getAllCourtsByClub } from "@/lib/courts"
 import { ManualBookingModal } from "@/components/club/manual-booking-modal"
+import { formatSafeDate } from "@/lib/utils"
 
 import { ReceiptLightboxModal } from "@/components/ui/receipt-lightbox-modal"
 
@@ -665,7 +666,7 @@ function PaymentDetailModal({
               <p className="font-semibold text-foreground">{booking?.court?.name || "—"}</p>
               {booking?.date && (
                 <p className="text-xs text-muted-foreground">
-                  {format(new Date(booking.date), "dd/MM/yyyy")} {booking.startTime?.slice(0,5)} - {booking.endTime?.slice(0,5)}
+                  {formatSafeDate(booking.date, "dd/MM/yyyy")} {booking.startTime?.slice(0,5)} - {booking.endTime?.slice(0,5)}
                 </p>
               )}
             </div>
@@ -1462,7 +1463,7 @@ function MetricsAuditTab() {
 
                           {booking?.date && (
                             <p className="text-[11px] text-muted-foreground">
-                              {format(new Date(booking.date), "dd/MM/yyyy")} • {booking.startTime?.slice(0,5)} - {booking.endTime?.slice(0,5)}
+                              {formatSafeDate(booking.date, "dd/MM/yyyy")} • {booking.startTime?.slice(0,5)} - {booking.endTime?.slice(0,5)}
                             </p>
                           )}
 

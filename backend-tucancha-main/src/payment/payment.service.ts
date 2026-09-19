@@ -830,7 +830,13 @@ export class PaymentService {
     return slots;
   }
   async generateSlotOccupied(courtId,date,startTime, duration){
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = typeof date === 'string'
+      ? date.substring(0, 10)
+      : (date instanceof Date
+          ? (date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0
+              ? date.toISOString().substring(0, 10)
+              : format(date, 'yyyy-MM-dd'))
+          : format(new Date(date), 'yyyy-MM-dd'));
     const times = this.generateTimeSlots(startTime, duration); 
     // Con overrides-only puede que no existan filas todavía.
     // Creamos/actualizamos ocupados por (courtId,date,time).

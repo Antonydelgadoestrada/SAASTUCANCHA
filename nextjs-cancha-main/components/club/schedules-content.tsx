@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, formatSafeDate } from "@/lib/utils";
 import { ScheduleTimeSlot } from "@/components/club/schedule-time-slot";
 import {
   bulkUpdate,
@@ -1061,7 +1061,7 @@ export function ClubSchedulesContent() {
               <div className="flex justify-between border-b pb-2">
                 <span className="font-semibold text-muted-foreground text-xs uppercase">Fecha</span>
                 <span className="font-medium text-foreground">
-                  {format(new Date(selectedItemDetails.data.date), "EEEE d 'de' MMMM, yyyy", { locale: es })}
+                  {formatSafeDate(selectedItemDetails.data.date, "EEEE d 'de' MMMM, yyyy", { locale: es })}
                 </span>
               </div>
               <div className="flex justify-between border-b pb-2">

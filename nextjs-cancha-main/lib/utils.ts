@@ -15,16 +15,27 @@ export function parseSafeDate(dateInput: any, timeStr?: string): Date | null {
 
   if (dateInput instanceof Date) {
     if (isNaN(dateInput.getTime())) return null
-    if (!timeStr) return dateInput
-    const dateOnly = dateInput.toISOString().split("T")[0]
-    const cleanTime = timeStr.length === 5 ? `${timeStr}:00` : timeStr
-    const combined = new Date(`${dateOnly}T${cleanTime}`)
-    return isNaN(combined.getTime()) ? dateInput : combined
+    // Si la fecha representa una fecha pura (medianoche UTC), extraer año-mes-día en UTC
+    const isUtcMidnight = dateInput.getUTCHours() === 0 && dateInput.getUTCMinutes() === 0 && dateInput.getUTCSeconds() === 0
+    const y = isUtcMidnight ? dateInput.getUTCFullYear() : dateInput.getFullYear()
+    const m = (isUtcMidnight ? dateInput.getUTCMonth() + 1 : dateInput.getMonth() + 1).toString().padStart(2, "0")
+    const d = (isUtcMidnight ? dateInput.getUTCDate() : dateInput.getDate()).toString().padStart(2, "0")
+    const dateOnly = `${y}-${m}-${d}`
+
+    if (timeStr) {
+      const cleanTime = timeStr.length === 5 ? `${timeStr}:00` : timeStr
+      const combined = new Date(`${dateOnly}T${cleanTime}`)
+      return isNaN(combined.getTime()) ? dateInput : combined
+    }
+    const localDate = new Date(`${dateOnly}T00:00:00`)
+    return isNaN(localDate.getTime()) ? dateInput : localDate
   }
 
   if (typeof dateInput === "string") {
-    // If it's something like "2025-05-15T00:00:00.000Z" or "2025-05-15"
-    const dateOnly = dateInput.includes("T") ? dateInput.split("T")[0] : dateInput.trim()
+    // If it's something like "2025-05-15T00:00:00.000Z", "2025-05-15 00:00:00" or "2025-05-15"
+    const dateStr = dateInput.trim()
+    const match = dateStr.match(/^(\d{4}-\d{2}-\d{2})/)
+    const dateOnly = match ? match[1] : (dateStr.includes("T") ? dateStr.split("T")[0] : dateStr)
 
     if (timeStr) {
       const cleanTime = timeStr.length === 5 ? `${timeStr}:00` : timeStr
