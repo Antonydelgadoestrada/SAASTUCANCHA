@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2, MapPin, Navigation } from "lucide-react"
+import Link from "next/link"
+import { Loader2, MapPin, Navigation, DollarSign, ShieldCheck } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import * as z from "zod"
@@ -18,6 +19,7 @@ import { registerUser } from "@/lib/auth"
 import { GooglePlacesAutocomplete } from "../google-places-autocomplete"
 import { signIn } from "next-auth/react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { TermsModal } from "@/components/legal/terms-modal"
 
 // Esquema para usuario normal
 const userFormSchema = z.object({
@@ -34,6 +36,9 @@ const userFormSchema = z.object({
     message: "Por favor ingresa un número de teléfono válido.",
   }),
   role: z.literal("USER"),
+  termsAccepted: z.boolean().refine((val) => val === true, {
+    message: "Debes aceptar los Términos y Condiciones y la Política Financiera de Reservas.",
+  }),
 })
 
 // Esquema extendido para club deportivo
@@ -76,6 +81,9 @@ const clubFormSchema = z.object({
       lng: z.number(),
     })
     .optional(),
+  termsAccepted: z.boolean().refine((val) => val === true, {
+    message: "Debes aceptar los Términos y Condiciones y la Política Financiera de Reservas.",
+  }),
 })
 
 export type UserFormValues = z.infer<typeof userFormSchema>
@@ -116,6 +124,7 @@ export function RegisterForm() {
       password: "",
       phone: "",
       role: "USER",
+      termsAccepted: false,
     },
   })
 
@@ -139,6 +148,7 @@ export function RegisterForm() {
       instagramUrl: "",
       twitterUrl: "",
       coordinates: undefined,
+      termsAccepted: false,
     },
   })
 
@@ -221,8 +231,9 @@ export function RegisterForm() {
     setIsLoading(true)
 
     try {
+      const { termsAccepted, ...userData } = values
       await registerUser({
-        ...values,
+        ...userData,
         role: "USER",
       })
 
@@ -383,7 +394,68 @@ export function RegisterForm() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full" disabled={isLoading}>
+
+              {/* Casillero de Términos, Condiciones y Políticas Financieras */}
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 space-y-3">
+                <div className="flex items-start gap-2.5 text-xs text-amber-950 dark:text-amber-200 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
+                  <DollarSign className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                  <span className="leading-tight">
+                    <strong>Aviso de Transacciones y Dinero:</strong> Al reservar en TuCancha se realizan pagos, señas o liquidaciones. Las reservas están sujetas a políticas de puntualidad, penalidades y cancelación.
+                  </span>
+                </div>
+
+                <FormField
+                  control={userForm.control}
+                  name="termsAccepted"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-2.5 space-y-0 pt-1">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={isLoading}
+                          className="mt-0.5"
+                          id="user-terms-checkbox"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <div className="text-xs font-normal text-muted-foreground leading-relaxed select-none">
+                          <label
+                            htmlFor="user-terms-checkbox"
+                            className="cursor-pointer hover:text-foreground transition-colors mr-1 inline"
+                          >
+                            He leído y acepto los
+                          </label>
+                          <TermsModal triggerText="Términos y Condiciones" />{" "}
+                          <label
+                            htmlFor="user-terms-checkbox"
+                            className="cursor-pointer hover:text-foreground transition-colors mx-1 inline"
+                          >
+                            y la
+                          </label>
+                          <Link
+                            href="/privacidad"
+                            target="_blank"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-primary underline hover:text-primary/80 font-medium inline"
+                          >
+                            Política de Privacidad
+                          </Link>
+                          <label
+                            htmlFor="user-terms-checkbox"
+                            className="cursor-pointer hover:text-foreground transition-colors ml-1 inline"
+                          >
+                            . Reconozco y acepto las políticas sobre pagos, señas y cancelaciones. *
+                          </label>
+                        </div>
+                        <FormMessage className="text-[11px]" />
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <Button type="submit" className="w-full font-bold py-5" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Registrarse como Usuario
               </Button>
@@ -693,6 +765,66 @@ export function RegisterForm() {
                     )}
                   />
                 </div>
+              </div>
+
+              {/* Casillero de Términos, Condiciones y Políticas Financieras para Club */}
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-3">
+                <div className="flex items-start gap-2.5 text-xs text-amber-950 dark:text-amber-200 bg-amber-500/10 p-3 rounded-lg border border-amber-500/20">
+                  <DollarSign className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                  <span className="leading-tight">
+                    <strong>Aviso Comercial y Financiero para Clubes:</strong> TuCancha administra la publicación de horarios, cobros en línea (MercadoPago), señas y transferencias de deportistas. Al registrar tu club, te comprometes a respetar los turnos reservados, tarifas publicadas y políticas de cancelación vigentes.
+                  </span>
+                </div>
+
+                <FormField
+                  control={clubForm.control}
+                  name="termsAccepted"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-2.5 space-y-0 pt-1">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={isLoading}
+                          className="mt-0.5"
+                          id="club-terms-checkbox"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <div className="text-xs font-normal text-muted-foreground leading-relaxed select-none">
+                          <label
+                            htmlFor="club-terms-checkbox"
+                            className="cursor-pointer hover:text-foreground transition-colors mr-1 inline"
+                          >
+                            He leído y acepto los
+                          </label>
+                          <TermsModal triggerText="Términos y Condiciones Comerciales" />{" "}
+                          <label
+                            htmlFor="club-terms-checkbox"
+                            className="cursor-pointer hover:text-foreground transition-colors mx-1 inline"
+                          >
+                            y la
+                          </label>
+                          <Link
+                            href="/privacidad"
+                            target="_blank"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-primary underline hover:text-primary/80 font-medium inline"
+                          >
+                            Política de Privacidad
+                          </Link>
+                          <label
+                            htmlFor="club-terms-checkbox"
+                            className="cursor-pointer hover:text-foreground transition-colors ml-1 inline"
+                          >
+                            . Acepto las comisiones, liquidaciones de pagos y políticas de disponibilidad de canchas. *
+                          </label>
+                        </div>
+                        <FormMessage className="text-[11px]" />
+                      </div>
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <Button type="submit" className="w-full text-base py-6 font-bold" disabled={isLoading}>

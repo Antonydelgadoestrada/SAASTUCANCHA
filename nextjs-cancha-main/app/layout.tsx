@@ -8,6 +8,7 @@ import { Toaster as CustomToaster } from "@/components/ui/toaster"
 import { authOptions } from "./api/auth/[...nextauth]/route"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SidebarProvider } from "@/components/ui/sidebar"
+import { CookieConsentBanner } from "@/components/cookies/cookie-consent-banner"
 import "./globals.css"
 import { SessionSync } from "@/components/SessionSync"
 import SessionProviderWrapper from "@/components/SessionProviderWrapper"
@@ -41,7 +42,8 @@ export default async function RootLayout({
                 {children}
               </SidebarProvider>
               <SonnerToaster position="top-center" richColors />
-                <CustomToaster/>
+              <CustomToaster/>
+              <CookieConsentBanner />
             </QueryProvider>
           </ThemeProvider>
         </SessionProviderWrapper>

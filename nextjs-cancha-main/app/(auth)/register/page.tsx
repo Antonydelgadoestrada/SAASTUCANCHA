@@ -11,12 +11,13 @@ export const metadata: Metadata = {
   description: `Crea una cuenta en ${process.env.NEXT_PUBLIC_APP_NAME}`,
 };
 
-export default function RegisterPage({
+export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
 }) {
-  const type = searchParams?.type ?? ("user" as string | undefined);
+  const resolvedParams = await searchParams;
+  const type = resolvedParams?.type ?? ("user" as string | undefined);
   const isClub = type === "club";
 
   return (

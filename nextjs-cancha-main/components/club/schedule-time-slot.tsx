@@ -77,7 +77,7 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
     return (
       <Button
         variant="ghost"
-        className={`h-10 w-full justify-center rounded-md p-0 text-white ${statusColors[currentStatus]}`}
+        className={`h-10 w-full justify-center rounded-md p-1 text-white overflow-hidden ${statusColors[currentStatus]}`}
         disabled={disabled}
         onClick={() => {
           if (onClick) {
@@ -86,8 +86,16 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
             setIsDialogOpen(true);
           }
         }}
+        title={reservedByName ? `Reservado: ${reservedByName} (${time})` : time}
       >
-        {time}
+        {reservedByName ? (
+          <div className="flex flex-col items-center justify-center leading-none px-0.5 overflow-hidden w-full">
+            <span className="text-[10px] font-medium opacity-85 truncate">{time}</span>
+            <span className="text-[11px] font-semibold truncate max-w-full">{reservedByName}</span>
+          </div>
+        ) : (
+          time
+        )}
       </Button>
     )
   }
@@ -100,13 +108,15 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
   };
 
   const formattedDate = format(date, "EEEE d 'de' MMMM", { locale: es })
-  const ariaDescription = `Horario ${time} del ${formattedDate}: ${statusLabels[currentStatus]}`
+  const ariaDescription = `Horario ${time} del ${formattedDate}: ${
+    reservedByName ? `Reservado por ${reservedByName}` : statusLabels[currentStatus]
+  }`
 
   return (
     <>
       <Button
         variant="ghost"
-        className={`h-10 w-full justify-center rounded-md p-0 text-white ${statusColors[currentStatus]}`}
+        className={`h-10 w-full justify-center rounded-md p-1 text-white shadow-sm transition-all overflow-hidden ${statusColors[currentStatus]}`}
         disabled={disabled}
         onClick={() => {
           if (onClick) {
@@ -123,10 +133,33 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
               ? 'Evento'
               : currentStatus === 'available'
                 ? 'Disponible (Click para administrar)'
-                : 'Click para disponible'
+                : currentStatus === 'occupied'
+                  ? 'Ocupado'
+                  : currentStatus === 'on-hold'
+                    ? 'Pendiente de confirmación'
+                    : currentStatus === 'blocked'
+                      ? 'Bloqueado (Click para desbloquear)'
+                      : 'Click para disponible'
         }
       >
-        {statusIcons[currentStatus]}
+        {reservedByName ? (
+          <div className="flex items-center justify-center w-full h-full px-1 overflow-hidden">
+            <span
+              className="truncate text-[11px] sm:text-xs font-semibold leading-tight text-white select-none max-w-full text-center"
+              title={`Reservado: ${reservedByName}`}
+            >
+              {reservedByName}
+            </span>
+          </div>
+        ) : currentStatus === "occupied" ? (
+          <div className="flex items-center justify-center w-full h-full px-1 overflow-hidden">
+            <span className="truncate text-[11px] sm:text-xs font-semibold leading-tight text-white/90 select-none max-w-full text-center">
+              Ocupado
+            </span>
+          </div>
+        ) : (
+          statusIcons[currentStatus]
+        )}
         <span className="sr-only">{ariaDescription}</span>
       </Button>
 

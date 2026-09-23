@@ -10,6 +10,7 @@ import { PricingSection } from "@/components/pricing-section"
 import { AuthHeaderButtons } from "@/components/AuthHeaderButtons"
 import { FeaturesCarousel } from "@/components/features-carousel"
 import { LandingNav } from "@/components/landing-nav"
+import { CookieTriggerButton } from "@/components/cookies/cookie-trigger-button"
 export const dynamic = "force-dynamic"
 
 export default async function HomePage() {
@@ -246,7 +247,7 @@ export default async function HomePage() {
               </ul>
             </div>
 
-            {/* Redes Sociales */}
+            {/* Redes Sociales y Legal */}
             <div className="space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Síguenos</h3>
               <div className="flex items-center gap-4 text-muted-foreground">
@@ -263,8 +264,24 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="mt-12 border-t pt-8 text-center text-xs text-muted-foreground/80">
-            &copy; {new Date().getFullYear()} {process.env.NEXT_PUBLIC_APP_NAME}. Todos los derechos reservados.
+          {/* Enlaces Legales y Configuración de Cookies */}
+          <div className="mt-12 border-t pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-6">
+              <Link href="/terminos" className="hover:text-foreground transition-colors underline-offset-4 hover:underline">
+                Términos y Condiciones
+              </Link>
+              <Link href="/privacidad" className="hover:text-foreground transition-colors underline-offset-4 hover:underline">
+                Política de Privacidad
+              </Link>
+              <Link href="/cookies" className="hover:text-foreground transition-colors underline-offset-4 hover:underline">
+                Política de Cookies
+              </Link>
+              <CookieTriggerButton />
+            </div>
+
+            <div>
+              &copy; {new Date().getFullYear()} {process.env.NEXT_PUBLIC_APP_NAME}. Todos los derechos reservados.
+            </div>
           </div>
         </div>
       </footer>

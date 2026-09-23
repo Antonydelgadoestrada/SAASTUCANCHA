@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn, formatSafeDate } from "@/lib/utils";
+import { cn, formatSafeDate, parseSafeDate } from "@/lib/utils";
 import { ScheduleTimeSlot } from "@/components/club/schedule-time-slot";
 import {
   bulkUpdate,
@@ -294,16 +294,55 @@ export function ClubSchedulesContent() {
     return slots;
   };
 
+  const isCourtMatch = useCallback((booking: any, targetCourtId: string) => {
+    if (!targetCourtId || targetCourtId === "all") return true;
+    const bCourtId =
+      booking.court?.id ??
+      booking.court?._id ??
+      booking.courtId ??
+      (typeof booking.court === "string" || typeof booking.court === "number" ? booking.court : null);
+    return String(bCourtId) === String(targetCourtId);
+  }, []);
+
+  const getBookingCustomerName = useCallback((booking: any): string => {
+    if (!booking) return "";
+    let custInfo = booking.customerInfo;
+    if (typeof custInfo === "string") {
+      try {
+        custInfo = JSON.parse(custInfo);
+      } catch {
+        custInfo = null;
+      }
+    }
+    const name =
+      custInfo?.name ||
+      booking.user?.name ||
+      booking.userName ||
+      booking.clientName ||
+      booking.name ||
+      (custInfo?.email ? custInfo.email.split("@")[0] : "") ||
+      (booking.user?.email ? booking.user.email.split("@")[0] : "");
+    return name ? String(name).trim() : "Reservado";
+  }, []);
+
   const isSlotOccupiedByBooking = useCallback((booking: any, dateStr: string, timeStr: string) => {
     if (!booking || booking.status === "CANCELLED" || booking.status === "cancelled") return false;
+    if (!booking.startTime) return false;
     
     // Garantizar formato YYYY-MM-DD sin problemas de zona horaria
-    const bookingDateStr = typeof booking.date === "string" 
-      ? booking.date.substring(0, 10) 
-      : new Date(booking.date).toISOString().substring(0, 10);
+    let bookingDateStr = "";
+    if (typeof booking.date === "string") {
+      const match = booking.date.match(/^(\d{4}-\d{2}-\d{2})/);
+      bookingDateStr = match ? match[1] : booking.date.substring(0, 10);
+    } else if (booking.date instanceof Date) {
+      bookingDateStr = format(booking.date, "yyyy-MM-dd");
+    } else if (booking.date) {
+      const parsed = parseSafeDate(booking.date);
+      bookingDateStr = parsed ? format(parsed, "yyyy-MM-dd") : "";
+    }
       
     if (bookingDateStr !== dateStr) return false;
-    const times = getBookingSlots(booking.startTime, booking.duration);
+    const times = getBookingSlots(booking.startTime, booking.duration || 1);
     return times.includes(timeStr);
   }, []);
 
@@ -871,7 +910,7 @@ export function ClubSchedulesContent() {
                           const cellStatus = resolveCellStatus(dateStr, timeStr, day, matchingSlot);
                           
                           const bookingForSlot = allReservations.find((b) => 
-                            String(b.court?.id) === String(selectedCourt) &&
+                            isCourtMatch(b, selectedCourt) &&
                             isSlotOccupiedByBooking(b, dateStr, timeStr)
                           );
 
@@ -885,7 +924,7 @@ export function ClubSchedulesContent() {
                           }
 
                           const reservedByName = bookingForSlot 
-                            ? bookingForSlot.customerInfo?.name 
+                            ? getBookingCustomerName(bookingForSlot) 
                             : eventForSlot 
                               ? `Evento: ${eventForSlot.name}` 
                               : undefined;
@@ -949,7 +988,7 @@ export function ClubSchedulesContent() {
                                     const cellStatus = resolveCellStatus(dateStr, timeStr, day, matchingSlot);
 
                                     const bookingForSlot = allReservations.find((b) => 
-                                      String(b.court?.id) === String(selectedCourt) &&
+                                      isCourtMatch(b, selectedCourt) &&
                                       isSlotOccupiedByBooking(b, dateStr, timeStr)
                                     );
 
@@ -963,7 +1002,7 @@ export function ClubSchedulesContent() {
                                     }
 
                                     const reservedByName = bookingForSlot 
-                                      ? bookingForSlot.customerInfo?.name 
+                                      ? getBookingCustomerName(bookingForSlot) 
                                       : eventForSlot 
                                         ? `Evento: ${eventForSlot.name}` 
                                         : undefined;
