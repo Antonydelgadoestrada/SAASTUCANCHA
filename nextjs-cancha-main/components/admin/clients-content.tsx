@@ -162,68 +162,52 @@ export function AdminClientsContent() {
 
       {/* Tarjetas KPI */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-emerald-500/20 bg-emerald-500/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              Membresías Activas
-            </CardTitle>
-            <CheckCircle2Icon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Membresías Activas</CardTitle>
+            <CheckCircle2Icon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-emerald-800 dark:text-emerald-300">
-              {stats.activeMemberships}
-            </div>
+            <div className="text-2xl font-bold">{stats.activeMemberships}</div>
             <p className="text-xs text-muted-foreground mt-1">
               De un total de {stats.totalClubs} clubes registrados
             </p>
           </CardContent>
         </Card>
 
-        <Card className={`border-amber-500/30 ${stats.expiringSoon > 0 ? "bg-amber-500/10" : "bg-amber-500/5"}`}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-400">
-              Próximos a Vencer
-            </CardTitle>
-            <AlertTriangleIcon className={`w-5 h-5 text-amber-600 dark:text-amber-400 ${stats.expiringSoon > 0 ? "animate-bounce" : ""}`} />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Próximos a Vencer</CardTitle>
+            <AlertTriangleIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-800 dark:text-amber-300">
-              {stats.expiringSoon}
-            </div>
+            <div className="text-2xl font-bold">{stats.expiringSoon}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Vencen en los próximos 7 días
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-rose-500/20 bg-rose-500/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-rose-700 dark:text-rose-400">
-              En Gracia / Vencidas
-            </CardTitle>
-            <ClockIcon className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">En Gracia / Vencidas</CardTitle>
+            <ClockIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-rose-800 dark:text-rose-300">
-              {stats.gracePeriod + stats.expired}
-            </div>
+            <div className="text-2xl font-bold">{stats.gracePeriod + stats.expired}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {stats.gracePeriod} en gracia · {stats.expired} vencidas
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-blue-500/20 bg-blue-500/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">
-              MRR Recurrente Estimado
-            </CardTitle>
-            <DollarSignIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">MRR Recurrente Estimado</CardTitle>
+            <DollarSignIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-800 dark:text-blue-300">
-              S/. {stats.mrr.toFixed(2)}
-            </div>
+            <div className="text-2xl font-bold">S/. {stats.mrr.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Ingresos mensuales recurrentes de membresía
             </p>

@@ -214,27 +214,15 @@ export function AdminRequestsContent() {
       {/* Tarjetas KPI de Estado */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card
-          className={`cursor-pointer transition-all hover:border-amber-500/50 ${
-            activeTab === "pending"
-              ? "border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/30"
-              : "border-amber-500/20 bg-amber-500/5"
-          }`}
+          className="cursor-pointer hover:border-primary/50 transition-colors"
           onClick={() => setActiveTab("pending")}
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-400">
-              Solicitudes Pendientes
-            </CardTitle>
-            <ClockIcon
-              className={`w-5 h-5 text-amber-600 dark:text-amber-400 ${
-                pendingClubsList.length > 0 ? "animate-pulse" : ""
-              }`}
-            />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Solicitudes Pendientes</CardTitle>
+            <ClockIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-800 dark:text-amber-300">
-              {pendingClubsList.length}
-            </div>
+            <div className="text-2xl font-bold">{pendingClubsList.length}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {pendingClubsList.length > 0
                 ? "Requieren revisión para aprobación"
@@ -244,23 +232,15 @@ export function AdminRequestsContent() {
         </Card>
 
         <Card
-          className={`cursor-pointer transition-all hover:border-emerald-500/50 ${
-            activeTab === "approved"
-              ? "border-emerald-500/60 bg-emerald-500/10 ring-1 ring-emerald-500/30"
-              : "border-emerald-500/20 bg-emerald-500/5"
-          }`}
+          className="cursor-pointer hover:border-primary/50 transition-colors"
           onClick={() => setActiveTab("approved")}
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              Clubes Aprobados
-            </CardTitle>
-            <CheckCircle2Icon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Clubes Aprobados</CardTitle>
+            <CheckCircle2Icon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-emerald-800 dark:text-emerald-300">
-              {approvedClubsList.length}
-            </div>
+            <div className="text-2xl font-bold">{approvedClubsList.length}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Operando activamente en la plataforma
             </p>
@@ -268,23 +248,15 @@ export function AdminRequestsContent() {
         </Card>
 
         <Card
-          className={`cursor-pointer transition-all hover:border-rose-500/50 ${
-            activeTab === "suspended"
-              ? "border-rose-500/60 bg-rose-500/10 ring-1 ring-rose-500/30"
-              : "border-rose-500/20 bg-rose-500/5"
-          }`}
+          className="cursor-pointer hover:border-primary/50 transition-colors"
           onClick={() => setActiveTab("suspended")}
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-rose-700 dark:text-rose-400">
-              Clubes Suspendidos
-            </CardTitle>
-            <BanIcon className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Clubes Suspendidos</CardTitle>
+            <BanIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-rose-800 dark:text-rose-300">
-              {suspendedClubsList.length}
-            </div>
+            <div className="text-2xl font-bold">{suspendedClubsList.length}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Acceso restringido temporalmente
             </p>
@@ -292,23 +264,15 @@ export function AdminRequestsContent() {
         </Card>
 
         <Card
-          className={`cursor-pointer transition-all hover:border-zinc-500/50 ${
-            activeTab === "rejected"
-              ? "border-zinc-500/60 bg-muted/60 ring-1 ring-zinc-500/30"
-              : "border-border bg-muted/20"
-          }`}
+          className="cursor-pointer hover:border-primary/50 transition-colors"
           onClick={() => setActiveTab("rejected")}
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Solicitudes Rechazadas
-            </CardTitle>
-            <XIcon className="w-5 h-5 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Solicitudes Rechazadas</CardTitle>
+            <XIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-foreground">
-              {rejectedClubsList.length}
-            </div>
+            <div className="text-2xl font-bold">{rejectedClubsList.length}</div>
             <p className="text-xs text-muted-foreground mt-1">
               No admitidas en el catálogo
             </p>
