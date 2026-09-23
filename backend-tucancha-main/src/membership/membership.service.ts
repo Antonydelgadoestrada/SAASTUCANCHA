@@ -563,4 +563,306 @@ export class MembershipService implements OnModuleInit {
     }
     return payment;
   }
+
+  // ----------------------------------------------------
+  // GESTIÓN ADMIN: CLIENTES Y MEMBRESÍAS
+  // ----------------------------------------------------
+  async getAdminClients(
+    search?: string,
+    filter?: string,
+  ): Promise<{
+    clients: any[];
+    stats: {
+      totalClubs: number;
+      activeMemberships: number;
+      expiringSoon: number;
+      gracePeriod: number;
+      expired: number;
+      mrr: number;
+    };
+  }> {
+    // Buscar todos los clubes
+    const query = this.clubRepo
+      .createQueryBuilder('club')
+      .leftJoinAndSelect('club.owner', 'owner')
+      .orderBy('club.createdAt', 'DESC');
+
+    if (search && search.trim()) {
+      const term = `%${search.trim().toLowerCase()}%`;
+      query.andWhere(
+        '(LOWER(club.name) LIKE :term OR LOWER(club.email) LIKE :term OR LOWER(club.district) LIKE :term OR LOWER(club.phone) LIKE :term)',
+        { term },
+      );
+    }
+
+    const clubs = await query.getMany();
+    const now = new Date();
+
+    // Obtener la membresía más reciente de cada club
+    const allMemberships = await this.membershipRepo.find({
+      relations: ['plan'],
+      order: { endDate: 'DESC' },
+    });
+
+    const membershipsByClub = new Map<string, ClubMembership>();
+    for (const m of allMemberships) {
+      if (!membershipsByClub.has(m.clubId)) {
+        membershipsByClub.set(m.clubId, m);
+      }
+    }
+
+    let activeMembershipsCount = 0;
+    let expiringSoonCount = 0;
+    let gracePeriodCount = 0;
+    let expiredCount = 0;
+    let totalMrr = 0;
+
+    const clients = clubs.map((club) => {
+      const latestMembership = membershipsByClub.get(club.id);
+      let membershipInfo: any = null;
+      let effectiveStatus = 'NONE';
+      let isExpiringSoon = false;
+      let daysRemaining = 0;
+
+      if (latestMembership) {
+        const endDate = new Date(latestMembership.endDate);
+        const graceEndDate = latestMembership.graceEndDate
+          ? new Date(latestMembership.graceEndDate)
+          : null;
+        const diffMs = endDate.getTime() - now.getTime();
+        daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+        if (endDate >= now) {
+          effectiveStatus = MembershipStatus.ACTIVE;
+          if (daysRemaining <= 7) {
+            isExpiringSoon = true;
+            expiringSoonCount++;
+          }
+          activeMembershipsCount++;
+
+          if (latestMembership.plan) {
+            const price = Number(latestMembership.plan.price) || 0;
+            if (latestMembership.plan.interval === BillingInterval.ANNUAL) {
+              totalMrr += price / 12;
+            } else if (latestMembership.plan.interval === BillingInterval.SEMIANNUAL) {
+              totalMrr += price / 6;
+            } else {
+              totalMrr += price;
+            }
+          }
+        } else if (graceEndDate && graceEndDate >= now) {
+          effectiveStatus = MembershipStatus.GRACE;
+          gracePeriodCount++;
+          isExpiringSoon = true;
+        } else {
+          effectiveStatus = MembershipStatus.EXPIRED;
+          expiredCount++;
+        }
+
+        membershipInfo = {
+          id: latestMembership.id,
+          planId: latestMembership.planId,
+          planName: latestMembership.plan?.name || 'Plan Club',
+          interval: latestMembership.plan?.interval || 'MONTHLY',
+          price: Number(latestMembership.plan?.price || 0),
+          currency: latestMembership.plan?.currency || 'PEN',
+          startDate: latestMembership.startDate,
+          endDate: latestMembership.endDate,
+          graceEndDate: latestMembership.graceEndDate,
+          status: effectiveStatus,
+          originalStatus: latestMembership.status,
+          autoRenew: latestMembership.autoRenew,
+          cancelAtPeriodEnd: latestMembership.cancelAtPeriodEnd,
+          isExpiringSoon,
+          daysRemaining,
+        };
+      } else {
+        expiredCount++;
+      }
+
+      const isTrialActive = Boolean(
+        club.trialEndDate && new Date(club.trialEndDate) > now && club.status === 'APPROVED',
+      );
+
+      return {
+        id: club.id,
+        name: club.name,
+        email: club.email,
+        phone: club.phone,
+        whatsapp: (club as any).whatsapp || club.phone,
+        address: club.address,
+        district: club.district || 'No especificado',
+        logo: club.logo,
+        status: club.status,
+        createdAt: club.createdAt,
+        owner: club.owner
+          ? {
+              id: club.owner.id,
+              name: club.owner.name,
+              email: club.owner.email,
+              phone: club.owner.phone,
+            }
+          : null,
+        membership: membershipInfo,
+        effectiveStatus,
+        isExpiringSoon,
+        isTrialActive,
+        trialEndDate: club.trialEndDate,
+      };
+    });
+
+    let filteredClients = clients;
+    if (filter === 'ACTIVE') {
+      filteredClients = clients.filter((c) => c.effectiveStatus === 'ACTIVE');
+    } else if (filter === 'EXPIRING') {
+      filteredClients = clients.filter((c) => c.isExpiringSoon && c.effectiveStatus !== 'EXPIRED');
+    } else if (filter === 'GRACE') {
+      filteredClients = clients.filter((c) => c.effectiveStatus === 'GRACE');
+    } else if (filter === 'EXPIRED') {
+      filteredClients = clients.filter(
+        (c) => c.effectiveStatus === 'EXPIRED' || c.effectiveStatus === 'NONE',
+      );
+    }
+
+    return {
+      clients: filteredClients,
+      stats: {
+        totalClubs: clubs.length,
+        activeMemberships: activeMembershipsCount,
+        expiringSoon: expiringSoonCount,
+        gracePeriod: gracePeriodCount,
+        expired: expiredCount,
+        mrr: Math.round(totalMrr * 100) / 100,
+      },
+    };
+  }
+
+  // ----------------------------------------------------
+  // GESTIÓN ADMIN: TRANSACCIONES DE MEMBRESÍAS (MERCADO PAGO)
+  // ----------------------------------------------------
+  async getAdminMembershipPayments(
+    search?: string,
+    status?: string,
+    page: number = 1,
+    limit: number = 50,
+  ): Promise<{
+    payments: any[];
+    summary: {
+      totalPaidAmount: number;
+      monthPaidAmount: number;
+      totalTransactions: number;
+      paidCount: number;
+      pendingCount: number;
+      rejectedCount: number;
+      refundedCount: number;
+    };
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const allPayments = await this.paymentRepo.find({
+      relations: ['plan', 'club'],
+      order: { createdAt: 'DESC' },
+    });
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    let totalPaidAmount = 0;
+    let monthPaidAmount = 0;
+    let paidCount = 0;
+    let pendingCount = 0;
+    let rejectedCount = 0;
+    let refundedCount = 0;
+
+    for (const p of allPayments) {
+      const amt = Number(p.amount) || 0;
+      if (p.status === MembershipPaymentStatus.PAID) {
+        totalPaidAmount += amt;
+        paidCount++;
+        const pDate = p.paidAt ? new Date(p.paidAt) : new Date(p.createdAt);
+        if (pDate.getFullYear() === currentYear && pDate.getMonth() === currentMonth) {
+          monthPaidAmount += amt;
+        }
+      } else if (p.status === MembershipPaymentStatus.PENDING) {
+        pendingCount++;
+      } else if (p.status === MembershipPaymentStatus.REJECTED) {
+        rejectedCount++;
+      } else if (p.status === MembershipPaymentStatus.REFUNDED) {
+        refundedCount++;
+      }
+    }
+
+    const query = this.paymentRepo
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.club', 'club')
+      .leftJoinAndSelect('p.plan', 'plan')
+      .leftJoinAndSelect('p.membership', 'membership')
+      .orderBy('p.createdAt', 'DESC');
+
+    if (status && status !== 'ALL') {
+      query.andWhere('p.status = :status', { status });
+    }
+
+    if (search && search.trim()) {
+      const term = `%${search.trim().toLowerCase()}%`;
+      query.andWhere(
+        '(LOWER(club.name) LIKE :term OR LOWER(club.email) LIKE :term OR LOWER(p.mpPaymentId) LIKE :term OR LOWER(p.referenceNumber) LIKE :term OR LOWER(p.id) LIKE :term)',
+        { term },
+      );
+    }
+
+    const totalCount = await query.getCount();
+    const skip = (page - 1) * limit;
+    const paginatedPayments = await query.skip(skip).take(limit).getMany();
+
+    const formattedPayments = paginatedPayments.map((p) => ({
+      id: p.id,
+      clubId: p.clubId,
+      clubName: p.club?.name || 'Club desconocido',
+      clubEmail: p.club?.email || '',
+      clubLogo: p.club?.logo || null,
+      clubDistrict: p.club?.district || null,
+      planId: p.planId,
+      planName: p.plan?.name || 'Plan de Membresía',
+      interval: p.plan?.interval || 'MONTHLY',
+      amount: Number(p.amount),
+      currency: p.currency || 'PEN',
+      status: p.status,
+      mpPaymentId: p.mpPaymentId || null,
+      mpPreferenceId: p.mpPreferenceId || null,
+      mpMerchantOrderId: p.mpMerchantOrderId || null,
+      paymentMethod: p.paymentMethod || 'mercadopago',
+      paymentType: p.paymentType || 'automatic',
+      paidAt: p.paidAt,
+      createdAt: p.createdAt,
+      comprobanteUrl: p.comprobanteUrl,
+      referenceNumber: p.referenceNumber,
+      notes: p.notes,
+      gatewayResponse: p.gatewayResponse,
+    }));
+
+    return {
+      payments: formattedPayments,
+      summary: {
+        totalPaidAmount: Math.round(totalPaidAmount * 100) / 100,
+        monthPaidAmount: Math.round(monthPaidAmount * 100) / 100,
+        totalTransactions: allPayments.length,
+        paidCount,
+        pendingCount,
+        rejectedCount,
+        refundedCount,
+      },
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit) || 1,
+      },
+    };
+  }
 }

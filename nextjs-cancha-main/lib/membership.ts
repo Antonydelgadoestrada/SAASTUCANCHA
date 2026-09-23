@@ -96,3 +96,125 @@ export const checkMembershipPaymentStatus = async (
   const result = await api.get(`/memberships/check-status/${paymentId}`);
   return result.data;
 };
+
+// ─── TIPOS Y APIS PARA ADMINISTRADOR ──────────────────────────────────
+
+export interface AdminClubClient {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  address: string;
+  district: string;
+  logo?: string;
+  status: string;
+  createdAt: string;
+  owner?: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+  } | null;
+  membership: {
+    id: string;
+    planId: string;
+    planName: string;
+    interval: "MONTHLY" | "SEMIANNUAL" | "ANNUAL";
+    price: number;
+    currency: string;
+    startDate: string;
+    endDate: string;
+    graceEndDate?: string;
+    status: string;
+    originalStatus?: string;
+    autoRenew: boolean;
+    cancelAtPeriodEnd: boolean;
+    isExpiringSoon: boolean;
+    daysRemaining: number;
+  } | null;
+  effectiveStatus: string;
+  isExpiringSoon: boolean;
+  isTrialActive: boolean;
+  trialEndDate?: string;
+}
+
+export interface AdminClientsStats {
+  totalClubs: number;
+  activeMemberships: number;
+  expiringSoon: number;
+  gracePeriod: number;
+  expired: number;
+  mrr: number;
+}
+
+export interface AdminClientsResponse {
+  clients: AdminClubClient[];
+  stats: AdminClientsStats;
+}
+
+export interface AdminMembershipPaymentItem {
+  id: string;
+  clubId: string;
+  clubName: string;
+  clubEmail: string;
+  clubLogo?: string | null;
+  clubDistrict?: string | null;
+  planId: string;
+  planName: string;
+  interval: string;
+  amount: number;
+  currency: string;
+  status: "PENDING" | "PAID" | "REJECTED" | "REFUNDED";
+  mpPaymentId?: string | null;
+  mpPreferenceId?: string | null;
+  mpMerchantOrderId?: string | null;
+  paymentMethod?: string;
+  paymentType?: string;
+  paidAt?: string | null;
+  createdAt: string;
+  comprobanteUrl?: string | null;
+  referenceNumber?: string | null;
+  notes?: string | null;
+  gatewayResponse?: any;
+}
+
+export interface AdminPaymentsSummary {
+  totalPaidAmount: number;
+  monthPaidAmount: number;
+  totalTransactions: number;
+  paidCount: number;
+  pendingCount: number;
+  rejectedCount: number;
+  refundedCount: number;
+}
+
+export interface AdminPaymentsResponse {
+  payments: AdminMembershipPaymentItem[];
+  summary: AdminPaymentsSummary;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export const getAdminClients = async (params?: {
+  search?: string;
+  filter?: string;
+}): Promise<AdminClientsResponse> => {
+  const result = await api.get("/memberships/admin/clients", { params });
+  return result.data;
+};
+
+export const getAdminMembershipPayments = async (params?: {
+  search?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}): Promise<AdminPaymentsResponse> => {
+  const result = await api.get("/memberships/admin/payments", { params });
+  return result.data;
+};
+

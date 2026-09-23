@@ -9,6 +9,7 @@ import { MembershipStatus } from './enums/membership-status.enum';
 import { BillingInterval } from './enums/billing-interval.enum';
 import { MembershipPaymentStatus } from './enums/membership-payment-status.enum';
 import { addDays, addMonths } from 'date-fns';
+import { S3Service } from '../aws/s3.service';
 
 // Mock MercadoPago
 jest.mock('mercadopago', () => {
@@ -82,6 +83,7 @@ describe('MembershipService - Sprint A & B Business Rules, Checkout & Webhook', 
     save: jest.fn((p) => Promise.resolve(p)),
     find: jest.fn(),
     findOne: jest.fn(),
+    createQueryBuilder: jest.fn(),
     manager: {
       transaction: jest.fn(),
     },
@@ -89,6 +91,7 @@ describe('MembershipService - Sprint A & B Business Rules, Checkout & Webhook', 
 
   const mockClubRepo = {
     findOne: jest.fn(),
+    createQueryBuilder: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -112,6 +115,10 @@ describe('MembershipService - Sprint A & B Business Rules, Checkout & Webhook', 
         {
           provide: getRepositoryToken(Club),
           useValue: mockClubRepo,
+        },
+        {
+          provide: S3Service,
+          useValue: { uploadFile: jest.fn() },
         },
       ],
     }).compile();
@@ -235,6 +242,106 @@ describe('MembershipService - Sprint A & B Business Rules, Checkout & Webhook', 
 
       expect(mockPaymentRepo.manager.transaction).toHaveBeenCalled();
       expect(pendingPayment.status).toBe(MembershipPaymentStatus.PAID);
+    });
+  });
+
+  describe('Admin Features: getAdminClients & getAdminMembershipPayments', () => {
+    it('should list all club clients and detect expiring memberships (<= 7 days)', async () => {
+      const now = new Date();
+      const in3Days = addDays(now, 3);
+      const pastDate = addDays(now, -30);
+
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            id: 'club-1',
+            name: 'Club Lima Padel',
+            email: 'padel@lima.pe',
+            phone: '999888777',
+            district: 'Miraflores',
+            status: 'APPROVED',
+            createdAt: now,
+          },
+        ]),
+      };
+      mockClubRepo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder);
+
+      mockMembershipRepo.find.mockResolvedValue([
+        {
+          id: 'mem-1',
+          clubId: 'club-1',
+          startDate: pastDate,
+          endDate: in3Days,
+          status: MembershipStatus.ACTIVE,
+          autoRenew: true,
+          plan: mockPlan,
+        },
+      ]);
+
+      const result = await service.getAdminClients();
+
+      expect(result.clients).toHaveLength(1);
+      expect(result.clients[0].isExpiringSoon).toBe(true);
+      expect(result.clients[0].membership?.daysRemaining).toBeLessThanOrEqual(4);
+      expect(result.stats.activeMemberships).toBe(1);
+      expect(result.stats.expiringSoon).toBe(1);
+    });
+
+    it('should list membership payment transactions and compute financial metrics', async () => {
+      mockPaymentRepo.find.mockResolvedValue([
+        {
+          id: 'pay-1',
+          clubId: 'club-1',
+          amount: 150,
+          status: MembershipPaymentStatus.PAID,
+          paidAt: new Date(),
+          createdAt: new Date(),
+          plan: mockPlan,
+        },
+        {
+          id: 'pay-2',
+          clubId: 'club-2',
+          amount: 120,
+          status: MembershipPaymentStatus.PENDING,
+          createdAt: new Date(),
+          plan: mockPlan,
+        },
+      ]);
+
+      const mockPaymentQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(2),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            id: 'pay-1',
+            clubId: 'club-1',
+            amount: 150,
+            currency: 'PEN',
+            status: MembershipPaymentStatus.PAID,
+            mpPaymentId: 'mp-12345',
+            club: { name: 'Club Lima Padel', email: 'padel@lima.pe' },
+            plan: mockPlan,
+            createdAt: new Date(),
+          },
+        ]),
+      };
+      mockPaymentRepo.createQueryBuilder = jest.fn().mockReturnValue(mockPaymentQueryBuilder);
+
+      const result = await service.getAdminMembershipPayments();
+
+      expect(result.payments).toHaveLength(1);
+      expect(result.summary.totalTransactions).toBe(2);
+      expect(result.summary.paidCount).toBe(1);
+      expect(result.summary.pendingCount).toBe(1);
+      expect(result.summary.totalPaidAmount).toBe(150);
+      expect(result.payments[0].mpPaymentId).toBe('mp-12345');
     });
   });
 });

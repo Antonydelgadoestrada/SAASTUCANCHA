@@ -118,6 +118,23 @@
 
 ---
 
+### Plan de Membresías: Sprint D (Panel Admin: Clientes y Gestor de Pagos)
+- [x] **Apartado de Clientes (`/admin/clients`):**
+  - Directorio completo de clubes con membresía activa o en prueba.
+  - Indicador de período de vigencia (fecha de inicio y fin).
+  - Cálculo de días restantes y alerta visual animada de "Por Vencer" (<= 7 días) o período de gracia.
+  - Integración de enlace directo con WhatsApp del club para recordatorios de pago.
+  - Modal con ficha técnica de suscripción y datos del propietario.
+- [x] **Gestor de Pagos de Membresías (`/admin/payments`):**
+  - Registro exclusivo de transacciones por cobro de membresías vía Mercado Pago hacia la plataforma.
+  - Métricas financieras consolidadas (Total Recaudado, Mes Actual, Tasa de Aprobación, Pendientes).
+  - Tabla de transacciones con ID de Mercado Pago, copiado rápido al portapapeles, filtros por estado y buscador.
+  - Auditoría técnica con inspección JSON de la pasarela y exportación a CSV para contabilidad.
+- [x] **Acceso Directo desde Dashboard:**
+  - Tarjetas "Clubes Activos" e "Ingresos Totales" del panel administrativo enlazadas a las nuevas secciones.
+
+---
+
 ## 7. Registro de Archivos Modificados / Creados
 
 ### Horarios
@@ -126,7 +143,7 @@
 - `[MODIFY]` `nextjs-cancha-main/components/club/schedule-time-slot.tsx`
 - `[NEW]` `backend-tucancha-main/src/schedule/schedule-template.service.spec.ts`
 
-### Membresías, Pagos y Visibilidad (Sprint A, B & C)
+### Membresías, Pagos y Visibilidad (Sprint A, B, C & D)
 - `[MODIFY]` `backend-tucancha-main/src/payment/payment-method.enum.ts`
 - `[MODIFY]` `backend-tucancha-main/src/payment/payment.entity.ts`
 - `[MODIFY]` `backend-tucancha-main/src/payment/payment.service.ts`
@@ -139,6 +156,8 @@
 - `[MODIFY]` `backend-tucancha-main/src/mailer/mailer.service.ts`
 - `[MODIFY]` `backend-tucancha-main/src/court/court.service.ts`
 - `[MODIFY]` `nextjs-cancha-main/components/layout/app-sidebar.tsx`
+- `[MODIFY]` `nextjs-cancha-main/components/admin/dashboard-content.tsx`
+- `[MODIFY]` `nextjs-cancha-main/lib/membership.ts`
 - `[NEW]` `backend-tucancha-main/src/payment/payment.service.spec.ts`
 - `[NEW]` `backend-tucancha-main/src/membership/enums/membership-status.enum.ts`
 - `[NEW]` `backend-tucancha-main/src/membership/enums/billing-interval.enum.ts`
@@ -151,7 +170,11 @@
 - `[NEW]` `backend-tucancha-main/src/membership/dto/subscribe-plan.dto.ts`
 - `[NEW]` `backend-tucancha-main/src/membership/membership-cron.service.ts`
 - `[NEW]` `backend-tucancha-main/src/membership/membership-cron.service.spec.ts`
-- `[NEW]` `nextjs-cancha-main/lib/membership.ts`
 - `[NEW]` `nextjs-cancha-main/components/club/membership-content.tsx`
 - `[NEW]` `nextjs-cancha-main/app/(club)/club/membership/page.tsx`
+- `[NEW]` `nextjs-cancha-main/app/(admin)/admin/clients/page.tsx`
+- `[NEW]` `nextjs-cancha-main/components/admin/clients-content.tsx`
+- `[NEW]` `nextjs-cancha-main/app/(admin)/admin/payments/page.tsx`
+- `[NEW]` `nextjs-cancha-main/components/admin/payments-content.tsx`
 - `[NEW]` `SYSTEM_INDEX.md`
+

@@ -61,25 +61,33 @@ export function AdminDashboardContent() {
               <p className="text-xs text-muted-foreground">Registrados en el sistema</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Clubes Activos</CardTitle>
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.activeClubs}</div>
-              <p className="text-xs text-muted-foreground">Cuentas de club aprobadas</p>
-            </CardContent>
+          <Card className="hover:border-primary/50 transition-colors">
+            <Link href="/admin/clients" className="block h-full">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Clubes Activos</CardTitle>
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.activeClubs}</div>
+                <p className="text-xs text-primary font-medium hover:underline mt-1">
+                  Ver directorio de clientes →
+                </p>
+              </CardContent>
+            </Link>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
-              <DollarSignIcon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">S/. {stats.totalIncome.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">Recaudación total por membresías</p>
-            </CardContent>
+          <Card className="hover:border-primary/50 transition-colors">
+            <Link href="/admin/payments" className="block h-full">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
+                <DollarSignIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">S/. {stats.totalIncome.toFixed(2)}</div>
+                <p className="text-xs text-primary font-medium hover:underline mt-1">
+                  Ver gestor de pagos →
+                </p>
+              </CardContent>
+            </Link>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

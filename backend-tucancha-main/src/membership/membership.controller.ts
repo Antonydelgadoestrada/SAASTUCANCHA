@@ -164,4 +164,36 @@ export class MembershipController {
     }
     return this.membershipService.submitManualPayment(user.club.id, body, file);
   }
+
+  // ADMIN: Listado de clientes y control de membresías
+  @UseGuards(JwtAuthGuard)
+  @Get('admin/clients')
+  async getAdminClients(
+    @Query('search') search: string,
+    @Query('filter') filter: string,
+    @GetUser() user: Partial<User>,
+  ) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo administradores pueden consultar el listado de clientes');
+    }
+    return this.membershipService.getAdminClients(search, filter);
+  }
+
+  // ADMIN: Gestor de pagos y transacciones de membresías (Mercado Pago)
+  @UseGuards(JwtAuthGuard)
+  @Get('admin/payments')
+  async getAdminPayments(
+    @Query('search') search: string,
+    @Query('status') status: string,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @GetUser() user: Partial<User>,
+  ) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo administradores pueden consultar el gestor de pagos');
+    }
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 50;
+    return this.membershipService.getAdminMembershipPayments(search, status, pageNum, limitNum);
+  }
 }

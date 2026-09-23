@@ -171,6 +171,18 @@ export function AppSidebar({ user }: AppSidebarProps) {
       active: isActive("/admin/dashboard"),
     },
     {
+      title: "Clientes",
+      icon: UsersIcon,
+      href: "/admin/clients",
+      active: isActive("/admin/clients"),
+    },
+    {
+      title: "Gestor de Pagos",
+      icon: CreditCardIcon,
+      href: "/admin/payments",
+      active: isActive("/admin/payments"),
+    },
+    {
       title: "Solicitudes",
       icon: ListIcon,
       href: "/admin/requests",
