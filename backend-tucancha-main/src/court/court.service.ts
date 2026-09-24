@@ -84,7 +84,7 @@ export class CourtService {
       promoNight: (court as any).promoNight ?? null,
       rating: null,
       reviews: null,
-      time: court.minimumBookingTime,
+      time: court.minimumBookingTime?.toString() || "1",
       club: club
         ? {
             id: club.id,
@@ -146,7 +146,7 @@ export class CourtService {
   async findAll() {
     const courts = await this.courtRepo.find({ 
       where: { isActive: true },
-      relations: ['club'] 
+      // No cargamos relations: ['club'] completo para evitar descargar configuraciones y tokens pesados
     });
     return this.applyScheduleTemplateFallback(courts);
   }
@@ -165,7 +165,6 @@ export class CourtService {
   async findAllByClub(clubId: string) {
     const courts = await this.courtRepo.find({
       where: { club: { id: clubId }, isActive: true },
-      relations: ['club'],
     })
     return this.applyScheduleTemplateFallback(courts, clubId);
   }
@@ -509,14 +508,14 @@ export class CourtService {
       }
     }
     
-    await this.courtRepo.update(id, {...data,  promoDay:
-      data.hasOwnProperty('promoDay') && data.promoDay?.trim() !== ''
-        ? data.promoDay
-        : null,
-    promoNight:
-      data.hasOwnProperty('promoNight') && data.promoNight?.trim() !== ''
-        ? data.promoNight
-        : null,});
+    const updateData: any = { ...data };
+    if (updateData.hasOwnProperty('priceDay')) updateData.priceDay = Number(updateData.priceDay);
+    if (updateData.hasOwnProperty('priceNight')) updateData.priceNight = Number(updateData.priceNight);
+    if (updateData.hasOwnProperty('minimumBookingTime')) updateData.minimumBookingTime = Number(updateData.minimumBookingTime);
+    updateData.promoDay = data.hasOwnProperty('promoDay') && String(data.promoDay).trim() !== '' ? Number(data.promoDay) : null;
+    updateData.promoNight = data.hasOwnProperty('promoNight') && String(data.promoNight).trim() !== '' ? Number(data.promoNight) : null;
+    
+    await this.courtRepo.update(id, updateData);
     return this.findOne(id);
   }
 

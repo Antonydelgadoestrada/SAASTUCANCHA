@@ -13,6 +13,15 @@ import { Promotion } from '../promotion/promotion.entity';
 import { Club } from '../club/club.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
 
+export class NumericTransformer {
+  to(data: number | null): number | null {
+    return data;
+  }
+  from(data: string | null): number | null {
+    return data ? parseFloat(data) : null;
+  }
+}
+
 @Entity()
 export class Court {
   @PrimaryGeneratedColumn('uuid')
@@ -27,20 +36,20 @@ export class Court {
   @Column()
   surface: string;
 
-  @Column()
-  priceDay : string;
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 0, transformer: new NumericTransformer() })
+  priceDay : number;
 
-  @Column()
-  priceNight : string;
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 0, transformer: new NumericTransformer() })
+  priceNight : number;
 
-  @Column({ nullable: true })
-  promoDay : string;
+  @Column({ type: 'numeric', precision: 10, scale: 2, nullable: true, transformer: new NumericTransformer() })
+  promoDay : number | null;
 
-  @Column({ nullable: true })
-  promoNight : string;
+  @Column({ type: 'numeric', precision: 10, scale: 2, nullable: true, transformer: new NumericTransformer() })
+  promoNight : number | null;
 
-  @Column({ type: 'varchar', default: '1' }) // 1 hora como string
-  minimumBookingTime: string;
+  @Column({ type: 'numeric', precision: 4, scale: 1, default: 1, transformer: new NumericTransformer() })
+  minimumBookingTime: number;
 
   @Column({ type: 'text' })
   description: string;
