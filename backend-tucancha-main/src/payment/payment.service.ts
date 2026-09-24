@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Payment, PaymentType } from './payment.entity';
@@ -18,6 +18,7 @@ import { MailerService } from '../mailer/mailer.service';
 import { Booking } from '../booking/booking.entity';
 import { S3Service } from '../aws/s3.service';
 import { CourtService } from '../court/court.service';
+import { MembershipService } from '../membership/membership.service';
 
 @Injectable()
 export class PaymentService {
@@ -32,6 +33,8 @@ export class PaymentService {
     private readonly scheduleTemplateService: ScheduleTemplateService,
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
+    @Inject(forwardRef(() => MembershipService))
+    private readonly membershipService: MembershipService,
   ) {
     this.mercadopago = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN})
   }
@@ -59,6 +62,11 @@ export class PaymentService {
   }
  
   async handleOauthCallback(code: string, clubId: string) {
+    // Si el state corresponde a la cuenta de la plataforma (Super Admin)
+    if (clubId && clubId.startsWith('admin_platform:')) {
+      return await this.membershipService.handlePlatformOauthCallback(code, clubId);
+    }
+
     try {
       if (!process.env.MP_CLIENT_ID || !process.env.MP_CLIENT_SECRET || !code || !process.env.SERVICES_URL) {
         console.error('⚠️ Faltan valores requeridos para OAuth de Mercado Pago:', {

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Payment } from './payment.entity';
 import { Booking } from '../booking/booking.entity';
@@ -9,6 +9,7 @@ import { BookingModule } from '../booking/booking.module';
 import { ClubModule } from '../club/club.module';
 import { MailerModule } from '../mailer/mailer.module';
 import { AwsModule } from '../aws/aws.module';
+import { MembershipModule } from '../membership/membership.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AwsModule } from '../aws/aws.module';
     ClubModule,
     MailerModule,
     AwsModule,
+    forwardRef(() => MembershipModule),
   ],
   providers: [PaymentService],
   controllers: [PaymentController],

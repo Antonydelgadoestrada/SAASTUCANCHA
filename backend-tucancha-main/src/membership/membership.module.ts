@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MembershipPlan } from './entities/membership_plan.entity';
 import { ClubMembership } from './entities/club_membership.entity';
 import { MembershipPayment } from './entities/membership_payment.entity';
+import { PlatformPaymentConfig } from './entities/platform_payment_config.entity';
 import { Club } from '../club/club.entity';
 import { MembershipService } from './membership.service';
 import { MembershipController } from './membership.controller';
@@ -16,6 +17,7 @@ import { MailerModule } from '../mailer/mailer.module';
       ClubMembership,
       MembershipPayment,
       Club,
+      PlatformPaymentConfig,
     ]),
     MailerModule,
   ],

@@ -7,6 +7,7 @@ import { ClubMembership } from './entities/club_membership.entity';
 import { Club } from '../club/club.entity';
 import { MembershipStatus } from './enums/membership-status.enum';
 import { MailerService } from '../mailer/mailer.service';
+import { MembershipService } from './membership.service';
 
 @Injectable()
 export class MembershipCronService {
@@ -18,6 +19,7 @@ export class MembershipCronService {
     @InjectRepository(Club)
     private readonly clubRepo: Repository<Club>,
     private readonly mailerService: MailerService,
+    private readonly membershipService: MembershipService,
   ) {}
 
   /**
@@ -236,4 +238,19 @@ export class MembershipCronService {
       this.logger.error(`Error durante el cron de membresías: ${error?.message || error}`);
     }
   }
+
+  /**
+   * Se ejecuta cada 4 horas para verificar y renovar proactivamente
+   * el token de Mercado Pago de la plataforma antes de que expire.
+   */
+  @Cron('0 0 */4 * * *')
+  async handlePlatformMpTokenRenewal() {
+    this.logger.log('Iniciando verificación proactiva de renovación de token MP de plataforma...');
+    try {
+      await this.membershipService.renewPlatformTokensIfNeeded();
+    } catch (err: any) {
+      this.logger.error(`Error en renovación periódica de token de plataforma: ${err?.message || err}`);
+    }
+  }
 }
+

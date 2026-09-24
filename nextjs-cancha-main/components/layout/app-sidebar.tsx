@@ -13,6 +13,7 @@ import {
   SettingsIcon,
   UsersIcon,
   SparklesIcon,
+  ShieldCheckIcon,
 } from "lucide-react"
 
 import { UserNav } from "@/components/layout/user-nav"
@@ -191,6 +192,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
       icon: ListIcon,
       href: "/admin/requests",
       active: isActive("/admin/requests"),
+    },
+    {
+      title: "Mercado Pago",
+      icon: ShieldCheckIcon,
+      href: "/admin/mercadopago",
+      active: isActive("/admin/mercadopago"),
     },
   ]
 

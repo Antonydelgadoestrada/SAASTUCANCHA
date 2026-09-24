@@ -7,17 +7,21 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { addMonths, addYears, addDays, isAfter } from 'date-fns';
-import { MercadoPagoConfig, Preference, Payment as PaymentMp } from 'mercadopago';
+import { addMonths, addYears, addDays, addSeconds, addHours, isAfter, isBefore, differenceInDays } from 'date-fns';
+import * as crypto from 'crypto';
+import axios from 'axios';
+import { MercadoPagoConfig, Preference, Payment as PaymentMp, OAuth } from 'mercadopago';
 import { MembershipPlan } from './entities/membership_plan.entity';
 import { ClubMembership } from './entities/club_membership.entity';
 import { MembershipPayment } from './entities/membership_payment.entity';
+import { PlatformPaymentConfig } from './entities/platform_payment_config.entity';
 import { MembershipStatus } from './enums/membership-status.enum';
 import { BillingInterval } from './enums/billing-interval.enum';
 import { MembershipPaymentStatus } from './enums/membership-payment-status.enum';
 import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { UpdateMembershipPlanDto } from './dto/update-membership-plan.dto';
 import { SubmitManualMembershipPaymentDto } from './dto/submit-manual-membership-payment.dto';
+import { SavePlatformCredentialsDto } from './dto/save-platform-credentials.dto';
 import { S3Service } from '../aws/s3.service';
 import { Club } from '../club/club.entity';
 
@@ -34,9 +38,11 @@ export class MembershipService implements OnModuleInit {
     private readonly paymentRepo: Repository<MembershipPayment>,
     @InjectRepository(Club)
     private readonly clubRepo: Repository<Club>,
+    @InjectRepository(PlatformPaymentConfig)
+    private readonly platformPaymentConfigRepo: Repository<PlatformPaymentConfig>,
     private readonly s3Service: S3Service,
   ) {
-    // REGLA DE ORO: Las membresías siempre utilizan las credenciales de la plataforma (Dueño)
+    // REGLA DE ORO: Las membresías utilizan las credenciales de la plataforma (Dueño)
     this.mercadopago = new MercadoPagoConfig({
       accessToken: process.env.MP_ACCESS_TOKEN || '',
     });
@@ -396,7 +402,8 @@ export class MembershipService implements OnModuleInit {
     const savedPayment = await this.paymentRepo.save(payment);
 
     // 2. Crear la preferencia de Mercado Pago con credenciales de la plataforma
-    const preferenceClient = new Preference(this.mercadopago);
+    const { client: mpConfigClient } = await this.getActivePlatformMercadoPagoConfig();
+    const preferenceClient = new Preference(mpConfigClient);
     const intervalLabel =
       plan.interval === BillingInterval.ANNUAL
         ? 'Anual'
@@ -475,8 +482,9 @@ export class MembershipService implements OnModuleInit {
         return;
       }
 
-      // 2. Consultar detalles de pago a Mercado Pago con token de la plataforma
-      const mpPayment = await new PaymentMp(this.mercadopago).get({ id: paymentId });
+      // 2. Consultar detalles de pago a Mercado Pago con token activo de la plataforma
+      const { client: mpConfigClient } = await this.getActivePlatformMercadoPagoConfig();
+      const mpPayment = await new PaymentMp(mpConfigClient).get({ id: paymentId });
       const externalRef = mpPayment.external_reference;
       const status = mpPayment.status;
 
@@ -864,5 +872,433 @@ export class MembershipService implements OnModuleInit {
         totalPages: Math.ceil(totalCount / limit) || 1,
       },
     };
+  }
+
+  // ----------------------------------------------------
+  // CONEXIÓN MERCADO PAGO PLATAFORMA (SUPER ADMIN)
+  // ----------------------------------------------------
+
+  private getOAuthSecret(): string {
+    return process.env.JWT_SECRET || 'tucancha_platform_mp_secure_key_2026';
+  }
+
+  /**
+   * Genera un estado OAuth anti-CSRF firmado con HMAC-SHA256 y expiración en 15 minutos.
+   */
+  generateAdminOAuthState(adminUserId: string): string {
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const timestamp = Date.now().toString();
+    const payload = `admin_platform:${adminUserId}:${nonce}:${timestamp}`;
+    const signature = crypto
+      .createHmac('sha256', this.getOAuthSecret())
+      .update(payload)
+      .digest('hex');
+    return `${payload}:${signature}`;
+  }
+
+  /**
+   * Valida la firma criptográfica anti-CSRF y la ventana de tiempo del estado OAuth.
+   */
+  verifyAdminOAuthState(state: string): { valid: boolean; adminUserId?: string; reason?: string } {
+    if (!state || !state.startsWith('admin_platform:')) {
+      return { valid: false, reason: 'Prefijo no corresponde a plataforma admin' };
+    }
+    const parts = state.split(':');
+    if (parts.length !== 5) {
+      return { valid: false, reason: 'Formato de estado OAuth inválido' };
+    }
+    const [prefix, adminUserId, nonce, timestampStr, signature] = parts;
+    const timestamp = parseInt(timestampStr, 10);
+    if (isNaN(timestamp) || Date.now() - timestamp > 15 * 60 * 1000) {
+      return { valid: false, reason: 'Estado OAuth expirado (límite 15 minutos)' };
+    }
+    const payload = `${prefix}:${adminUserId}:${nonce}:${timestampStr}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', this.getOAuthSecret())
+      .update(payload)
+      .digest('hex');
+
+    try {
+      const sigBuf = Buffer.from(signature, 'hex');
+      const expBuf = Buffer.from(expectedSignature, 'hex');
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+        return { valid: false, reason: 'Firma HMAC anti-CSRF no coincide' };
+      }
+    } catch {
+      return { valid: false, reason: 'Error verificando firma criptográfica' };
+    }
+
+    return { valid: true, adminUserId };
+  }
+
+  /**
+   * Retorna la configuración activa de Mercado Pago de la plataforma.
+   * Si existe en la BD y está conectado, renueva el token automáticamente si expira en < 2 horas.
+   * Si no está en BD, utiliza fallback a process.env.MP_ACCESS_TOKEN.
+   */
+  async getActivePlatformMercadoPagoConfig(): Promise<{
+    accessToken: string;
+    client: MercadoPagoConfig;
+    source: 'database' | 'environment';
+    configEntity?: PlatformPaymentConfig;
+  }> {
+    const config = await this.platformPaymentConfigRepo
+      .createQueryBuilder('cfg')
+      .addSelect(['cfg.mpAccessToken', 'cfg.mpRefreshToken'])
+      .where('cfg.provider = :provider AND cfg.isConnected = :isConnected', {
+        provider: 'mercadopago',
+        isConnected: true,
+      })
+      .getOne();
+
+    if (config && config.mpAccessToken) {
+      // Auto-renovación si quedan menos de 2 horas y existe refresh token
+      if (
+        config.mpRefreshToken &&
+        config.mpTokenExpiresAt &&
+        isBefore(new Date(config.mpTokenExpiresAt), addHours(new Date(), 2))
+      ) {
+        try {
+          const oauth = new OAuth(this.mercadopago);
+          const refreshed = await oauth.refresh({
+            body: {
+              client_id: process.env.MP_CLIENT_ID || '',
+              client_secret: process.env.MP_CLIENT_SECRET || '',
+              refresh_token: config.mpRefreshToken,
+            },
+          });
+          config.mpAccessToken = refreshed.access_token;
+          if (refreshed.refresh_token) {
+            config.mpRefreshToken = refreshed.refresh_token;
+          }
+          if (refreshed.public_key) {
+            config.mpPublicKey = refreshed.public_key;
+          }
+          config.mpTokenExpiresAt = addSeconds(new Date(), refreshed.expires_in || 15552000);
+          config.lastSyncAt = new Date();
+          await this.platformPaymentConfigRepo.save(config);
+          console.log('🔄 [Platform MP] Token renovado proactivamente');
+        } catch (err: any) {
+          console.error('⚠️ [Platform MP] Error en auto-renovación de token:', err?.message || err);
+        }
+      }
+
+      return {
+        accessToken: config.mpAccessToken,
+        client: new MercadoPagoConfig({ accessToken: config.mpAccessToken }),
+        source: 'database',
+        configEntity: config,
+      };
+    }
+
+    const envToken = process.env.MP_ACCESS_TOKEN || '';
+    return {
+      accessToken: envToken,
+      client: this.mercadopago,
+      source: 'environment',
+    };
+  }
+
+  /**
+   * Obtiene el estado público de Mercado Pago para el panel Admin (Zero-Leakage).
+   * Jamás retorna mpAccessToken ni mpRefreshToken.
+   */
+  async getPlatformMercadoPagoStatus() {
+    const config = await this.platformPaymentConfigRepo.findOne({
+      where: { provider: 'mercadopago' },
+    });
+
+    const hasEnvFallback = Boolean(process.env.MP_ACCESS_TOKEN);
+    const hasClientIdAndSecret = Boolean(
+      process.env.MP_CLIENT_ID && process.env.MP_CLIENT_SECRET,
+    );
+
+    let expiresInDays: number | null = null;
+    if (config?.mpTokenExpiresAt) {
+      expiresInDays = Math.max(0, differenceInDays(new Date(config.mpTokenExpiresAt), new Date()));
+    }
+
+    const isConnected = Boolean(config?.isConnected);
+
+    // Enmascarar User ID (ej: "12345678" -> "1234****")
+    let maskedUserId: string | null = null;
+    if (config?.mpUserId) {
+      maskedUserId =
+        config.mpUserId.length > 4
+          ? `${config.mpUserId.slice(0, 4)}****`
+          : config.mpUserId;
+    }
+
+    return {
+      isConnected,
+      provider: 'mercadopago',
+      mpUserId: maskedUserId,
+      mpPublicKey: config?.mpPublicKey || null,
+      accountEmail: config?.accountEmail || null,
+      accountNickname: config?.accountNickname || null,
+      environment: config?.environment || 'sandbox',
+      connectedAt: config?.connectedAt || null,
+      lastSyncAt: config?.lastSyncAt || null,
+      mpTokenExpiresAt: config?.mpTokenExpiresAt || null,
+      expiresInDays,
+      source: isConnected ? 'database' : hasEnvFallback ? 'environment' : 'unconfigured',
+      hasEnvFallback,
+      hasClientIdAndSecret,
+      redirectUri: `${process.env.SERVICES_URL || 'http://localhost:3001'}/payments/oauth/callback`,
+    };
+  }
+
+  /**
+   * Genera el URL oficial de OAuth Mercado Pago para conectar la cuenta Admin
+   */
+  async getAdminAuthorizeUrl(adminUserId: string): Promise<string> {
+    const clientId = process.env.MP_CLIENT_ID;
+    const servicesUrl = process.env.SERVICES_URL || 'http://localhost:3001';
+
+    if (!clientId) {
+      throw new BadRequestException(
+        'Falta configurar MP_CLIENT_ID en las variables de entorno de la plataforma',
+      );
+    }
+
+    const signedState = this.generateAdminOAuthState(adminUserId);
+    const oauth = new OAuth(this.mercadopago);
+
+    const url = oauth.getAuthorizationURL({
+      options: {
+        client_id: clientId,
+        redirect_uri: `${servicesUrl}/payments/oauth/callback`,
+        state: signedState,
+      },
+    });
+
+    return url;
+  }
+
+  /**
+   * Procesa el retorno de OAuth de Mercado Pago para la cuenta de plataforma
+   */
+  async handlePlatformOauthCallback(
+    code: string,
+    state: string,
+  ): Promise<{ redirect: string }> {
+    const webUrl = process.env.WEB_SERVICES_URL || 'http://localhost:3000';
+    const servicesUrl = process.env.SERVICES_URL || 'http://localhost:3001';
+
+    // 1. Validar Anti-CSRF
+    const verification = this.verifyAdminOAuthState(state);
+    if (!verification.valid) {
+      console.error('⛔ [Platform MP OAuth] CSRF State Invalido:', verification.reason);
+      return {
+        redirect: `${webUrl}/admin/mercadopago?error=csrf_validation_failed&reason=${encodeURIComponent(
+          verification.reason || 'invalid_state',
+        )}`,
+      };
+    }
+
+    // 2. Canjear código por tokens con Mercado Pago
+    try {
+      const oauth = new OAuth(this.mercadopago);
+      const credentials = await oauth.create({
+        body: {
+          client_id: process.env.MP_CLIENT_ID || '',
+          client_secret: process.env.MP_CLIENT_SECRET || '',
+          code,
+          redirect_uri: `${servicesUrl}/payments/oauth/callback`,
+        },
+      });
+
+      const { access_token, refresh_token, user_id, public_key, live_mode } = credentials;
+
+      // 3. Consultar datos de la cuenta en MP (/users/me)
+      let accountEmail: string | null = null;
+      let accountNickname: string | null = null;
+      try {
+        const meRes = await axios.get('https://api.mercadopago.com/users/me', {
+          headers: { Authorization: `Bearer ${access_token}` },
+          timeout: 5000,
+        });
+        accountEmail = meRes.data?.email || null;
+        accountNickname = meRes.data?.nickname || meRes.data?.first_name || null;
+      } catch (err: any) {
+        console.warn('⚠️ [Platform MP] No se pudo obtener /users/me de Mercado Pago:', err?.message || err);
+      }
+
+      // 4. Persistir configuración de forma segura
+      let config = await this.platformPaymentConfigRepo.findOne({
+        where: { provider: 'mercadopago' },
+      });
+
+      if (!config) {
+        config = this.platformPaymentConfigRepo.create({ provider: 'mercadopago' });
+      }
+
+      config.mpUserId = String(user_id);
+      config.mpAccessToken = access_token;
+      config.mpRefreshToken = refresh_token || null;
+      config.mpPublicKey = public_key || null;
+      config.mpTokenExpiresAt = addSeconds(new Date(), credentials.expires_in || 15552000);
+      config.isConnected = true;
+      config.accountEmail = accountEmail;
+      config.accountNickname = accountNickname;
+      config.environment = live_mode ? 'production' : 'sandbox';
+      config.connectedAt = new Date();
+      config.lastSyncAt = new Date();
+      config.updatedByUserId = verification.adminUserId || null;
+
+      await this.platformPaymentConfigRepo.save(config);
+
+      console.log(
+        `✅ [Platform MP OAuth] Mercado Pago de la plataforma conectado exitosamente para User MP ${user_id}`,
+      );
+
+      return {
+        redirect: `${webUrl}/admin/mercadopago?status=connected`,
+      };
+    } catch (err: any) {
+      console.error('⛔ [Platform MP OAuth Error]:', err?.response?.data || err?.message || err);
+      return {
+        redirect: `${webUrl}/admin/mercadopago?error=oauth_exchange_failed`,
+      };
+    }
+  }
+
+  /**
+   * Desconecta la cuenta de Mercado Pago de la plataforma
+   */
+  async disconnectPlatformMercadoPago(adminUserId?: string) {
+    const config = await this.platformPaymentConfigRepo.findOne({
+      where: { provider: 'mercadopago' },
+    });
+
+    if (!config) {
+      throw new NotFoundException('No existe configuración de Mercado Pago para desconectar');
+    }
+
+    config.isConnected = false;
+    config.mpAccessToken = null;
+    config.mpRefreshToken = null;
+    config.lastSyncAt = new Date();
+    if (adminUserId) {
+      config.updatedByUserId = adminUserId;
+    }
+
+    await this.platformPaymentConfigRepo.save(config);
+
+    return {
+      success: true,
+      message: 'Cuenta de Mercado Pago desconectada exitosamente',
+    };
+  }
+
+  /**
+   * Prueba de conectividad activa (Ping) con los servidores de Mercado Pago
+   */
+  async syncPlatformMercadoPago() {
+    const active = await this.getActivePlatformMercadoPagoConfig();
+    if (!active.accessToken) {
+      throw new BadRequestException('No hay ninguna credencial de Mercado Pago configurada');
+    }
+
+    const startTime = Date.now();
+    try {
+      const response = await axios.get('https://api.mercadopago.com/users/me', {
+        headers: { Authorization: `Bearer ${active.accessToken}` },
+        timeout: 7000,
+      });
+      const latencyMs = Date.now() - startTime;
+
+      // Actualizar lastSyncAt si existe en BD
+      if (active.configEntity) {
+        active.configEntity.lastSyncAt = new Date();
+        if (response.data?.email) {
+          active.configEntity.accountEmail = response.data.email;
+        }
+        if (response.data?.nickname) {
+          active.configEntity.accountNickname = response.data.nickname;
+        }
+        await this.platformPaymentConfigRepo.save(active.configEntity);
+      }
+
+      return {
+        success: true,
+        latencyMs,
+        source: active.source,
+        accountEmail: response.data?.email || null,
+        accountNickname: response.data?.nickname || null,
+        countryId: response.data?.country_id || 'PE',
+        liveMode: response.data?.site_status === 'active',
+        message: 'Conexión verificada exitosamente con Mercado Pago',
+      };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      console.error('⚠️ [Platform MP Sync Ping Error]:', err?.response?.data || err?.message);
+      throw new BadRequestException(
+        `Error al validar conexión con Mercado Pago (${latencyMs}ms): ${err?.response?.data?.message || err?.message || 'Fallo de autenticación'}`,
+      );
+    }
+  }
+
+  /**
+   * Guarda credenciales manuales para la plataforma con validación previa de conectividad
+   */
+  async savePlatformManualCredentials(
+    dto: SavePlatformCredentialsDto,
+    adminUserId?: string,
+  ) {
+    if (!dto.accessToken) {
+      throw new BadRequestException('El Access Token es obligatorio');
+    }
+
+    // Validar token contra /users/me de Mercado Pago
+    let meData: any = null;
+    try {
+      const testRes = await axios.get('https://api.mercadopago.com/users/me', {
+        headers: { Authorization: `Bearer ${dto.accessToken}` },
+        timeout: 7000,
+      });
+      meData = testRes.data;
+    } catch (err: any) {
+      throw new BadRequestException(
+        `El Access Token proporcionado es inválido o expiró: ${err?.response?.data?.message || err?.message}`,
+      );
+    }
+
+    let config = await this.platformPaymentConfigRepo.findOne({
+      where: { provider: 'mercadopago' },
+    });
+
+    if (!config) {
+      config = this.platformPaymentConfigRepo.create({ provider: 'mercadopago' });
+    }
+
+    config.mpUserId = meData?.id ? String(meData.id) : null;
+    config.mpAccessToken = dto.accessToken;
+    config.mpRefreshToken = null;
+    config.mpPublicKey = dto.publicKey || null;
+    config.mpTokenExpiresAt = null; // Tokens manuales no tienen expiración OAuth conocida
+    config.isConnected = true;
+    config.accountEmail = meData?.email || null;
+    config.accountNickname = meData?.nickname || meData?.first_name || null;
+    config.environment = meData?.site_status === 'active' ? 'production' : 'sandbox';
+    config.connectedAt = new Date();
+    config.lastSyncAt = new Date();
+    if (adminUserId) {
+      config.updatedByUserId = adminUserId;
+    }
+
+    await this.platformPaymentConfigRepo.save(config);
+
+    return {
+      success: true,
+      message: 'Credenciales manuales de Mercado Pago guardadas y validadas exitosamente',
+    };
+  }
+
+  /**
+   * Daemon de renovación para el Cron de la plataforma
+   */
+  async renewPlatformTokensIfNeeded(): Promise<void> {
+    await this.getActivePlatformMercadoPagoConfig();
   }
 }

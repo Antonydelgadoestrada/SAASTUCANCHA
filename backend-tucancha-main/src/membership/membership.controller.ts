@@ -20,6 +20,7 @@ import { CreateMembershipPlanDto } from './dto/create-membership-plan.dto';
 import { UpdateMembershipPlanDto } from './dto/update-membership-plan.dto';
 import { SubscribePlanDto } from './dto/subscribe-plan.dto';
 import { SubmitManualMembershipPaymentDto } from './dto/submit-manual-membership-payment.dto';
+import { SavePlatformCredentialsDto } from './dto/save-platform-credentials.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
 import { User } from '../user/user.entity';
@@ -196,4 +197,58 @@ export class MembershipController {
     const limitNum = limit ? parseInt(limit, 10) : 50;
     return this.membershipService.getAdminMembershipPayments(search, status, pageNum, limitNum);
   }
+
+  // ----------------------------------------------------
+  // ADMIN: Configuración y Conexión de Mercado Pago (Plataforma)
+  // ----------------------------------------------------
+
+  @UseGuards(JwtAuthGuard)
+  @Get('admin/mercadopago/status')
+  async getAdminMercadoPagoStatus(@GetUser() user: Partial<User>) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo administradores pueden consultar el estado de Mercado Pago');
+    }
+    return this.membershipService.getPlatformMercadoPagoStatus();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('admin/mercadopago/authorize')
+  async getAdminMercadoPagoAuthorizeUrl(@GetUser() user: Partial<User>) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo administradores pueden iniciar vinculación de Mercado Pago');
+    }
+    const url = await this.membershipService.getAdminAuthorizeUrl(user.id);
+    return { url };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('admin/mercadopago/disconnect')
+  async disconnectAdminMercadoPago(@GetUser() user: Partial<User>) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo administradores pueden desconectar la cuenta de Mercado Pago');
+    }
+    return this.membershipService.disconnectPlatformMercadoPago(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('admin/mercadopago/sync')
+  async syncAdminMercadoPago(@GetUser() user: Partial<User>) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo administradores pueden probar la conexión de Mercado Pago');
+    }
+    return this.membershipService.syncPlatformMercadoPago();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('admin/mercadopago/manual-credentials')
+  async saveAdminManualCredentials(
+    @Body() dto: SavePlatformCredentialsDto,
+    @GetUser() user: Partial<User>,
+  ) {
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Solo administradores pueden configurar credenciales manuales');
+    }
+    return this.membershipService.savePlatformManualCredentials(dto, user.id);
+  }
 }
+
