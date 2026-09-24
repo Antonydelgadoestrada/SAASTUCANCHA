@@ -30,7 +30,8 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     ) {}
     @UseGuards(JwtAuthGuard)
     @Get()
-    findAll(): Promise<Booking[]> {
+    findAll(@GetUser() user: User): Promise<Booking[]> {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.bookingService.findAll();
     }
 
@@ -169,22 +170,29 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     } 
     @UseGuards(JwtAuthGuard)
     @Get(':id')
-    findOne(@Param('id') id: string): Promise<Booking> {
+    findOne(@Param('id') id: string, @GetUser() user: User): Promise<Booking> {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.bookingService.findOne(id);
     }
+    
     @UseGuards(JwtAuthGuard)
     @Post()
-    create(@Body() data: Partial<Booking>) {
+    create(@Body() data: Partial<Booking>, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.bookingService.create(data);
     }
+    
     @UseGuards(JwtAuthGuard)
     @Put(':id')
-    update(@Param('id') id: string, @Body() data: Partial<Booking>) {
+    update(@Param('id') id: string, @Body() data: Partial<Booking>, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.bookingService.update(id, data);
     }
+    
     @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    remove(@Param('id') id: string) {
+    remove(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.bookingService.remove(id);
     }
   

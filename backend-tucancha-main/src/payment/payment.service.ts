@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, Brackets } from 'typeorm';
 import { Payment, PaymentType } from './payment.entity';
 import { PaymentStatus } from './payment-status.enum';
 import { BookingStatus } from '../booking/booking-status.enum';
@@ -202,6 +202,7 @@ export class PaymentService {
           failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
           pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
         },
+        notification_url: `${process.env.SERVICES_URL}/payments/webhook?clubId=${booking.club?.id}`,
         // auto_return: 'approved',
         external_reference: `${bookingId}`,
         marketplace_fee: 5, // 💰 comisión
@@ -253,6 +254,7 @@ export class PaymentService {
           failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
           pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
         },
+        notification_url: `${process.env.SERVICES_URL}/payments/webhook?clubId=${firstBooking.club?.id}`,
         external_reference: bookingIds, // Pasamos la lista de IDs separados por coma
         marketplace_fee: 5,
       },
@@ -262,7 +264,7 @@ export class PaymentService {
   }
   
   async handleMercadoPagoWebhook(query: any) {
-    const { type, 'data.id': paymentId } = query;
+    const { type, 'data.id': paymentId, clubId } = query;
   
     if (type !== 'payment' || !paymentId) {
       return;
@@ -272,7 +274,7 @@ export class PaymentService {
       // 1. Verificación rápida de idempotencia por transactionId existente
       const existingPayment = await this.paymentRepo.findOne({
         where: { transactionId: String(paymentId) },
-        relations: ['booking'],
+        relations: ['bookings'],
       });
 
       if (existingPayment && existingPayment.status === PaymentStatus.PAID) {
@@ -281,7 +283,15 @@ export class PaymentService {
       }
 
       // 2. Obtener datos del pago desde la API de Mercado Pago
-      const mpPayment = await new PaymentMp(this.mercadopago).get({ id: paymentId });
+      let mpClient = this.mercadopago;
+      if (clubId) {
+        const club = await this.clubsService.findOne(clubId);
+        if (club && club.mpAccessToken) {
+          mpClient = new MercadoPagoConfig({ accessToken: club.mpAccessToken });
+        }
+      }
+
+      const mpPayment = await new PaymentMp(mpClient).get({ id: paymentId });
       const externalRef = mpPayment.external_reference;
       const status = mpPayment.status;
   

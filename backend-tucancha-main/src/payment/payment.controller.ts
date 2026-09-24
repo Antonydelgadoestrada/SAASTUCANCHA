@@ -14,6 +14,7 @@ import {
     UseGuards,
     UseInterceptors,
     UploadedFile,
+    UnauthorizedException,
   } from '@nestjs/common';
   import { PaymentService } from './payment.service';
   import { Payment } from './payment.entity';
@@ -30,7 +31,8 @@ import { memoryStorage, File as MulterFile } from 'multer';
     constructor(private readonly service: PaymentService) {}
     @UseGuards(JwtAuthGuard)
     @Get()
-    findAll(): Promise<Payment[]> {
+    findAll(@GetUser() user: User): Promise<Payment[]> {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.findAll();
     }
     // payments.controller.ts
@@ -88,25 +90,29 @@ import { memoryStorage, File as MulterFile } from 'multer';
     }
     @UseGuards(JwtAuthGuard)
     @Post()
-    create(@Body() data: Partial<Payment>) {
+    create(@Body() data: Partial<Payment>, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.create(data);
     }
 
     @UseGuards(JwtAuthGuard)
     @Get(':id')
-    async findOne(@Param('id') id: string): Promise<Payment> {
+    async findOne(@Param('id') id: string, @GetUser() user: User): Promise<Payment> {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       const payment = await this.service.findOne(id);
       if (!payment) throw new NotFoundException('Payment not found');
       return payment;
     }
     @UseGuards(JwtAuthGuard)
     @Put(':id')
-    update(@Param('id') id: string, @Body() data: Partial<Payment>) {
+    update(@Param('id') id: string, @Body() data: Partial<Payment>, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.update(id, data);
     }
     @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    remove(@Param('id') id: string) {
+    remove(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.remove(id);
     }
 

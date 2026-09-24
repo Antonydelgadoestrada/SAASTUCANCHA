@@ -274,7 +274,7 @@ export class BookingService implements OnModuleInit {
         if (slot.id) {
           await manager.update('CourtScheduleAvailability', slot.id, { status: slot.status });
         } else {
-          const existing = await manager.findOne('CourtScheduleAvailability', {
+          const existing: any = await manager.findOne('CourtScheduleAvailability', {
             where: { courtId: slot.courtId, date: slot.date, time: slot.time },
           });
           if (existing) {
@@ -488,7 +488,7 @@ export class BookingService implements OnModuleInit {
         if (slot.id) {
           await manager.update('CourtScheduleAvailability', slot.id, { status: slot.status });
         } else {
-          const existing = await manager.findOne('CourtScheduleAvailability', {
+          const existing: any = await manager.findOne('CourtScheduleAvailability', {
             where: { courtId: slot.courtId, date: slot.date, time: slot.time },
           });
           if (existing) {
