@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Booking } from './booking.entity';
 import { Repository } from 'typeorm';
@@ -244,7 +244,15 @@ export class BookingService implements OnModuleInit {
       booking = Object.assign(booking, statusManual);
       
       const saveBooking = await this.bookingRepo.create(booking);
-      const result = await this.bookingRepo.save(saveBooking);
+      let result;
+      try {
+        result = await this.bookingRepo.save(saveBooking);
+      } catch (error: any) {
+        if (error.code === '23505') {
+          throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+        }
+        throw error;
+      }
       
       slots = slots.map((slot) => (Object.assign(slot, { status: 'on-hold' })));
       await this.scheduleTemplateService.bulkUpdate(slots);
@@ -391,7 +399,15 @@ export class BookingService implements OnModuleInit {
         paymentStatus: initialPaymentStatus,
         bookingReference: `REF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       });
-      const savedBooking = await this.bookingRepo.save(booking);
+      let savedBooking;
+      try {
+        savedBooking = await this.bookingRepo.save(booking);
+      } catch (error: any) {
+        if (error.code === '23505') {
+          throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+        }
+        throw error;
+      }
 
       // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
       if (!isUnpaid) {
@@ -465,7 +481,14 @@ export class BookingService implements OnModuleInit {
       bookingReference: `REF-${Date.now()}`,
     });
 
-    await this.bookingRepo.save(booking);
+    try {
+      await this.bookingRepo.save(booking);
+    } catch (error: any) {
+      if (error.code === '23505') {
+        throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+      }
+      throw error;
+    }
 
     slots = slots.map((slot) => Object.assign(slot, { status: 'on-hold' }));
     await this.scheduleTemplateService.bulkUpdate(slots);
