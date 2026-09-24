@@ -39,6 +39,10 @@ import { MembershipModule } from './membership/membership.module';
             : false,
         retryAttempts: 20,
         retryDelay: 3000,
+        poolSize: Number(config.get<string>('DATABASE_POOL_SIZE')) || 15,
+        extra: {
+          max: Number(config.get<string>('DATABASE_POOL_SIZE')) || 15,
+        },
         // Carga entidades desde TypeOrmModule.forFeature() de cada módulo (evita fallos de glob / metadata).
         autoLoadEntities: true,
         synchronize:

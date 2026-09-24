@@ -1,5 +1,3 @@
-import axios from "axios";
-
 function getServerApiBaseUrl(): string {
   const url =
     process.env.API_INTERNAL_BASE_URL ||
@@ -8,19 +6,14 @@ function getServerApiBaseUrl(): string {
   return url.replace("localhost", "127.0.0.1");
 }
 
-// API client para Server Components (no usa localStorage ni next-auth)
-const serverApi = axios.create({
-  baseURL: getServerApiBaseUrl(),
-  timeout: 8000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
 export const getLimit10Server = async () => {
   try {
-    const result = await serverApi.get("/courts/featured");
-    return result.data;
+    const res = await fetch(`${getServerApiBaseUrl()}/courts/featured`, {
+      next: { revalidate: 60, tags: ['featured-courts'] },
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!res.ok) throw new Error('Failed to fetch featured courts');
+    return await res.json();
   } catch (error) {
     console.error('Server API error:', error);
     return [];
@@ -29,8 +22,12 @@ export const getLimit10Server = async () => {
 
 export const getAllClubsServer = async () => {
   try {
-    const result = await serverApi.get("/clubs");
-    return result.data;
+    const res = await fetch(`${getServerApiBaseUrl()}/clubs`, {
+      next: { revalidate: 120, tags: ['clubs'] },
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!res.ok) throw new Error('Failed to fetch clubs');
+    return await res.json();
   } catch (error) {
     console.error('Server API error fetching clubs:', error);
     return [];

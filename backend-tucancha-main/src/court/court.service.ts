@@ -11,6 +11,8 @@ import { CourtScheduleAvailability } from '../schedule/court_schedule_availabili
 
 @Injectable()
 export class CourtService {
+  public static templateCache = new Map<string, { data: any; expiry: number }>();
+
   constructor(
     @InjectRepository(Court)
     private readonly courtRepo: Repository<Court>,
@@ -380,14 +382,37 @@ export class CourtService {
       const courtIds = courtsWithFallback.map((c) => c.id);
       const templateIds = Array.from(new Set(courtsWithFallback.map((c: any) => c.schedule_template_id).filter(Boolean)));
 
-      const [allOverrides, allTemplates] = await Promise.all([
+      const now = Date.now();
+      const cachedTemplates: any[] = [];
+      const missedTemplateIds: string[] = [];
+      
+      for (const id of templateIds as string[]) {
+        const cached = CourtService.templateCache.get(id);
+        if (cached && cached.expiry > now) {
+          cachedTemplates.push(cached.data);
+        } else {
+          missedTemplateIds.push(id);
+        }
+      }
+
+      const [allOverrides, dbTemplates] = await Promise.all([
         courtIds.length > 0 
           ? this.availabilityRepo.find({ where: { courtId: In(courtIds), date: targetDate } })
           : [],
-        templateIds.length > 0
-          ? this.scheduleTemplateRepo.find({ where: { id: In(templateIds as string[]) } })
+        missedTemplateIds.length > 0
+          ? this.scheduleTemplateRepo.find({ where: { id: In(missedTemplateIds) } })
           : []
       ]);
+
+      if (dbTemplates.length > 0) {
+        const expiry = Date.now() + 300 * 1000; // 5 minutos
+        for (const t of dbTemplates) {
+          CourtService.templateCache.set(t.id, { data: t, expiry });
+          cachedTemplates.push(t);
+        }
+      }
+      
+      const allTemplates = cachedTemplates;
 
       const overridesByCourt: Record<string, any[]> = {};
       for (const curr of allOverrides) {
@@ -521,6 +546,10 @@ export class CourtService {
 
   remove(id: string) {
     return this.courtRepo.update(id, { isActive: false });
+  }
+
+  public invalidateTemplateCache(templateId: string) {
+    CourtService.templateCache.delete(templateId);
   }
 
 }
