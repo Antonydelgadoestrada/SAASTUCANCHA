@@ -373,7 +373,7 @@ function SettleSaldoModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BanknoteIcon className="w-5 h-5 text-emerald-600" />
@@ -585,7 +585,7 @@ function PaymentDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ReceiptIcon className="w-5 h-5 text-emerald-600" />
@@ -1415,8 +1415,9 @@ function MetricsAuditTab() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full text-sm">
               <thead className="bg-muted/30 text-xs font-bold text-muted-foreground uppercase tracking-wide border-b">
                 <tr>
                   <th className="px-4 py-3 text-left">Cliente & N° Reserva</th>
@@ -1743,7 +1744,126 @@ function MetricsAuditTab() {
               </tbody>
             </table>
           </div>
-        )}
+
+          {/* Vista en tarjetas para móvil */}
+          <div className="md:hidden divide-y divide-border">
+            {filteredPayments.map((p) => {
+              const details = computePaymentDetails(p)
+              const booking = details.booking
+              const customer = booking?.customerInfo || p.user
+              const customerName = customer?.name || p.user?.name || "Cliente"
+              const bookingRef = booking?.bookingReference || (booking as any)?.reference || (p as any)?.bookingReference || p.id.slice(0, 8).toUpperCase()
+              const isAuditRequired1 = details.isComprobantePending
+              const isAuditRequired2 = details.isSaldoAuditPending
+
+              return (
+                <div
+                  key={p.id}
+                  className={`p-4 space-y-3 ${
+                    isAuditRequired1 || isAuditRequired2 ? "bg-amber-500/10/30 dark:bg-amber-950/10" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-foreground text-sm">
+                          {customerName}
+                        </span>
+                        <Badge variant="secondary" className="font-mono text-[10px] font-bold bg-primary/10 text-primary border border-primary/25">
+                          #{bookingRef}
+                        </Badge>
+                      </div>
+                      <p className="font-medium text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                        {booking?.court?.name || "Cancha"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-base text-foreground">
+                        {fmt(details.totalBookingPrice)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Recibido: {fmt(details.totalRecibido)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground flex items-center justify-between">
+                    <span>
+                      {booking?.date ? `${formatSafeDate(booking.date, "dd/MM/yyyy")} • ${booking.startTime?.slice(0,5)} - ${booking.endTime?.slice(0,5)}` : format(new Date(p.createdAt), "dd/MM/yyyy HH:mm")}
+                    </span>
+                    {customer?.phone && (
+                      <span className="text-[11px]">Tel: {customer.phone}</span>
+                    )}
+                  </div>
+
+                  {/* Pagos y Estados */}
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">1er Pago</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-foreground">{fmt(details.paidInitial)}</span>
+                        <span className="text-[10px] text-muted-foreground">({p.method})</span>
+                      </div>
+                      <div>
+                        {statusBadge(
+                          p.status,
+                          p.comprobanteUrl,
+                          details.isCancelled,
+                          details.isComprobanteApproved,
+                          details.isAdvance,
+                          details.isSaldoPaid
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase">2do Pago (Saldo)</span>
+                      <div>
+                        {details.isCancelled ? (
+                          <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300 text-[10px]">
+                            Cancelada
+                          </Badge>
+                        ) : !details.isAdvance ? (
+                          <span className="text-[11px] text-muted-foreground">No aplica</span>
+                        ) : (
+                          <div className="space-y-1">
+                            <span className={`font-bold block ${details.isSaldoPaid ? "text-emerald-600" : "text-amber-600"}`}>
+                              {details.isSaldoPaid ? fmt(details.saldoSettledAmount) : fmt(details.saldoFaltante)}
+                            </span>
+                            {saldoBadge(
+                              details.isAdvance,
+                              details.isSaldoPaid,
+                              details.saldoFaltante,
+                              p.saldoMethod,
+                              details.isComprobanteRejected,
+                              p.saldoStatus,
+                              p.saldoComprobanteUrl,
+                              details.isCancelled,
+                              details.isComprobanteApproved
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs font-semibold gap-1.5"
+                      onClick={() => openDetail(p)}
+                    >
+                      <EyeIcon className="w-3.5 h-3.5" />
+                      Ver Auditoría & Detalle 360°
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
       </div>
 
       {/* Modal de Detalle Completo 360° */}
@@ -1794,11 +1914,11 @@ export function ReservationsContent() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Cabecera */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             Gestión de Reservas y Auditoría
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

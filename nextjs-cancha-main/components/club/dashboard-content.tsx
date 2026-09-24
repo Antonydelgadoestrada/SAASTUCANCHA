@@ -267,20 +267,20 @@ export function ClubDashboardContent() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       {/* Cabecera y Resumen */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground">Resumen general de tu club deportivo.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-sm text-muted-foreground">Resumen general de tu club deportivo.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all duration-300 hover:shadow-md">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button asChild className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all duration-300 hover:shadow-md">
             <Link href="/club/schedules">
               <CalendarIcon className="mr-2 h-4 w-4" /> Ver Horarios
             </Link>
           </Button>
-          <Button asChild className="bg-green-600 hover:bg-green-700 text-white shadow-sm transition-all duration-300 hover:shadow-md">
+          <Button asChild className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white shadow-sm transition-all duration-300 hover:shadow-md">
             <Link href="/club/bookings">
               <PlusCircleIcon className="mr-2 h-4 w-4" /> Nueva Reserva
             </Link>
@@ -288,11 +288,10 @@ export function ClubDashboardContent() {
         </div>
       </div>
       <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {/* Selector de rango predefinido */}
-          {/* isPopoverOpen */}
           <Select value={timeRange} onValueChange={handleTimeRangeChange} disabled={isPopoverOpen}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Seleccionar período" />
             </SelectTrigger>
             <SelectContent>
@@ -305,35 +304,33 @@ export function ClubDashboardContent() {
           </Select>
 
           {/* Selector de rango personalizado */}
-
           <Popover open={isPopoverOpen} onOpenChange={(open) => {
-            // Solo permitir cerrar desde los botones "Limpiar" o "Aplicar"
             if (open) {
               setIsPopoverOpen(true)
-
             }
-            // No hacer nada al cerrar desde fuera
           }}>
             <PopoverTrigger asChild>
               <Button
                 disabled={timeRange !== "custom"}
                 variant="outline"
-                className={`w-[240px] justify-start text-left font-normal ${
+                className={`w-full sm:w-[240px] justify-start text-left font-normal ${
                   !dateRange.from && !isCustomDate ? "text-muted-foreground" : ""
                 }`}
               >
-                <CalendarDaysIcon className="mr-2 h-4 w-4" />
-                {dateRange.from && dateRange.to ? (
-                  <>
-                    {format(dateRange.from, "dd/MM/yyyy", { locale: es })} -{" "}
-                    {format(dateRange.to, "dd/MM/yyyy", { locale: es })}
-                  </>
-                ) : (
-                  <span>Seleccionar fechas</span>
-                )}
+                <CalendarDaysIcon className="mr-2 h-4 w-4 shrink-0" />
+                <span className="truncate">
+                  {dateRange.from && dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "dd/MM/yyyy", { locale: es })} -{" "}
+                      {format(dateRange.to, "dd/MM/yyyy", { locale: es })}
+                    </>
+                  ) : (
+                    "Seleccionar fechas"
+                  )}
+                </span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
+            <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 initialFocus
                 mode="range"
@@ -486,12 +483,12 @@ export function ClubDashboardContent() {
       {/* ====== PRÓXIMAS RESERVAS ====== */}
       <section>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-lg">Próximas Reservas</CardTitle>
               <CardDescription>Reservas de hoy en adelante ordenadas por fecha y hora</CardDescription>
             </div>
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
               <Link href="/club/bookings">
                 Ver todas <ArrowRightIcon className="ml-1 h-4 w-4" />
               </Link>
@@ -620,12 +617,12 @@ export function ClubDashboardContent() {
       {/* ====== PRÓXIMOS EVENTOS ====== */}
       <section>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-lg">Eventos Activos</CardTitle>
               <CardDescription>Alquileres recurrentes y academias registradas en tus canchas</CardDescription>
             </div>
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" className="w-full sm:w-auto" asChild>
               <Link href="/club/events">
                 Gestionar <ArrowRightIcon className="ml-1 h-4 w-4" />
               </Link>

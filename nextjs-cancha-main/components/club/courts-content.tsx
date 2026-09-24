@@ -157,10 +157,10 @@ export function ClubCourtsContent() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <div className="flex flex-col space-y-1">
         <h2 className="text-2xl font-bold tracking-tight">Gestión de Canchas</h2>
-        <p className="text-muted-foreground">Administra las canchas deportivas de tu club.</p>
+        <p className="text-sm text-muted-foreground">Administra las canchas deportivas de tu club.</p>
       </div>
 
       {/* Alerta si no tiene métodos de pago configurados */}
@@ -209,7 +209,7 @@ export function ClubCourtsContent() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "table")}>
             <TabsList>
               <TabsTrigger value="grid">Cuadrícula</TabsTrigger>
@@ -223,7 +223,7 @@ export function ClubCourtsContent() {
           </Button>
 
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
+            <DialogContent className="w-[95vw] sm:max-w-[700px] max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
               <DialogHeader>
                 <DialogTitle>Agregar Nueva Cancha</DialogTitle>
                 <DialogDescription>Completa los detalles para agregar una nueva cancha a tu club.</DialogDescription>
@@ -411,7 +411,7 @@ export function ClubCourtsContent() {
 
       {/* Dialog para editar cancha */}
       <Dialog open={!!editingCourt} onOpenChange={(open) => !open && closeEditDialog()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
+        <DialogContent className="w-[95vw] sm:max-w-[700px] max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           <DialogHeader>
             <DialogTitle>Editar Cancha</DialogTitle>
             <DialogDescription>Modifica los detalles de la cancha.</DialogDescription>

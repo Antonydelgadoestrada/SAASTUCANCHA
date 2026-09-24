@@ -108,6 +108,12 @@ export default function LoginPage() {
 
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 max-w-[400px] bg-background/60 backdrop-blur-xl border border-border/50 p-6 sm:p-8 rounded-2xl shadow-xl shadow-zinc-950/5">
           <div className="flex flex-col space-y-2 text-center">
+            <Link href="/" className="lg:hidden flex items-center justify-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 border border-primary/20">
+                <Image src="/logo.png" alt="Logo" width={18} height={18} />
+              </div>
+              <span className="font-bold text-lg tracking-tight">{process.env.NEXT_PUBLIC_APP_NAME || "TuCancha"}</span>
+            </Link>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Iniciar Sesión</h1>
             <p className="text-sm text-muted-foreground">
               Ingresa tus credenciales para acceder a tu cuenta

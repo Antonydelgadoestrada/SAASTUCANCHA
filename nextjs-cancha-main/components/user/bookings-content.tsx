@@ -382,31 +382,31 @@ export function UserBookingsContent() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <div className="flex flex-col space-y-1">
         <h2 className="text-2xl font-bold tracking-tight">Mis Reservas</h2>
-        <p className="text-muted-foreground">Gestiona tus reservas, consulta estados y cancela tus saldos pendientes.</p>
+        <p className="text-sm text-muted-foreground">Gestiona tus reservas, consulta estados y cancela tus saldos pendientes.</p>
       </div>
 
       <Tabs defaultValue="upcoming" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="upcoming" className="flex items-center gap-2">
-            <CalendarIcon className="h-4 w-4" />
-            Próximas
-            <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+        <TabsList className="grid w-full grid-cols-3 h-auto p-1">
+          <TabsTrigger value="upcoming" className="flex items-center justify-center gap-1 sm:gap-2 px-1 py-2 text-xs sm:text-sm font-medium">
+            <CalendarIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span>Próximas</span>
+            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold text-primary">
               {upcomingBookings.length}
             </span>
           </TabsTrigger>
-          <TabsTrigger value="pending" className="flex items-center gap-2">
-            <CreditCardIcon className="h-4 w-4" />
-            Pendientes
-            <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          <TabsTrigger value="pending" className="flex items-center justify-center gap-1 sm:gap-2 px-1 py-2 text-xs sm:text-sm font-medium">
+            <CreditCardIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span>Pendientes</span>
+            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold text-primary">
               {pendingBookings.length}
             </span>
           </TabsTrigger>
-          <TabsTrigger value="past" className="flex items-center gap-2">
-            <ClockIcon className="h-4 w-4" />
-            Historial
+          <TabsTrigger value="past" className="flex items-center justify-center gap-1 sm:gap-2 px-1 py-2 text-xs sm:text-sm font-medium">
+            <ClockIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span>Historial</span>
           </TabsTrigger>
         </TabsList>
 
@@ -541,19 +541,21 @@ export function UserBookingsContent() {
                         </div>
                       )}
 
-                      <CardFooter className="flex items-center gap-2">
-                        <Button variant="outline" className="flex-1 text-xs" onClick={() => handleViewDetails(booking)}>
+                      <CardFooter className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <Button variant="outline" className="w-full sm:flex-1 text-xs" onClick={() => handleViewDetails(booking)}>
                           Ver detalles
                         </Button>
                         {fin.hasPendingSaldo && (
                           <Button
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1 shadow-sm"
+                            className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1 shadow-sm"
                             onClick={() => handlePaySaldo(booking)}
                           >
-                            <Banknote className="h-3.5 w-3.5" />
-                            {fin.isSaldoPendingVerification
-                              ? `Ver / Re-subir Saldo (S/ ${fin.saldoRemaining})`
-                              : `Pagar Saldo (S/ ${fin.saldoRemaining})`}
+                            <Banknote className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">
+                              {fin.isSaldoPendingVerification
+                                ? `Ver / Re-subir Saldo (S/ ${fin.saldoRemaining})`
+                                : `Pagar Saldo (S/ ${fin.saldoRemaining})`}
+                            </span>
                           </Button>
                         )}
                       </CardFooter>
@@ -687,11 +689,11 @@ export function UserBookingsContent() {
                           </a>
                         </div>
                       )}
-                      <CardFooter className="flex justify-between gap-2">
-                        <Button variant="outline" className="flex-1 text-xs" onClick={() => handleViewDetails(booking)}>
+                      <CardFooter className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <Button variant="outline" className="w-full sm:flex-1 text-xs" onClick={() => handleViewDetails(booking)}>
                           Ver detalles
                         </Button>
-                        <Button className="flex-1 text-xs bg-primary" onClick={() => handlePayment(booking)}>
+                        <Button className="w-full sm:flex-1 text-xs bg-primary" onClick={() => handlePayment(booking)}>
                           {fin.isPendingAudit ? "Ver / Cambiar comprobante" : "Pagar ahora"}
                         </Button>
                       </CardFooter>

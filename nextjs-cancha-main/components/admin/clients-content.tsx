@@ -136,7 +136,7 @@ export function AdminClientsContent() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -257,7 +257,7 @@ export function AdminClientsContent() {
       {/* Tabla de Clubes Clientes */}
       <Card>
         <CardContent className="p-0">
-          <div className="rounded-md border overflow-x-auto">
+          <div className="hidden md:block rounded-md border overflow-x-auto">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
@@ -480,12 +480,151 @@ export function AdminClientsContent() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Vista en tarjetas para móvil */}
+          <div className="md:hidden divide-y divide-border">
+            {isLoading ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <RefreshCwIcon className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
+                Cargando clubes y membresías...
+              </div>
+            ) : filteredClients.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <UsersIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                No se encontraron clubes.
+              </div>
+            ) : (
+              filteredClients.map((client) => {
+                const mem = client.membership
+                const isExpiring = client.isExpiringSoon && mem?.status === "ACTIVE"
+                const isGrace = mem?.status === "GRACE"
+                const isActive = mem?.status === "ACTIVE"
+                const isExpired = mem?.status === "EXPIRED" || (!mem && !client.isTrialActive)
+
+                return (
+                  <div
+                    key={client.id}
+                    className={`p-4 space-y-3 ${
+                      isExpiring ? "bg-amber-500/5" : isGrace ? "bg-rose-500/5" : ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 border shrink-0">
+                          <AvatarImage src={client.logo} alt={client.name} />
+                          <AvatarFallback className="font-bold bg-primary/10 text-primary">
+                            {client.name.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-semibold text-sm flex items-center gap-1.5 flex-wrap">
+                            <span>{client.name}</span>
+                            {client.status === "SUSPENDED" && (
+                              <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30 px-1 py-0">
+                                Suspendido
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPinIcon className="w-3 h-3 text-muted-foreground/70 shrink-0" />
+                            {client.district || "Distrito no especificado"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Estado */}
+                      <div>
+                        {isExpiring && (
+                          <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] flex items-center gap-1">
+                            <AlertTriangleIcon className="w-3 h-3" />
+                            {mem.daysRemaining === 0 ? "¡Vence Hoy!" : `Vence en ${mem.daysRemaining}d`}
+                          </Badge>
+                        )}
+                        {isActive && !isExpiring && (
+                          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] flex items-center gap-1">
+                            <CheckCircle2Icon className="w-3 h-3" />
+                            Activa ({mem.daysRemaining}d)
+                          </Badge>
+                        )}
+                        {isGrace && (
+                          <Badge className="bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[10px] flex items-center gap-1">
+                            <ClockIcon className="w-3 h-3" />
+                            En Gracia
+                          </Badge>
+                        )}
+                        {isExpired && (
+                          <Badge variant="destructive" className="text-[10px] flex items-center gap-1">
+                            <XCircleIcon className="w-3 h-3" />
+                            Vencida
+                          </Badge>
+                        )}
+                        {!mem && client.isTrialActive && (
+                          <Badge className="bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30 text-[10px]">
+                            Prueba
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Plan y vigencia */}
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t">
+                      <div>
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Plan</span>
+                        <span className="font-medium text-foreground">{mem?.planName || (client.isTrialActive ? "Prueba Gratuita" : "Sin plan")}</span>
+                        {mem && (
+                          <span className="text-[11px] text-muted-foreground block">
+                            S/. {Number(mem.price).toFixed(2)} / {mem.interval === "ANNUAL" ? "Año" : "Mes"}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Vigencia</span>
+                        <span className="text-[11px] text-muted-foreground block">
+                          Hasta {formatDateSafely(mem?.endDate || client.trialEndDate)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Acciones */}
+                    <div className="flex items-center gap-2 pt-1">
+                      {client.phone && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs text-emerald-600 hover:text-emerald-700 flex-1 gap-1"
+                          asChild
+                        >
+                          <a
+                            href={getWhatsAppLink(client.phone, client.name, mem?.daysRemaining)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <MessageCircleIcon className="w-3.5 h-3.5" />
+                            WhatsApp
+                          </a>
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs flex-1 gap-1"
+                        onClick={() => handleOpenDetail(client)}
+                      >
+                        <InfoIcon className="w-3.5 h-3.5" />
+                        Ver Ficha
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </CardContent>
       </Card>
 
       {/* Modal de Detalle de Ficha de Club */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           {selectedClient && (
             <>
               <DialogHeader>

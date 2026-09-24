@@ -36,12 +36,12 @@ export function PricingSection() {
         </p>
       </div>
 
-      <div className="grid justify-center">
+      <div className="flex justify-center px-4">
         {plans.map((plan) => (
           <Card
             key={plan.name}
             className={cn(
-              "flex flex-col",
+              "flex flex-col w-full max-w-sm sm:max-w-md",
               plan.popular ? "border-primary shadow-lg shadow-primary/10" : "border-border shadow-md",
             )}
           >

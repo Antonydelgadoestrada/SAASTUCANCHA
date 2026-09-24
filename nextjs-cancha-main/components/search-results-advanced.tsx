@@ -939,20 +939,20 @@ export function SearchResults({
   return (
     <div className="space-y-6">
       {/* Controles de ordenamiento */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {displayedCourts.length}{" "}
           {displayedCourts.length === 1
             ? "resultado encontrado"
             : "resultados encontrados"}
           {selectedDate && (
-            <span className="ml-2 font-medium">
+            <span className="block sm:inline sm:ml-2 font-medium">
               para el {format(selectedDate, "dd/MM/yyyy", { locale: es })}
             </span>
           )}
         </p>
         <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger className="w-full sm:w-[220px]">
             <SelectValue placeholder="Ordenar por" />
           </SelectTrigger>
           <SelectContent>
@@ -1129,7 +1129,7 @@ export function SearchResults({
               <span>Horarios disponibles:</span>
             </div>
 
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
               {court.availability
                 .filter((time: string) => {
                   if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
@@ -1206,15 +1206,15 @@ export function SearchResults({
           </div>
         </CardContent>
 
-        <CardFooter className="gap-2">
+        <CardFooter className="gap-2 flex-col sm:flex-row">
           <Button
             variant="outline"
-            className="flex-1"
+            className="w-full sm:flex-1"
             onClick={() => handleViewDetails(court)}
           >
             Ver detalles
           </Button>
-          <Button className="flex-1" onClick={() => handleBookNow(court)}>
+          <Button className="w-full sm:flex-1" onClick={() => handleBookNow(court)}>
             Reservar ahora
           </Button>
         </CardFooter>
@@ -1278,7 +1278,7 @@ export function SearchResults({
 
       {/* Modal de Detalles */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           <DialogHeader>
             <DialogTitle>{selectedCourt?.name}</DialogTitle>
             <DialogDescription>{selectedCourt?.club}</DialogDescription>
@@ -1434,11 +1434,11 @@ export function SearchResults({
                 </p>
               </div>
 
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" onClick={() => setShowDetails(false)}>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowDetails(false)}>
                   Cerrar
                 </Button>
-                <Button onClick={() => handleBookNow(selectedCourt)}>
+                <Button className="w-full sm:w-auto" onClick={() => handleBookNow(selectedCourt)}>
                   Ver disponibilidad
                 </Button>
               </div>
@@ -1449,7 +1449,7 @@ export function SearchResults({
 
       {/* Modal de Reserva */}
       <Dialog open={showBooking} onOpenChange={setShowBooking}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           <DialogHeader>
             <DialogTitle>Reservar {selectedCourt?.name}</DialogTitle>
             <DialogDescription>{selectedCourt?.club}</DialogDescription>
@@ -1497,7 +1497,7 @@ export function SearchResults({
                 </div>
                 <div>
                   <Label>Horarios disponibles</Label>
-                  <div className="grid grid-cols-3 gap-2 mt-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 max-h-48 overflow-y-auto pr-1">
                     {filteredtimeOptions.map((time: any) => {
                       const [h, m] = time.split(":").map(Number);
                       const d = new Date();
@@ -1714,11 +1714,11 @@ export function SearchResults({
                 </AlertDescription>
               </Alert>
 
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" onClick={() => setShowBooking(false)}>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowBooking(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleProceedToPayment}>
+                <Button className="w-full sm:w-auto" onClick={handleProceedToPayment}>
                   {user ? "Proceder al pago o Reserva" : "Iniciar sesión para reservar"}
                 </Button>
               </div>
@@ -2146,12 +2146,12 @@ export function SearchResults({
                 </AlertDescription>
               </Alert>
 
-              <div className="flex flex-col gap-2 pt-2">
+              <div className="flex flex-col gap-2.5 pt-2">
                 <Button
                   variant="outline"
                   onClick={handleSeparate}
                   disabled={isLoading}
-                  className="flex-1"
+                  className="w-full min-h-[44px] py-2.5 text-xs sm:text-sm font-medium"
                 >
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Separar Cancha (Pagar después)
@@ -2161,7 +2161,7 @@ export function SearchResults({
                   <Button
                     onClick={handleConfirmPayment}
                     disabled={isLoading}
-                    className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white gap-1.5 font-semibold"
+                    className="w-full min-h-[44px] py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white gap-1.5 font-semibold text-xs sm:text-sm"
                   >
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4 fill-white text-[#25D366]" />}
                     <span className="whitespace-normal text-center">Bloquear Horario y Coordinar por WhatsApp</span>
@@ -2170,7 +2170,7 @@ export function SearchResults({
                   <Button
                     onClick={handleConfirmPayment}
                     disabled={isLoading || !receiptFile}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                    className="w-full min-h-[44px] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-semibold text-xs sm:text-sm"
                   >
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                     Enviar Comprobante
@@ -2179,7 +2179,7 @@ export function SearchResults({
                   <Button
                     onClick={handleConfirmPayment}
                     disabled={isLoading}
-                    className="flex-1 bg-sky-600 hover:bg-sky-700 text-white gap-1.5"
+                    className="w-full min-h-[44px] py-2.5 bg-sky-600 hover:bg-sky-700 text-white gap-1.5 font-semibold text-xs sm:text-sm"
                   >
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCardIcon className="h-4 w-4" />}
                     Pagar con Mercado Pago

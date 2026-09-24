@@ -52,12 +52,12 @@ export function PublicSearchForm() {
 
   return (
     <Card className="overflow-hidden border-none shadow-lg">
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-6">
         <form onSubmit={handleSearch} className="space-y-4">
-          {/* Primera fila - Búsqueda y ubicación */}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Ubicación */}
             <div>
-              <label className="mb-2 block text-sm font-medium">Ubicación</label>
+              <label className="mb-1.5 block text-xs sm:text-sm font-medium">Ubicación</label>
               <GooglePlacesAutocomplete
                 placeholder="Distrito, dirección o lugar..."
                 onPlaceSelect={handlePlaceSelect}
@@ -65,30 +65,12 @@ export function PublicSearchForm() {
                 onChange={setLocationQuery}
               />
             </div>
-            <div>
-                <label className="mb-2 block text-sm font-medium">Hora</label>
-                <Select value={selectedTime} onValueChange={setSelectedTime}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar la hora" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {timeSlots.map((time) => (
-                      <SelectItem key={time} value={time}>
-                        {time}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
 
-          </div>
-
-          {/* Segunda fila - Filtros */}
-          <div className="grid gap-4 md:grid-cols-4">
+            {/* Deporte */}
             <div>
-              <label className="mb-2 block text-sm font-medium">Deporte</label>
+              <label className="mb-1.5 block text-xs sm:text-sm font-medium">Deporte</label>
               <Select value={sport} onValueChange={setSport}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="Seleccionar deporte" />
                 </SelectTrigger>
                 <SelectContent>
@@ -101,19 +83,20 @@ export function PublicSearchForm() {
               </Select>
             </div>
 
-            <div className={sport === "futbol" ? "md:col-start-3" : ""}>
-              <label className="mb-2 block text-sm font-medium">Fecha</label>
+            {/* Fecha */}
+            <div>
+              <label className="mb-1.5 block text-xs sm:text-sm font-medium">Fecha</label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
+                    className={cn("w-full justify-start text-left font-normal h-10 text-xs sm:text-sm", !date && "text-muted-foreground")}
                   >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP", { locale: es }) : "Seleccionar fecha"}
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">{date ? format(date, "PPP", { locale: es }) : "Seleccionar fecha"}</span>
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
                     selected={date}
@@ -126,12 +109,30 @@ export function PublicSearchForm() {
               </Popover>
             </div>
 
-            <div className="flex items-end">
-              <Button type="submit" className="w-full gap-2">
-                <SearchIcon className="h-4 w-4" />
-                Buscar Canchas
-              </Button>
+            {/* Hora */}
+            <div>
+              <label className="mb-1.5 block text-xs sm:text-sm font-medium">Hora</label>
+              <Select value={selectedTime} onValueChange={setSelectedTime}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Seleccionar la hora" />
+                </SelectTrigger>
+                <SelectContent>
+                  {timeSlots.map((time) => (
+                    <SelectItem key={time} value={time}>
+                      {time}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          {/* Botón de búsqueda principal */}
+          <div className="pt-1">
+            <Button type="submit" size="lg" className="w-full gap-2 h-11 rounded-xl text-sm sm:text-base font-semibold shadow-md shadow-primary/20 hover:shadow-lg transition-all">
+              <SearchIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+              Buscar Canchas Disponibles
+            </Button>
           </div>
 
           {/* Información de ubicación seleccionada */}

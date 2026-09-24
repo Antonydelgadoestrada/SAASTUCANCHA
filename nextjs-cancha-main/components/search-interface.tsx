@@ -272,7 +272,7 @@ export function SearchInterface() {
           </div>
 
           {/* Filtros */}
-          <div className="grid gap-4 md:grid-cols-6">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 items-end">
             <div>
               <label className="mb-2 block text-sm font-medium">Fecha</label>
               <Popover>

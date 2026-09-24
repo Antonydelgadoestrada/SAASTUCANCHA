@@ -16,6 +16,8 @@ import {
 } from "lucide-react"
 
 import { UserNav } from "@/components/layout/user-nav"
+import Link from "next/link"
+import Image from "next/image"
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +29,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { User } from "@/lib/types"
@@ -44,6 +47,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
+  const { isMobile, setOpenMobile } = useSidebar()
 
   const isActive = (path: string) => {
     return pathname === path || pathname.startsWith(`${path}/`)
@@ -206,9 +210,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
-              <a href="/">
+              <Link href="/" onClick={() => isMobile && setOpenMobile(false)} className="flex items-center gap-2">
                 <span className="text-base font-semibold">{process.env.NEXT_PUBLIC_APP_NAME}</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -237,7 +241,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild tooltip={item.title} isActive={item.active}>
-                      <a href={item.href} className="flex items-center justify-between w-full">
+                      <Link
+                        href={item.href}
+                        onClick={() => isMobile && setOpenMobile(false)}
+                        className="flex items-center justify-between w-full"
+                      >
                         <div className="flex items-center gap-2">
                           <item.icon />
                           <span>{item.title}</span>
@@ -247,7 +255,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                             Pagar
                           </span>
                         )}
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )

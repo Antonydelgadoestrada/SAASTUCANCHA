@@ -634,12 +634,12 @@ export function ClubSchedulesContent() {
 };
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <div className="flex flex-col space-y-1">
         <h2 className="text-2xl font-bold tracking-tight">
           Gestión de Horarios
         </h2>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Administra los horarios disponibles de tus canchas.
         </p>
       </div>
@@ -760,7 +760,7 @@ export function ClubSchedulesContent() {
                 Visualiza y gestiona los horarios de tus canchas. Cada bloque en la cuadrícula representa un intervalo de 30 minutos.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="icon"
@@ -774,12 +774,12 @@ export function ClubSchedulesContent() {
                   <Button
                     variant="outline"
                     className={cn(
-                      "w-[240px] justify-start text-left font-normal",
+                      "w-full sm:w-[240px] justify-start text-left font-normal truncate",
                       !date && "text-muted-foreground"
                     )}
                   >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(date, "PPP", { locale: es })}
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">{format(date, "PPP", { locale: es })}</span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -804,13 +804,13 @@ export function ClubSchedulesContent() {
         </CardHeader>
         <CardContent>
           <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
               <div className="flex items-center gap-2">
                 <FilterIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Filtrar:</span>
               </div>
               <Select value={selectedCourt} onValueChange={handleCourtChange}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Todas las canchas" />
                 </SelectTrigger>
                 <SelectContent>
@@ -977,7 +977,7 @@ export function ClubSchedulesContent() {
                                   </span>
                                 </div>
 
-                                <div className="grid grid-cols-4 gap-2">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                   {(courtTemplate?.slots && courtTemplate.slots.length > 0
                                     ? [...courtTemplate.slots].sort((a: any, b: any) => a.time.localeCompare(b.time))
                                     : Array.from({ length: 24 }, (_, i) => ({ time: `${i.toString().padStart(2, "0")}:00` }))

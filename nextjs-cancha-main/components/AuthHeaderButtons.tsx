@@ -12,16 +12,18 @@ export const AuthHeaderButtons = () => {
 
   if (!user) {
     return (
-      <>
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <Link href="/login">
-          <Button variant="ghost" className="hidden md:inline-flex">
+          <Button variant="ghost" size="sm" className="h-8 sm:h-9 px-2.5 sm:px-4 text-xs sm:text-sm font-medium">
             Iniciar Sesión
           </Button>
         </Link>
         <Link href="/register?type=club">
-          <Button className="bg-emerald-600 hover:bg-emerald-700">Registrar Club</Button>
+          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 sm:h-9 px-2.5 sm:px-4 text-xs sm:text-sm font-medium shadow-xs">
+            <span className="hidden xs:inline sm:inline">Registrar</span> Club
+          </Button>
         </Link>
-      </>
+      </div>
     )
   }
 
@@ -36,7 +38,7 @@ export const AuthHeaderButtons = () => {
   }
 
   return (
-    <Button onClick={handleRedirect}>
+    <Button size="sm" onClick={handleRedirect} className="h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm font-medium">
       Ir a mi Panel
     </Button>
   )

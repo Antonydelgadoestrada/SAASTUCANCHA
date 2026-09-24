@@ -18,9 +18,9 @@ export default async function HomePage() {
     <div className="flex w-full min-h-screen flex-col bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+        <div className="container flex h-16 items-center justify-between gap-2 px-4 sm:px-6">
+          <Link href="/" className="flex items-center gap-2.5 shrink-0 hover:opacity-90 transition-opacity">
+            <div className="relative flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-primary/10">
               <Image
                 src="/logo.png"
                 alt="Logo"
@@ -29,12 +29,12 @@ export default async function HomePage() {
                 className="object-contain"
               />
             </div>
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-emerald-600 bg-clip-text text-transparent">
+            <span className="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-emerald-600 bg-clip-text text-transparent">
               {process.env.NEXT_PUBLIC_APP_NAME}
             </span>
-          </div>
+          </Link>
           <LandingNav />
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             <AuthHeaderButtons />
           </div>
         </div>
@@ -42,33 +42,33 @@ export default async function HomePage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative overflow-hidden pt-20 pb-24 lg:pt-32 lg:pb-32 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-background to-background">
+        <section className="relative overflow-hidden pt-12 pb-16 sm:pt-20 sm:pb-24 lg:pt-32 lg:pb-32 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-background to-background">
           <div className="absolute inset-y-0 right-0 -z-10 w-full max-w-5xl bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-transparent blur-3xl" />
           
-          <div className="container grid gap-12 lg:grid-cols-12 lg:gap-8">
-            <div className="flex flex-col justify-center space-y-6 lg:col-span-7">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-sm font-medium text-primary">
-                <Award className="h-4 w-4" />
-                La plataforma #1 para reserva de canchas deportivas
+          <div className="container grid gap-8 lg:grid-cols-12 lg:gap-8 px-4 sm:px-6">
+            <div className="flex flex-col justify-center space-y-5 sm:space-y-6 lg:col-span-7">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs sm:text-sm font-medium text-primary">
+                <Award className="h-4 w-4 shrink-0" />
+                <span>La plataforma #1 para reserva de canchas</span>
               </div>
-              <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
+              <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl leading-tight">
                 Reserva canchas deportivas{" "}
                 <span className="bg-gradient-to-r from-primary via-emerald-500 to-teal-600 bg-clip-text text-transparent">
                   en segundos
                 </span>
               </h1>
-              <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
+              <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
                 Encuentra, compara y reserva las mejores canchas deportivas cerca de ti en tiempo real. Fútbol, tenis, pádel, voley y mucho más.
               </p>
-              <div className="flex flex-col gap-4 sm:flex-row pt-2">
-                <Link href="#search">
-                  <Button size="lg" className="h-12 px-6 text-base gap-2 rounded-xl shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5">
+              <div className="flex flex-col gap-3 sm:flex-row pt-2 w-full sm:w-auto">
+                <Link href="#search" className="w-full sm:w-auto">
+                  <Button size="lg" className="w-full sm:w-auto h-12 px-6 text-base gap-2 rounded-xl shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5">
                     <Search className="h-5 w-5" />
                     Buscar Canchas
                   </Button>
                 </Link>
-                <Link href="/register?type=club">
-                  <Button size="lg" variant="outline" className="h-12 px-6 text-base gap-2 rounded-xl transition-all hover:bg-muted hover:-translate-y-0.5">
+                <Link href="/register?type=club" className="w-full sm:w-auto">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto h-12 px-6 text-base gap-2 rounded-xl transition-all hover:bg-muted hover:-translate-y-0.5">
                     Registra tu Club
                     <ArrowRight className="h-5 w-5" />
                   </Button>
@@ -76,18 +76,18 @@ export default async function HomePage() {
               </div>
 
               {/* Stats / Trust Badges */}
-              <div className="grid grid-cols-3 gap-6 pt-10 border-t border-border/40">
-                <div className="space-y-1">
-                  <h4 className="text-3xl font-extrabold tracking-tight text-foreground">+50K</h4>
-                  <p className="text-sm text-muted-foreground font-medium">Reservas procesadas</p>
+              <div className="grid grid-cols-3 gap-3 sm:gap-6 pt-8 sm:pt-10 border-t border-border/40">
+                <div className="space-y-0.5 sm:space-y-1">
+                  <h4 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">+50K</h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground font-medium">Reservas hechas</p>
                 </div>
-                <div className="space-y-1">
-                  <h4 className="text-3xl font-extrabold tracking-tight text-foreground">99.9%</h4>
-                  <p className="text-sm text-muted-foreground font-medium">Puntualidad de acceso</p>
+                <div className="space-y-0.5 sm:space-y-1">
+                  <h4 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">99.9%</h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground font-medium">Puntualidad</p>
                 </div>
-                <div className="space-y-1">
-                  <h4 className="text-3xl font-extrabold tracking-tight text-foreground">+100</h4>
-                  <p className="text-sm text-muted-foreground font-medium">Clubes asociados</p>
+                <div className="space-y-0.5 sm:space-y-1">
+                  <h4 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">+100</h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground font-medium">Clubes asociados</p>
                 </div>
               </div>
             </div>
@@ -188,15 +188,15 @@ export default async function HomePage() {
               <p className="text-lg text-emerald-100/90 max-w-xl mx-auto leading-relaxed">
                 Únete a la comunidad de {process.env.NEXT_PUBLIC_APP_NAME} y comienza a digitalizar tus reservas con la prueba gratuita de 30 días.
               </p>
-              <div className="flex flex-col justify-center gap-4 sm:flex-row pt-4">
-                <Link href="/register?type=club">
-                  <Button size="lg" variant="secondary" className="h-12 px-6 text-base gap-2 rounded-xl shadow-lg transition-all hover:bg-background hover:-translate-y-0.5">
+              <div className="flex flex-col justify-center gap-3 sm:gap-4 sm:flex-row pt-4 max-w-md sm:max-w-none mx-auto">
+                <Link href="/register?type=club" className="w-full sm:w-auto">
+                  <Button size="lg" variant="secondary" className="w-full sm:w-auto h-12 px-6 text-base gap-2 rounded-xl shadow-lg transition-all hover:bg-background hover:-translate-y-0.5">
                     Registrar mi Club
                     <ArrowRight className="h-5 w-5" />
                   </Button>
                 </Link>
-                <Link href="/register">
-                  <Button size="lg" variant="outline" className="h-12 px-6 text-base gap-2 rounded-xl bg-transparent text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10 hover:border-primary-foreground hover:-translate-y-0.5">
+                <Link href="/register" className="w-full sm:w-auto">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto h-12 px-6 text-base gap-2 rounded-xl bg-transparent text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10 hover:border-primary-foreground hover:-translate-y-0.5">
                     Crear Cuenta Personal
                   </Button>
                 </Link>
@@ -207,8 +207,8 @@ export default async function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border bg-background py-16">
-        <div className="container">
+      <footer className="border-t border-border bg-background py-12 sm:py-16">
+        <div className="container px-4 sm:px-6">
           <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-3">
             {/* Logo + descripción */}
             <div className="space-y-4">
