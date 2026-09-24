@@ -28,6 +28,7 @@ export enum SaldoStatus {
 }
 
 @Entity()
+@Index('idx_payment_created', ['createdAt'])
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
   id: string;

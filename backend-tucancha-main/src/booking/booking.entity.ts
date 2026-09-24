@@ -21,6 +21,10 @@
     unique: true, 
     where: "status != 'cancelled'" 
   })
+  @Index('idx_booking_club_date', ['club', 'date'])
+  @Index('idx_booking_user', ['user'])
+  @Index('idx_booking_court_date_status', ['court', 'date', 'status'])
+  @Index('idx_booking_status_created', ['status', 'createdAt'], { where: "status = 'pending'" })
   @Entity()
   export class Booking {
     @PrimaryGeneratedColumn('uuid')

@@ -47,7 +47,7 @@ export class BookingCronService {
    * 3. Con comprobante subido -> Se auto-confirma a las 2 horas si el club no responde (cancha 100% asegurada).
    * 4. Recordatorio automático 30 minutos antes del turno para reducir inasistencias.
    */
-  @Cron('*/1 * * * *')
+  @Cron('*/5 * * * *')
   async handleBookingLifecycle() {
     this.logger.log('⏰ Ejecutando ciclo de reservas (Yape/Plin sin voucher > 10m, WhatsApp sin confirmar > 2h, Con voucher > 2h, Recordatorios 30m)...');
     await this.handleUnpaidBookingsAutoCancellation();

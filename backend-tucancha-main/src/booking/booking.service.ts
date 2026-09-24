@@ -805,19 +805,25 @@ export class BookingService implements OnModuleInit {
       if (!dayOfWeekOccurrences[d]) dayOfWeekOccurrences[d] = 1;
     }
 
-    // 3. Buscar todas las reservas del club en el rango de fechas y canchas seleccionadas
-    let bookings: Booking[] = [];
+    // 3. Buscar todas las reservas del club en el rango de fechas y canchas seleccionadas (optimizado)
+    let rawBookings: any[] = [];
     if (filteredCourtIds.length > 0) {
       const bookingQuery = this.bookingRepo
         .createQueryBuilder('booking')
-        .leftJoinAndSelect('booking.court', 'court')
+        .leftJoin('booking.court', 'court')
         .leftJoin('booking.club', 'club')
+        .select([
+          'booking.date AS date',
+          'booking.startTime AS starttime',
+          'booking.duration AS duration',
+          'booking.pricing AS pricing',
+        ])
         .where('club.id = :clubId', { clubId })
         .andWhere('booking.date BETWEEN :startDate AND :endDate', { startDate, endDate })
         .andWhere('booking.status != :cancelled', { cancelled: 'cancelled' })
         .andWhere('court.id IN (:...filteredCourtIds)', { filteredCourtIds });
 
-      bookings = await bookingQuery.getMany();
+      rawBookings = await bookingQuery.getRawMany();
     }
 
     // 4. Inicializar Matriz 7 Días x 18 Horas (06:00 a 23:00)
@@ -862,17 +868,24 @@ export class BookingService implements OnModuleInit {
       }
     }
 
-    // 5. Poblar la matriz con las reservas reales
-    for (const b of bookings) {
+    // 5. Poblar la matriz con las reservas reales (procesando crudos)
+    for (const b of rawBookings) {
       const bDate = new Date(b.date);
       const utcDate = new Date(bDate.getUTCFullYear(), bDate.getUTCMonth(), bDate.getUTCDate());
       const dayOfWeek = utcDate.getDay();
 
       if (!matrix[dayOfWeek]) continue;
 
-      const startH = b.startTime ? parseInt(b.startTime.split(':')[0], 10) : 0;
+      const startH = b.starttime ? parseInt(b.starttime.split(':')[0], 10) : 0;
       const duration = b.duration ? Number(b.duration) : 1;
-      const totalPrice = Number(b.pricing?.totalPrice ?? (b as any).price ?? 0);
+      
+      let pricingObj: any = {};
+      if (typeof b.pricing === 'string') {
+        try { pricingObj = JSON.parse(b.pricing); } catch (e) {}
+      } else if (typeof b.pricing === 'object') {
+        pricingObj = b.pricing;
+      }
+      const totalPrice = Number(pricingObj?.totalPrice ?? b.price ?? 0);
       const revenuePerHour = duration > 0 ? totalPrice / duration : totalPrice;
 
       for (let h = startH; h < startH + duration; h++) {
@@ -1087,7 +1100,7 @@ export class BookingService implements OnModuleInit {
         totalDeadHours: deadHoursCount,
         totalPeakHours: peakHoursCount,
         estimatedRevenueGain,
-        totalBookingsEvaluated: bookings.length,
+        totalBookingsEvaluated: rawBookings.length,
         courtCount,
       },
       deadBlocks: deadBlocks.slice(0, 8),
