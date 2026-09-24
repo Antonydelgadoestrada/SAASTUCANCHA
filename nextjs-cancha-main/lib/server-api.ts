@@ -26,3 +26,13 @@ export const getLimit10Server = async () => {
     return [];
   }
 };
+
+export const getAllClubsServer = async () => {
+  try {
+    const result = await serverApi.get("/clubs");
+    return result.data;
+  } catch (error) {
+    console.error('Server API error fetching clubs:', error);
+    return [];
+  }
+};

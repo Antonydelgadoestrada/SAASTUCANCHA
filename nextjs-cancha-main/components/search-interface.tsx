@@ -31,14 +31,14 @@ import { Loader2 } from "lucide-react"
 
 // Datos de ejemplo
 
-export function SearchInterface() {
+export function SearchInterface({ initialClubs = [] }: { initialClubs?: Club[] }) {
   const PERU_TZ = "America/Lima"
   const pathname = usePathname()
   const {user} = useUserStore((state) => state)
   const router = useRouter()
   const urlSearchParams = useSearchParams()
   const { toast } = useToast()
-  const [clubs, setClubs] = useState<Club[]>([])
+  const [clubs, setClubs] = useState<Club[]>(initialClubs)
   const [searchQuery, setSearchQuery] = useState( "")
   const [selectedSport, setSelectedSport] = useState( "all")
   const [selectedTime, setSelectedTime] = useState<string>( "10:00")
@@ -57,20 +57,7 @@ export function SearchInterface() {
   const [isSearching, setIsSearching] = useState(false)
 
 
-  // Verificar usuario logueado
-  useEffect(() => {
- 
-    const fetchClub = async ()=>{
-      try {
-        const result = await getAllClubs()
-        setClubs(result)
-      } catch (error) {
-        console.error("Error al cargar las canchas", error)
-      }
-    }
-    fetchClub()
-  }, [])
-  
+
 
   useEffect(() => {
     const query = urlSearchParams.get("query") || ""

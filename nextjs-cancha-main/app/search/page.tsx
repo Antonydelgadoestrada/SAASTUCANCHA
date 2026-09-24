@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { SearchInterface } from "@/components/search-interface"
+import { getAllClubsServer } from "@/lib/server-api"
 import Image from "next/image"
 import { AuthHeaderButtons } from "@/components/AuthHeaderButtons"
 
@@ -26,7 +27,9 @@ interface SearchPageProps {
 }
 
 // export default async function SearchPage({ searchParams }: SearchPageProps) {
-export default function SearchPage() {
+export default async function SearchPage() {
+  const initialClubs = await getAllClubsServer()
+
   return (
     <div className="min-h-screen w-full bg-background">
       {/* Header */}
@@ -62,7 +65,7 @@ export default function SearchPage() {
         </div>
 
         <Suspense fallback={<div>Cargando buscador...</div>}>
-          <SearchInterface />
+          <SearchInterface initialClubs={initialClubs} />
           {/* <SearchInterface searchParams={searchParams} isUserLoggedIn={false} /> */}
         </Suspense>
       </main>
