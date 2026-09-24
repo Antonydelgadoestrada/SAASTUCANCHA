@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Court, CourtUpdateDto } from './court.entity';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { S3Service } from '../aws/s3.service';
 import { format } from 'date-fns'
 import { isNight } from '../helpers/helpers';
@@ -378,13 +378,66 @@ export class CourtService {
       
       const courtsWithFallback = await this.applyScheduleTemplateFallback(result);
   
-      const courtsWithVirtual = await Promise.all(
-        courtsWithFallback.map(async (court) => {
-          const virtualAvailabilities = await this.getVirtualAvailability(court, targetDate);
-          (court as any).availabilities = virtualAvailabilities;
-          return court;
-        }),
-      );
+      const courtIds = courtsWithFallback.map((c) => c.id);
+      const templateIds = Array.from(new Set(courtsWithFallback.map((c: any) => c.schedule_template_id).filter(Boolean)));
+
+      const [allOverrides, allTemplates] = await Promise.all([
+        courtIds.length > 0 
+          ? this.availabilityRepo.find({ where: { courtId: In(courtIds), date: targetDate } })
+          : [],
+        templateIds.length > 0
+          ? this.scheduleTemplateRepo.find({ where: { id: In(templateIds as string[]) } })
+          : []
+      ]);
+
+      const overridesByCourt: Record<string, any[]> = {};
+      for (const curr of allOverrides) {
+        if (!overridesByCourt[curr.courtId]) overridesByCourt[curr.courtId] = [];
+        overridesByCourt[curr.courtId].push(curr);
+      }
+
+      const templatesById: Record<string, any> = {};
+      for (const curr of allTemplates) {
+        templatesById[curr.id] = curr;
+      }
+
+      const daysMap: Record<string, number> = {
+        sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+      };
+      const dateObj = new Date(targetDate + 'T00:00:00');
+      const dayOfWeek = dateObj.getDay();
+
+      const courtsWithVirtual = courtsWithFallback.map((court) => {
+        const overrides = overridesByCourt[court.id] || [];
+        let virtualSlots: any[] = overrides;
+        
+        const templateId = (court as any).schedule_template_id;
+        const template = templateId ? templatesById[templateId] : null;
+
+        if (template) {
+          const enabledDays = (template.days || []).map((d: string) => daysMap[d.toLowerCase()]);
+          if (enabledDays.includes(dayOfWeek)) {
+             const slots = [];
+             for (const slot of (template.slots || [])) {
+               const override = overrides.find((o) => o.time === slot.time);
+               if (override) {
+                 slots.push(override);
+               } else {
+                 slots.push({
+                   courtId: court.id,
+                   date: targetDate,
+                   time: slot.time,
+                   status: slot.status,
+                 });
+               }
+             }
+             virtualSlots = slots;
+          }
+        }
+
+        (court as any).availabilities = virtualSlots;
+        return court;
+      });
   
       let transformed = this.transformCourts(courtsWithVirtual);
 
