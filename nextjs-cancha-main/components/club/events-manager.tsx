@@ -316,8 +316,8 @@ export function EventsManager({
     const timeRanges = formData.horarios.map((h) => {
       const start = normalizeHHmm(h.inicio)
       const finLastSlot = normalizeHHmm(h.fin)
-      // "Fin" = inicio de la última celda de 30 min incluida; el backend usa [start, until) → until = instante tras esa celda.
-      return { start, until: add30MinutesLabel(finLastSlot) }
+      // El usuario espera que "Fin" sea la hora exacta en la que termina el evento (ej: de 7 a 9, termina a las 9:00, no a las 9:30).
+      return { start, until: finLastSlot }
     })
     for (const r of timeRanges) {
       if (timeToMinutes(r.until) <= timeToMinutes(r.start)) {
