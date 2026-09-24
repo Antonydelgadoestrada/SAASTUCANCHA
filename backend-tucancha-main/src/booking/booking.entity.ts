@@ -7,6 +7,7 @@
       UpdateDateColumn,
       JoinColumn,
       OneToOne,
+      Index,
     } from 'typeorm';
   import { User } from '../user/user.entity';
   import { Court } from '../court/court.entity';
@@ -16,6 +17,10 @@
   import { Review } from '../review/review.entity';
   import { PaymentStatus } from '../payment/payment-status.enum';
   
+  @Index('UQ_active_booking', ['court', 'date', 'startTime'], { 
+    unique: true, 
+    where: "status != 'cancelled'" 
+  })
   @Entity()
   export class Booking {
     @PrimaryGeneratedColumn('uuid')
