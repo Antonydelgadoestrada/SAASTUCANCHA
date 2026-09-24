@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Court, CourtUpdateDto } from './court.entity';
 import { Repository } from 'typeorm';
@@ -8,6 +8,7 @@ import { isNight } from '../helpers/helpers';
 import { FeaturedCourtDto } from './court.dto';
 import { ScheduleTemplate } from '../schedule/schedule_template.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
+import { ScheduleTemplateService } from '../schedule/schedule-template.service';
 
 @Injectable()
 export class CourtService {
@@ -19,6 +20,8 @@ export class CourtService {
     @InjectRepository(CourtScheduleAvailability)
     private readonly availabilityRepo: Repository<CourtScheduleAvailability>,
     private readonly s3Service: S3Service,
+    @Inject(forwardRef(() => ScheduleTemplateService))
+    private readonly scheduleTemplateService: ScheduleTemplateService,
   ) {}
 
   private async getFirstTemplateIdByClubId(clubId: string): Promise<string | null> {
@@ -251,58 +254,7 @@ export class CourtService {
   }
   
   async getVirtualAvailability(court: Court, dateStr: string): Promise<any[]> {
-    const overrides = await this.availabilityRepo.find({
-      where: {
-        courtId: court.id,
-        date: dateStr,
-      },
-    });
-
-    if (!court.schedule_template_id) {
-      return overrides;
-    }
-
-    const template = await this.scheduleTemplateRepo.findOne({
-      where: { id: court.schedule_template_id },
-    });
-
-    if (!template) {
-      return overrides;
-    }
-
-    const daysMap: Record<string, number> = {
-      sunday: 0,
-      monday: 1,
-      tuesday: 2,
-      wednesday: 3,
-      thursday: 4,
-      friday: 5,
-      saturday: 6,
-    };
-    const enabledDays = (template.days || []).map((d: string) => daysMap[d.toLowerCase()]);
-    const targetDate = new Date(dateStr + 'T00:00:00');
-    const dayOfWeek = targetDate.getDay();
-
-    if (!enabledDays.includes(dayOfWeek)) {
-      return overrides;
-    }
-
-    const virtualSlots: any[] = [];
-    for (const slot of (template.slots || [])) {
-      const override = overrides.find((o) => o.time === slot.time);
-      if (override) {
-        virtualSlots.push(override);
-      } else {
-        virtualSlots.push({
-          courtId: court.id,
-          date: dateStr,
-          time: slot.time,
-          status: slot.status,
-        });
-      }
-    }
-
-    return virtualSlots;
+    return this.scheduleTemplateService.getAvailabilityByCourtAndDates(court.id, dateStr, dateStr);
   }
 
   async findAllWithFilters(query: any) {

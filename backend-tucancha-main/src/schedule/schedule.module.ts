@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleTemplate } from './schedule_template.entity';
 import { CourtScheduleAvailability } from './court_schedule_availability.entity';
@@ -17,7 +17,7 @@ import { CourtModule } from '../court/court.module';
       CourtScheduleAvailability,
       CourtScheduleEvent,
     ]),
-    CourtModule,
+    forwardRef(() => CourtModule),
   ],
   providers: [ScheduleTemplateService, CourtScheduleEventService],
   controllers: [ScheduleTemplateController, CourtScheduleEventController],
