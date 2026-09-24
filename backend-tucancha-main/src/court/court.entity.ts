@@ -27,10 +27,10 @@ export class Court {
   @Column()
   surface: string;
 
-  @Column()
+  @Column({ nullable: true, default: '0' })
   priceDay : string;
 
-  @Column()
+  @Column({ nullable: true, default: '0' })
   priceNight : string;
 
   @Column({ nullable: true })
