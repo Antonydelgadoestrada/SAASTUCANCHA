@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import * as Sentry from '@sentry/node';
 import { AllExceptionsFilter } from './common/interceptors/sentry.interceptor';
@@ -29,6 +30,10 @@ async function bootstrap() {
     });
 
     app.useGlobalFilters(new AllExceptionsFilter());
+    app.useGlobalPipes(new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }));
 
     const port = Number(process.env.PORT) || 3001;
     await app.listen(port);
