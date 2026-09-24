@@ -54,6 +54,31 @@ export class MembershipService implements OnModuleInit {
       await this.paymentRepo.query(
         'ALTER TABLE membership_payments ALTER COLUMN "membershipId" DROP NOT NULL;',
       ).catch(() => {});
+
+      // 2. Asegurar que la tabla platform_payment_config exista en entornos donde DATABASE_SYNCHRONIZE=false (Producción)
+      await this.platformPaymentConfigRepo.query(`
+        CREATE TABLE IF NOT EXISTS platform_payment_config (
+          "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          "provider" varchar NOT NULL DEFAULT 'mercadopago',
+          "mpUserId" varchar,
+          "mpAccessToken" text,
+          "mpRefreshToken" text,
+          "mpPublicKey" varchar,
+          "mpTokenExpiresAt" timestamp,
+          "isConnected" boolean DEFAULT false,
+          "accountEmail" varchar,
+          "accountNickname" varchar,
+          "environment" varchar DEFAULT 'production',
+          "liveMode" boolean DEFAULT true,
+          "connectedAt" timestamp,
+          "lastSyncAt" timestamp,
+          "connectedByUserId" varchar,
+          "updatedByUserId" varchar,
+          "createdAt" timestamp DEFAULT now(),
+          "updatedAt" timestamp DEFAULT now(),
+          CONSTRAINT "UQ_platform_payment_config_provider" UNIQUE ("provider")
+        );
+      `).catch(() => {});
     } catch (e) {
       // Ignorar errores durante inicialización si la BD aún no migró
     }
