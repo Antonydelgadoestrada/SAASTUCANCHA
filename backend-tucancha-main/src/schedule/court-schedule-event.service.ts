@@ -541,9 +541,11 @@ export class CourtScheduleEventService {
     courtId: string,
     startDate: string,
     endDate: string,
-    clubId: string,
+    clubId?: string,
   ): Promise<ExpandedEventSlot[]> {
-    await this.assertCourtInClub(courtId, clubId);
+    if (clubId) {
+      await this.assertCourtInClub(courtId, clubId);
+    }
 
     const start = parseISO(startDate);
     const end = parseISO(endDate);

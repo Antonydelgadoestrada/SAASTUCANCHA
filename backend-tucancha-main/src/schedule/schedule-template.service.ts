@@ -1,10 +1,11 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common'
+import { Injectable, ForbiddenException, NotFoundException, Inject, forwardRef } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Between, Repository, DataSource } from 'typeorm'
 import { CourtService } from '../court/court.service'
 import { CourtScheduleAvailability } from './court_schedule_availability.entity'
 import { ScheduleTemplate } from './schedule_template.entity'
 import { CreateScheduleTemplateDto } from './dto/create-schedule-template.dto'
+import { CourtScheduleEventService } from './court-schedule-event.service';
 export enum SlotStatus {
   AVAILABLE = 'available',
   BLOCKED = 'blocked',
@@ -26,6 +27,8 @@ export class ScheduleTemplateService {
 
     private readonly courtsService: CourtService, // este servicio debe tener un método `findAllByVenue`
     private readonly dataSource: DataSource,
+    @Inject(forwardRef(() => CourtScheduleEventService))
+    private readonly eventService: CourtScheduleEventService,
   ) {}
 
   /**
@@ -389,6 +392,29 @@ export class ScheduleTemplateService {
       if (!alreadyAdded) {
         virtualSlots.push(override);
       }
+    }
+
+    // Fusionar eventos (CourtScheduleEvent) para que se bloqueen las horas!
+    try {
+      const expandedEvents = await this.eventService.expandForCourt(courtId, start, end);
+      if (expandedEvents && expandedEvents.length > 0) {
+        // Por cada evento expandido, buscar el slot virtual y cambiar su status a "event"
+        for (const ev of expandedEvents) {
+          let targetSlot = virtualSlots.find((s) => s.date === ev.date && s.time === ev.time);
+          if (targetSlot) {
+            targetSlot.status = 'event';
+          } else {
+            virtualSlots.push({
+              courtId,
+              date: ev.date,
+              time: ev.time,
+              status: 'event',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching events in getAvailabilityByCourtAndDates:', e);
     }
 
     // Ordenar por fecha y hora
