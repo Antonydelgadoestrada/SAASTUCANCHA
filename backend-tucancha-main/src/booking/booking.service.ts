@@ -408,9 +408,14 @@ export class BookingService implements OnModuleInit {
       }
     }
 
+    // 1. Validar disponibilidad de todas las fechas primero (Falla rápido)
+    const allBookingsToCreate = [];
+    const allSlotsPayload = [];
+
     for (let currentdate of datesToBook) {
       let slots = await this.checkAvailability(dto.courtId, currentdate, dto.startTime, parsedDuration);
-      const booking = this.bookingRepo.create({
+      
+      const bookingData = {
         user: userReservation,
         court,
         club: user.club || court.club,
@@ -429,44 +434,78 @@ export class BookingService implements OnModuleInit {
         paymentMethod: safeMethod.toLowerCase(),
         paymentStatus: initialPaymentStatus,
         bookingReference: `REF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      });
-      let savedBooking;
-      try {
-        savedBooking = await this.bookingRepo.save(booking);
-      } catch (error: any) {
-        if (error.code === '23505') {
-          throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
-        }
-        throw error;
-      }
+      };
 
-      // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
-      if (!isUnpaid) {
-        const payment = this.paymentRepo.create({
-          bookings: [savedBooking],
-          user: userReservation,
-          amount: amountPaidPerBooking,
-          currency: 'PEN',
-          method: safeMethod,
-          paymentMethod: safeMethod,
-          status: PaymentStatus.PAID,
-          type: isFullPaid ? PaymentType.PAGO_COMPLETO : PaymentType.ADELANTO,
-          saldoStatus: isFullPaid ? 'NO_APLICA' : 'PENDIENTE',
-          saldoAmount: isFullPaid ? 0 : Math.max(0, Number((singleTotalPrice - amountPaidPerBooking).toFixed(2))),
-          pendingAudit: false,
-          confirmadoPor: user,
-          fechaConfirmacion: new Date(),
-        });
-        const savedPayment = await this.paymentRepo.save(payment);
-        savedBooking.payment = savedPayment;
-        await this.bookingRepo.save(savedBooking);
-      }
+      allBookingsToCreate.push(bookingData);
 
-      // Ocupar o retener slots en el calendario
       slots = slots.map((slot) => Object.assign(slot, { status: isUnpaid ? 'on-hold' : 'occupied' }));
-      await this.scheduleTemplateService.bulkUpdate(slots);
-      createdBookings.push(savedBooking);
+      allSlotsPayload.push(...slots);
     }
+
+    // 2. Guardar todo atómicamente en una sola transacción
+    await this.bookingRepo.manager.transaction(async (manager) => {
+      // Guardar reservas y pagos
+      for (let i = 0; i < allBookingsToCreate.length; i++) {
+        const bookingData = allBookingsToCreate[i];
+        const saveBooking = manager.create(Booking, bookingData);
+        let savedBooking;
+        try {
+          savedBooking = await manager.save(Booking, saveBooking);
+        } catch (error: any) {
+          if (error.code === '23505') {
+            throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+          }
+          throw error;
+        }
+
+        // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
+        if (!isUnpaid) {
+          const paymentData = manager.create(Payment, {
+            bookings: [savedBooking],
+            user: userReservation,
+            amount: amountPaidPerBooking,
+            currency: 'PEN',
+            method: safeMethod,
+            paymentMethod: safeMethod,
+            status: PaymentStatus.PAID,
+            type: isFullPaid ? PaymentType.PAGO_COMPLETO : PaymentType.ADELANTO,
+            saldoStatus: isFullPaid ? 'NO_APLICA' : 'PENDIENTE',
+            saldoAmount: isFullPaid ? 0 : Math.max(0, Number((singleTotalPrice - amountPaidPerBooking).toFixed(2))),
+            pendingAudit: false,
+            confirmadoPor: user,
+            fechaConfirmacion: new Date(),
+          });
+          const savedPayment = await manager.save(Payment, paymentData);
+          savedBooking.payment = savedPayment;
+          await manager.save(Booking, savedBooking);
+        }
+
+        createdBookings.push(savedBooking);
+      }
+
+      // Actualizar slots (Equivalente inline de bulkUpdate para usar el mismo manager)
+      for (const slot of allSlotsPayload) {
+        if (slot.id) {
+          await manager.update('CourtScheduleAvailability', slot.id, { status: slot.status });
+        } else {
+          const existing = await manager.findOne('CourtScheduleAvailability', {
+            where: { courtId: slot.courtId, date: slot.date, time: slot.time },
+          });
+          if (existing) {
+            await manager.update('CourtScheduleAvailability', existing.id, { status: slot.status });
+          } else {
+            const newSlot = manager.create('CourtScheduleAvailability', {
+              courtId: slot.courtId,
+              date: slot.date,
+              time: slot.time,
+              status: slot.status,
+              templateId: slot.templateId,
+            });
+            await manager.save(newSlot);
+          }
+        }
+      }
+    });
 
     // Despachar notificaciones correspondientes
     for (const b of createdBookings) {
