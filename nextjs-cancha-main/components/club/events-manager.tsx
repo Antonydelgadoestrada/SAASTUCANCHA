@@ -1062,13 +1062,19 @@ export function EventsManager({
               </div>
             )}
 
+            {!templateId && eventCourtId && (
+              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-md text-sm my-4 border border-red-200 dark:border-red-800">
+                ⚠️ Esta cancha no tiene un horario base asignado. Para crear eventos, primero ve a la sección "Horarios" y asígnale una plantilla a la cancha.
+              </div>
+            )}
+
             <div className="flex gap-2 pt-4 border-t">
               <Button variant="outline" onClick={() => setIsCreating(false)} className="flex-1" disabled={saving}>
                 Cerrar
               </Button>
               <Button
                 onClick={() => void handleCreateEvent()}
-                disabled={!formData.nombre.trim() || !eventCourtId || saving}
+                disabled={!formData.nombre.trim() || !eventCourtId || !templateId || saving}
                 className="flex-1"
               >
                 <SaveIcon className="h-4 w-4 mr-2" />
