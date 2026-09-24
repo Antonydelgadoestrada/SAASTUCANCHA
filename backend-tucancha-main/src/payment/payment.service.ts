@@ -453,21 +453,78 @@ export class PaymentService {
       throw new BadRequestException('El usuario no tiene un club asociado');
     }
 
-    const payments = await this.paymentRepo.find({
-      where: [
-        { bookings: { club: { id: clubId } } },
-        { bookings: { court: { club: { id: clubId } } } }
-      ],
-      relations: ['bookings', 'bookings.club', 'bookings.court', 'user'],
-    });
+    const paymentQuery = `
+      SELECT 
+        p.id as "paymentId", p.status as "paymentStatus", p.amount, p."saldoStatus", p."saldoAmount", 
+        p.method, p."saldoMethod", p.type as "paymentType",
+        b.id as "bookingId", b.pricing, b.duration, b.status as "bookingStatus",
+        c."priceDay", c."priceNight"
+      FROM payment p
+      LEFT JOIN payment_bookings_booking pbb ON p.id = pbb."paymentId"
+      LEFT JOIN booking b ON pbb."bookingId" = b.id
+      LEFT JOIN court c ON b."courtId" = c.id
+      WHERE b."clubId" = $1 OR c."clubId" = $1
+    `;
 
-    const allClubBookings = await this.bookingRepo.find({
-      where: [
-        { club: { id: clubId } },
-        { court: { club: { id: clubId } } }
-      ],
-      relations: ['court', 'user', 'payment'],
-    });
+    const bookingQuery = `
+      SELECT 
+        b.id, b.pricing, b.duration, b.status, b."paymentStatus", b."paymentMethod", b."proofOfPaymentUrl",
+        c."priceDay", c."priceNight"
+      FROM booking b
+      LEFT JOIN court c ON b."courtId" = c.id
+      LEFT JOIN payment_bookings_booking pbb ON b.id = pbb."bookingId"
+      WHERE (b."clubId" = $1 OR c."clubId" = $1)
+      AND pbb."paymentId" IS NULL
+    `;
+    
+    const [rawPayments, rawBookings] = await Promise.all([
+      this.paymentRepo.query(paymentQuery, [clubId]),
+      this.bookingRepo.query(bookingQuery, [clubId])
+    ]);
+
+    const paymentsMap = new Map();
+    for (const row of rawPayments) {
+      if (!paymentsMap.has(row.paymentId)) {
+        paymentsMap.set(row.paymentId, {
+          id: row.paymentId,
+          status: row.paymentStatus,
+          amount: Number(row.amount) || 0,
+          saldoStatus: row.saldoStatus,
+          saldoAmount: Number(row.saldoAmount) || 0,
+          method: row.method,
+          saldoMethod: row.saldoMethod,
+          type: row.paymentType,
+          bookings: []
+        });
+      }
+      if (row.bookingId) {
+        paymentsMap.get(row.paymentId).bookings.push({
+          id: row.bookingId,
+          pricing: typeof row.pricing === 'string' ? row.pricing : JSON.stringify(row.pricing || {}),
+          duration: row.duration,
+          status: row.bookingStatus,
+          court: {
+            priceDay: row.priceDay,
+            priceNight: row.priceNight
+          }
+        });
+      }
+    }
+    const payments = Array.from(paymentsMap.values());
+
+    const allClubBookings = rawBookings.map(row => ({
+      id: row.id,
+      pricing: typeof row.pricing === 'string' ? row.pricing : JSON.stringify(row.pricing || {}),
+      duration: row.duration,
+      status: row.status,
+      paymentStatus: row.paymentStatus,
+      paymentMethod: row.paymentMethod,
+      proofOfPaymentUrl: row.proofOfPaymentUrl,
+      court: {
+        priceDay: row.priceDay,
+        priceNight: row.priceNight
+      }
+    }));
 
     let totalRecaudado = 0;
     let recaudadoMercadoPago = 0;
