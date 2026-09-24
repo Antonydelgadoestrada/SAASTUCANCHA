@@ -1,11 +1,11 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 // import { Toaster } from "sonner"
-import { getServerSession } from "next-auth"
+// import { getServerSession } from "next-auth"
 import { Toaster as SonnerToaster } from "sonner"
 import { Toaster as CustomToaster } from "@/components/ui/toaster"
 
-import { authOptions } from "./api/auth/[...nextauth]/route"
+// import { authOptions } from "./api/auth/[...nextauth]/route"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { CookieConsentBanner } from "@/components/cookies/cookie-consent-banner"
@@ -29,12 +29,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const session = await getServerSession(authOptions)
+  // const session = await getServerSession(authOptions)
 
   return (
     <html lang="es" suppressHydrationWarning>
       <body className={inter.className}>
-        <SessionProviderWrapper session={session}>
+        <SessionProviderWrapper>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
             <QueryProvider>
               <SidebarProvider>
