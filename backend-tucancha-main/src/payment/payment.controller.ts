@@ -28,7 +28,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
   @Controller('payments')
   export class PaymentController {
     constructor(private readonly service: PaymentService) {}
-  
+    @UseGuards(JwtAuthGuard)
     @Get()
     findAll(): Promise<Payment[]> {
       return this.service.findAll();
@@ -86,24 +86,25 @@ import { memoryStorage, File as MulterFile } from 'multer';
       await this.service.handleMercadoPagoWebhook(query);
       return { received: true };
     }
-  
+    @UseGuards(JwtAuthGuard)
     @Post()
     create(@Body() data: Partial<Payment>) {
       return this.service.create(data);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Get(':id')
     async findOne(@Param('id') id: string): Promise<Payment> {
       const payment = await this.service.findOne(id);
       if (!payment) throw new NotFoundException('Payment not found');
       return payment;
     }
-  
+    @UseGuards(JwtAuthGuard)
     @Put(':id')
     update(@Param('id') id: string, @Body() data: Partial<Payment>) {
       return this.service.update(id, data);
     }
-  
+    @UseGuards(JwtAuthGuard)
     @Delete(':id')
     remove(@Param('id') id: string) {
       return this.service.remove(id);

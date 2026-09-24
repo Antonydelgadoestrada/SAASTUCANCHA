@@ -28,7 +28,7 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     constructor(
       private readonly bookingService: BookingService
     ) {}
-  
+    @UseGuards(JwtAuthGuard)
     @Get()
     findAll(): Promise<Booking[]> {
       return this.bookingService.findAll();
@@ -167,22 +167,22 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     getCountByCloud(@GetUser() user: User){
       return this.bookingService.getCountByCloud(user.club.id)
     } 
-  
+    @UseGuards(JwtAuthGuard)
     @Get(':id')
     findOne(@Param('id') id: string): Promise<Booking> {
       return this.bookingService.findOne(id);
     }
-  
+    @UseGuards(JwtAuthGuard)
     @Post()
     create(@Body() data: Partial<Booking>) {
       return this.bookingService.create(data);
     }
-  
+    @UseGuards(JwtAuthGuard)
     @Put(':id')
     update(@Param('id') id: string, @Body() data: Partial<Booking>) {
       return this.bookingService.update(id, data);
     }
-  
+    @UseGuards(JwtAuthGuard)
     @Delete(':id')
     remove(@Param('id') id: string) {
       return this.bookingService.remove(id);
