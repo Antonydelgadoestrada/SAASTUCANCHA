@@ -1805,14 +1805,7 @@ function MetricsAuditTab() {
                         <span className="text-[10px] text-muted-foreground">({p.method})</span>
                       </div>
                       <div>
-                        {statusBadge(
-                          p.status,
-                          p.comprobanteUrl,
-                          details.isCancelled,
-                          details.isComprobanteApproved,
-                          details.isAdvance,
-                          details.isSaldoPaid
-                        )}
+                        {comprobanteBadge(p.status, p.autoConfirmed || booking?.autoConfirmed, p.pendingAudit || booking?.pendingAudit)}
                       </div>
                     </div>
 
