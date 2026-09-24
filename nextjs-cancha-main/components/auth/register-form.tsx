@@ -16,7 +16,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { registerUser } from "@/lib/auth"
-import { GooglePlacesAutocomplete } from "../google-places-autocomplete"
+import dynamic from 'next/dynamic'
+const GooglePlacesAutocomplete = dynamic(() => import('../google-places-autocomplete').then(mod => mod.GooglePlacesAutocomplete), { ssr: false })
 import { signIn } from "next-auth/react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { TermsModal } from "@/components/legal/terms-modal"

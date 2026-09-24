@@ -14,8 +14,9 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useToast } from "@/hooks/use-toast"
 import { SearchResults } from "@/components/search-results-advanced"
-import { MapView } from "@/components/map-view"
-import { GooglePlacesAutocomplete } from "@/components/google-places-autocomplete"
+import dynamic from 'next/dynamic'
+const MapView = dynamic(() => import('@/components/map-view').then(mod => mod.MapView), { ssr: false, loading: () => <div className="h-[400px] w-full animate-pulse bg-muted rounded-xl" /> })
+const GooglePlacesAutocomplete = dynamic(() => import('@/components/google-places-autocomplete').then(mod => mod.GooglePlacesAutocomplete), { ssr: false })
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
