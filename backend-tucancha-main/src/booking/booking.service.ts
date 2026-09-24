@@ -232,7 +232,10 @@ export class BookingService implements OnModuleInit {
     };
     
     let datesToProcess = dto.dates && dto.dates.length > 0 ? dto.dates : [dto.date];
-    let createdBookings = [];
+    
+    // 1. Validar disponibilidad de todas las fechas primero (Falla rápido)
+    const allBookingsToCreate = [];
+    const allSlotsPayload = [];
 
     for (const date of datesToProcess) {
       if (!date) continue;
@@ -243,22 +246,52 @@ export class BookingService implements OnModuleInit {
       let booking = await this.createObjectBooking(currentDto, user);
       booking = Object.assign(booking, statusManual);
       
-      const saveBooking = await this.bookingRepo.create(booking);
-      let result;
-      try {
-        result = await this.bookingRepo.save(saveBooking);
-      } catch (error: any) {
-        if (error.code === '23505') {
-          throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
-        }
-        throw error;
-      }
+      allBookingsToCreate.push(booking);
       
       slots = slots.map((slot) => (Object.assign(slot, { status: 'on-hold' })));
-      await this.scheduleTemplateService.bulkUpdate(slots);
-      
-      createdBookings.push(result);
+      allSlotsPayload.push(...slots);
     }
+
+    // 2. Guardar todo atómicamente en una sola transacción
+    let createdBookings = [];
+    await this.bookingRepo.manager.transaction(async (manager) => {
+      // Guardar reservas
+      for (const bookingData of allBookingsToCreate) {
+        const saveBooking = manager.create(Booking, bookingData);
+        try {
+          const result = await manager.save(saveBooking);
+          createdBookings.push(result);
+        } catch (error: any) {
+          if (error.code === '23505') {
+            throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+          }
+          throw error;
+        }
+      }
+
+      // Actualizar slots (Equivalente inline de bulkUpdate para usar el mismo manager)
+      for (const slot of allSlotsPayload) {
+        if (slot.id) {
+          await manager.update('CourtScheduleAvailability', slot.id, { status: slot.status });
+        } else {
+          const existing = await manager.findOne('CourtScheduleAvailability', {
+            where: { courtId: slot.courtId, date: slot.date, time: slot.time },
+          });
+          if (existing) {
+            await manager.update('CourtScheduleAvailability', existing.id, { status: slot.status });
+          } else {
+            const newSlot = manager.create('CourtScheduleAvailability', {
+              courtId: slot.courtId,
+              date: slot.date,
+              time: slot.time,
+              status: slot.status,
+              templateId: slot.templateId,
+            });
+            await manager.save(newSlot);
+          }
+        }
+      }
+    });
 
     if (createdBookings.length > 0) {
       try {
@@ -269,8 +302,6 @@ export class BookingService implements OnModuleInit {
       }
     }
     
-    // Si solo hay una, retornamos el objeto para no romper flujos que esperen un solo objeto
-    // Si hay multiples, retornamos el array
     return createdBookings.length === 1 ? createdBookings[0] : createdBookings;
  }
 

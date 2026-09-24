@@ -684,8 +684,27 @@ export class PaymentService {
       .orderBy('payment.createdAt', 'DESC');
 
     if (clubId) {
-      query.where('(booking.clubId = :clubId OR court.clubId = :clubId)', { clubId });
+      query.andWhere('(booking.clubId = :clubId OR court.clubId = :clubId)', { clubId });
     }
+
+    // Optimización SQL: Búsqueda directa en base de datos para no saturar la memoria JS
+    if (filters.search) {
+      const s = `%${filters.search.toLowerCase()}%`;
+      query.andWhere(
+        new Brackets((qb) => {
+          qb.where('booking.bookingReference ILIKE :s', { s })
+            .orWhere('CAST(payment.id AS TEXT) ILIKE :s', { s })
+            .orWhere('court.name ILIKE :s', { s })
+            .orWhere('customer.name ILIKE :s', { s })
+            .orWhere('customer.email ILIKE :s', { s })
+            .orWhere('payer.name ILIKE :s', { s })
+            .orWhere('payer.email ILIKE :s', { s });
+        })
+      );
+    }
+
+    // Prevenir colapso de memoria limitando la carga a los últimos 400 registros
+    query.take(400);
 
     const rawPayments = await query.getMany();
 
@@ -698,8 +717,23 @@ export class PaymentService {
       .orderBy('b.createdAt', 'DESC');
 
     if (clubId) {
-      bookingsQuery.where('(b.clubId = :clubId OR court.clubId = :clubId)', { clubId });
+      bookingsQuery.andWhere('(b.clubId = :clubId OR court.clubId = :clubId)', { clubId });
     }
+
+    if (filters.search) {
+      const s = `%${filters.search.toLowerCase()}%`;
+      bookingsQuery.andWhere(
+        new Brackets((qb) => {
+          qb.where('b.bookingReference ILIKE :s', { s })
+            .orWhere('CAST(payment.id AS TEXT) ILIKE :s', { s })
+            .orWhere('court.name ILIKE :s', { s })
+            .orWhere('customer.name ILIKE :s', { s })
+            .orWhere('customer.email ILIKE :s', { s });
+        })
+      );
+    }
+
+    bookingsQuery.take(400);
 
     const allClubBookings = await bookingsQuery.getMany();
 
