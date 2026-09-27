@@ -767,11 +767,23 @@ export function PaymentSettingsTab() {
               <p className="text-xs text-muted-foreground">
                 Si está activo, los usuarios podrán elegir Mercado Pago como medio de pago online en el checkout.
               </p>
+              {!isMPConnected && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium pt-0.5">
+                  ⚠️ Primero debes conectar tu cuenta con el botón de abajo para poder activar este medio.
+                </p>
+              )}
             </div>
             <Switch
               id="toggle-mp"
-              checked={aceptaMercadopago}
+              checked={isMPConnected && aceptaMercadopago}
+              disabled={!isMPConnected}
               onCheckedChange={(checked) => {
+                if (!isMPConnected) {
+                  toast.error("Cuenta no vinculada", {
+                    description: "Primero debes conectar tu cuenta de Mercado Pago usando el botón azul.",
+                  })
+                  return
+                }
                 setAceptaMercadopago(checked)
               }}
             />

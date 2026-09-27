@@ -215,7 +215,7 @@ export class CourtService {
             plinTitular: club.plinTitular,
             porcentajeAdelantoDefault: club.porcentajeAdelantoDefault ?? 50,
             adelantoMinimo: club.adelantoMinimo,
-            aceptaMercadopago: club.aceptaMercadopago ?? false,
+            aceptaMercadopago: Boolean(club.aceptaMercadopago && club.mpAccessToken),
             aceptaYape: club.aceptaYape ?? true,
             aceptaPlin: club.aceptaPlin ?? true,
           } : undefined,

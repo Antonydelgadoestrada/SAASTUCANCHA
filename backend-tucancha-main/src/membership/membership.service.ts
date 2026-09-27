@@ -49,12 +49,21 @@ export class MembershipService implements OnModuleInit {
   }
 
   private getWebUrl(): string {
-    const raw = process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000');
+    let raw = (process.env.WEB_SERVICES_URL || '').trim();
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      raw = process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000';
+    }
     return raw.replace(/\/+$/, '');
   }
 
   private getServicesUrl(): string {
-    const raw = process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001');
+    let raw = (process.env.SERVICES_URL || '').trim();
+    const domainFlagMatch = raw.match(/--domain=([a-zA-Z0-9.-]+)/);
+    if (domainFlagMatch) {
+      raw = `https://${domainFlagMatch[1]}`;
+    } else if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      raw = process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001';
+    }
     return raw.replace(/\/+$/, '');
   }
 
@@ -1193,9 +1202,16 @@ export class MembershipService implements OnModuleInit {
         redirect: `${webUrl}/admin/mercadopago?status=connected`,
       };
     } catch (err: any) {
+      const errorDetail =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'oauth_exchange_failed';
       console.error('⛔ [Platform MP OAuth Error]:', err?.response?.data || err?.message || err);
       return {
-        redirect: `${webUrl}/admin/mercadopago?error=oauth_exchange_failed`,
+        redirect: `${webUrl}/admin/mercadopago?error=oauth_exchange_failed&reason=${encodeURIComponent(
+          String(errorDetail),
+        )}`,
       };
     }
   }

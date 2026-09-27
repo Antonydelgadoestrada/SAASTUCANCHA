@@ -45,12 +45,21 @@ export class PaymentService {
   }
 
   private getWebUrl(): string {
-    const raw = process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000');
+    let raw = (process.env.WEB_SERVICES_URL || '').trim();
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      raw = process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000';
+    }
     return raw.replace(/\/+$/, '');
   }
 
   private getServicesUrl(): string {
-    const raw = process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001');
+    let raw = (process.env.SERVICES_URL || '').trim();
+    const domainFlagMatch = raw.match(/--domain=([a-zA-Z0-9.-]+)/);
+    if (domainFlagMatch) {
+      raw = `https://${domainFlagMatch[1]}`;
+    } else if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      raw = process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001';
+    }
     return raw.replace(/\/+$/, '');
   }
 
@@ -110,8 +119,13 @@ export class PaymentService {
       console.log(`✅ [MercadoPago OAuth] Club ${clubId} vinculado exitosamente con MP User ${user_id}`);
       return { redirect: `${webUrl}/club/payments?mp_status=connected` };
     } catch (error: any) {
+      const errorDetail =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'expired_or_used';
       console.error('⚠️ [MercadoPago OAuth Callback Error]:', error?.response?.data || error?.message || error);
-      return { redirect: `${webUrl}/club/payments?mp_error=expired_or_used` };
+      return { redirect: `${webUrl}/club/payments?mp_error=${encodeURIComponent(String(errorDetail))}` };
     }
   }
 
@@ -146,10 +160,16 @@ export class PaymentService {
   }
 
   async authorize(clubId: string) {
+    if (!process.env.MP_CLIENT_ID) {
+      throw new BadRequestException('Falta configurar MP_CLIENT_ID en las variables de entorno del servidor');
+    }
+    if (!clubId) {
+      throw new BadRequestException('Se requiere el identificador del club para iniciar la vinculación');
+    }
     const servicesUrl = this.getServicesUrl();
     const url = new OAuth(this.mercadopago).getAuthorizationURL({
       options: {
-        client_id: process.env.MP_CLIENT_ID || '',
+        client_id: process.env.MP_CLIENT_ID,
         redirect_uri: `${servicesUrl}/payments/oauth/callback`,
         state: clubId,
       },

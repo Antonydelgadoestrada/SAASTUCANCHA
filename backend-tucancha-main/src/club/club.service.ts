@@ -126,7 +126,13 @@ export class ClubService {
   }
 
   async updateClubWithMP(user_id, access_token, refresh_token, clubId, tokenExpiresAt){
-    return this.repo.update(clubId, {mpUserId: user_id, mpAccessToken: access_token, mpRefreshToken:refresh_token, mpTokenExpiresAt:tokenExpiresAt})
+    return this.repo.update(clubId, {
+      mpUserId: user_id,
+      mpAccessToken: access_token,
+      mpRefreshToken: refresh_token,
+      mpTokenExpiresAt: tokenExpiresAt,
+      aceptaMercadopago: true,
+    });
   }
 
   async getPaymentConfig(id: string) {
