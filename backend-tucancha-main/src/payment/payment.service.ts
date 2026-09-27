@@ -6,12 +6,13 @@ import { PaymentStatus } from './payment-status.enum';
 import { BookingStatus } from '../booking/booking-status.enum';
 import { BookingService } from '../booking/booking.service';
 import { ClubService } from '../club/club.service';
-import {MercadoPagoConfig, Preference, OAuth} from "mercadopago";
-import {Payment as PaymentMp} from "mercadopago";
+import { Club } from '../club/club.entity';
+import { MercadoPagoConfig, Preference, OAuth } from "mercadopago";
+import { Payment as PaymentMp } from "mercadopago";
 import { User } from '../user/user.entity';
 import { UserRole } from '../user/user-role.enum';
 import { CreateManualBookingDto } from '../booking/create-booking.dto';
-import { addMinutes, addSeconds, isBefore, format} from 'date-fns'
+import { addDays, addMinutes, addSeconds, isBefore, format } from 'date-fns';
 import { PaymentMethod } from './payment-method.enum';
 import { ScheduleTemplateService } from '../schedule/schedule-template.service';
 import { MailerService } from '../mailer/mailer.service';
@@ -28,6 +29,8 @@ export class PaymentService {
     private readonly paymentRepo: Repository<Payment>,
     @InjectRepository(Booking)
     private readonly bookingRepo: Repository<Booking>,
+    @InjectRepository(Club)
+    private readonly clubRepo: Repository<Club>,
     private readonly bookingService: BookingService,
     private readonly clubsService: ClubService,
     private readonly scheduleTemplateService: ScheduleTemplateService,
@@ -36,8 +39,21 @@ export class PaymentService {
     @Inject(forwardRef(() => MembershipService))
     private readonly membershipService: MembershipService,
   ) {
-    this.mercadopago = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN})
+    this.mercadopago = new MercadoPagoConfig({
+      accessToken: process.env.MP_ACCESS_TOKEN || '',
+    });
   }
+
+  private getWebUrl(): string {
+    const raw = process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000');
+    return raw.replace(/\/+$/, '');
+  }
+
+  private getServicesUrl(): string {
+    const raw = process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001');
+    return raw.replace(/\/+$/, '');
+  }
+
 
   findAll() {
     return this.paymentRepo.find({ relations: ['booking'] });
@@ -67,47 +83,51 @@ export class PaymentService {
       return await this.membershipService.handlePlatformOauthCallback(code, clubId);
     }
 
+    const servicesUrl = this.getServicesUrl();
+    const webUrl = this.getWebUrl();
+
     try {
-      if (!process.env.MP_CLIENT_ID || !process.env.MP_CLIENT_SECRET || !code || !process.env.SERVICES_URL) {
+      if (!process.env.MP_CLIENT_ID || !process.env.MP_CLIENT_SECRET || !code) {
         console.error('⚠️ Faltan valores requeridos para OAuth de Mercado Pago:', {
           clientId: Boolean(process.env.MP_CLIENT_ID),
           clientSecret: Boolean(process.env.MP_CLIENT_SECRET),
           code: Boolean(code),
-          servicesUrl: Boolean(process.env.SERVICES_URL),
+          servicesUrl,
         });
-        return { redirect: `${process.env.WEB_SERVICES_URL}/club/payments?mp_error=missing_config` };
+        return { redirect: `${webUrl}/club/payments?mp_error=missing_config` };
       }
       const credentials = await new OAuth(this.mercadopago).create({
         body: {
           client_id: process.env.MP_CLIENT_ID,
           client_secret: process.env.MP_CLIENT_SECRET,
           code,
-          redirect_uri: `${process.env.SERVICES_URL}/payments/oauth/callback`,
+          redirect_uri: `${servicesUrl}/payments/oauth/callback`,
         },
       });
       const { access_token, refresh_token, user_id, expires_in } = credentials;
       const tokenExpiresAt = addSeconds(new Date(), expires_in || 15552000);
       await this.clubsService.updateClubWithMP(user_id, access_token, refresh_token, clubId, tokenExpiresAt);
       console.log(`✅ [MercadoPago OAuth] Club ${clubId} vinculado exitosamente con MP User ${user_id}`);
-      return { redirect: `${process.env.WEB_SERVICES_URL}/club/payments?mp_status=connected` };
+      return { redirect: `${webUrl}/club/payments?mp_status=connected` };
     } catch (error: any) {
       console.error('⚠️ [MercadoPago OAuth Callback Error]:', error?.response?.data || error?.message || error);
-      return { redirect: `${process.env.WEB_SERVICES_URL}/club/payments?mp_error=expired_or_used` };
+      return { redirect: `${webUrl}/club/payments?mp_error=expired_or_used` };
     }
   }
 
   async updateToken() {
     const clubs = await this.clubsService.findAllWithToken();
-    const threshold = addMinutes(new Date(), 30); // renovar si expira en menos de 30 mins
+    // Renovar si el token expira en menos de 7 días (para evitar expiraciones silenciosas en cron diario)
+    const threshold = addDays(new Date(), 7);
     const oauth = new OAuth(this.mercadopago);
 
     for (const club of clubs) {
-      if(!(club.mpTokenExpiresAt && isBefore(club.mpTokenExpiresAt, threshold))) continue
+      if (!(club.mpTokenExpiresAt && isBefore(club.mpTokenExpiresAt, threshold))) continue;
       try {
         const credentials = await oauth.refresh({
           body: {
-            client_id: process.env.MP_CLIENT_ID,
-            client_secret: process.env.MP_CLIENT_SECRET,
+            client_id: process.env.MP_CLIENT_ID || '',
+            client_secret: process.env.MP_CLIENT_SECRET || '',
             refresh_token: club.mpRefreshToken,
           },
         });
@@ -115,25 +135,26 @@ export class PaymentService {
         await this.clubsService.update(club.id, {
           mpAccessToken: credentials.access_token,
           mpRefreshToken: credentials.refresh_token,
-          mpTokenExpiresAt: addSeconds(new Date(), credentials.expires_in),
+          mpTokenExpiresAt: addSeconds(new Date(), credentials.expires_in || 15552000),
         });
-
-      } catch (error) {
-        throw new Error(`Error al renovar token de ${club.name}, ${error.message}`);
+        console.log(`✅ [MercadoPago Token Cron] Token renovado exitosamente para club ${club.name} (${club.id})`);
+      } catch (error: any) {
+        console.error(`⚠️ [MercadoPago Token Cron] Error al renovar token de ${club.name}: ${error.message}`);
+        // No lanzamos excepción para que un club fallido no impida renovar a los demás
       }
     }
   }
 
-  async authorize(clubId:string){
+  async authorize(clubId: string) {
+    const servicesUrl = this.getServicesUrl();
     const url = new OAuth(this.mercadopago).getAuthorizationURL({
       options: {
-        client_id: process.env.MP_CLIENT_ID,
-        redirect_uri: `${process.env.SERVICES_URL}/payments/oauth/callback`,
-        state:clubId
+        client_id: process.env.MP_CLIENT_ID || '',
+        redirect_uri: `${servicesUrl}/payments/oauth/callback`,
+        state: clubId,
       },
     });
 
-    // Devolvemos la url
     return url;
   }
   async createAndValidatePreference(dto: {
@@ -145,165 +166,247 @@ export class PaymentService {
   }) {
       
   }
-  async createPreference(dto: CreateManualBookingDto, user: User){
-    try{
-      const bookings = await this.bookingService.createOnlineBooking(dto, user);
-      if (Array.isArray(bookings)) {
-        if (bookings.length === 1) {
-          return await this.confirmPreference(bookings[0]);
+  async createPreference(dto: CreateManualBookingDto, user: User) {
+    try {
+      const rawBookings = await this.bookingService.createOnlineBooking(dto, user);
+      const customAmount = (dto as any)?.amount ? Number((dto as any).amount) : undefined;
+      if (Array.isArray(rawBookings)) {
+        if (!rawBookings.length) throw new BadRequestException('No se crearon reservas');
+        const completeBookings: Booking[] = [];
+        for (const b of rawBookings) {
+          const full = await this.bookingService.findOneComplete(b.id);
+          completeBookings.push(full || b);
         }
-        return await this.confirmPreferenceMulti(bookings);
+        if (completeBookings.length === 1) {
+          return await this.confirmPreference(completeBookings[0], customAmount);
+        }
+        return await this.confirmPreferenceMulti(completeBookings);
       }
-      return await this.confirmPreference(bookings as any);
+      const singleBooking = await this.bookingService.findOneComplete((rawBookings as any).id) || rawBookings;
+      return await this.confirmPreference(singleBooking as any, customAmount);
+    } catch (error: any) {
+      console.error('Error in createPreference:', error?.message || error);
+      throw error;
     }
-    catch(error){
-      throw new Error(`Error in createPreference, detail: ${error.message}`)
-    }
-  }
-  
-  async confirmPayment(dto: any){
-    const booking = await this.bookingService.findOneComplete(dto.id);
-    const amount = dto.amount ? Number(dto.amount) : undefined;
-    return await this.confirmPreference(booking, amount)
   }
 
-  async confirmPreference(booking: Booking, customAmount?: number){
-    if (!booking.club || !booking.club.mpAccessToken) {
-      throw new BadRequestException('El club no tiene Mercado Pago conectado');
+  async confirmPayment(dto: any) {
+    const booking = await this.bookingService.findOneComplete(dto.id);
+    if (!booking) throw new NotFoundException('Reserva no encontrada');
+    const amount = dto.amount ? Number(dto.amount) : undefined;
+    return await this.confirmPreference(booking, amount);
+  }
+
+  private async resolveMpTokenForBooking(booking: Booking): Promise<string | null> {
+    if (booking.club?.mpAccessToken) return booking.club.mpAccessToken;
+    if (booking.court?.club?.mpAccessToken) return booking.court.club.mpAccessToken;
+    const clubId = booking.club?.id || booking.court?.club?.id;
+    if (clubId) {
+      const club = await this.clubsService.findOne(clubId);
+      if (club?.mpAccessToken) return club.mpAccessToken;
     }
-    const mpAccessToken = booking.club.mpAccessToken;
+    // Fallback opcional a token maestro de plataforma si está configurado
+    if (process.env.MP_ACCESS_TOKEN) {
+      return process.env.MP_ACCESS_TOKEN;
+    }
+    return null;
+  }
+
+  async confirmPreference(booking: Booking, customAmount?: number) {
+    const mpAccessToken = await this.resolveMpTokenForBooking(booking);
+    if (!mpAccessToken) {
+      throw new BadRequestException('El club no tiene Mercado Pago conectado y no hay pasarela disponible');
+    }
+
     const finalAmount = customAmount && customAmount > 0 ? customAmount : (booking.pricing?.totalPrice ?? 0);
     const isSaldo = customAmount && booking.pricing?.totalPrice && customAmount < booking.pricing.totalPrice;
+    const courtName = booking.court?.name || "Cancha";
     const title = isSaldo
-      ? `Saldo restante - ${booking.court?.name || "Cancha"}`
-      : `Reserva en ${booking.court?.name || "Cancha"}`;
+      ? `Saldo restante - ${courtName}`
+      : `Reserva en ${courtName}`;
     const bookingId = booking.id;
-    const email = booking.user?.email || "";
-    // 2. Crear una instancia temporal de MercadoPago con el token del club
+    const email = booking.customerInfo?.email || booking.user?.email || "";
+
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
     });
-  
-    // 3. Crear la preferencia de pago
+
+    const webUrl = this.getWebUrl();
+    const servicesUrl = this.getServicesUrl();
+
     const preferenceClient = new Preference(client);
-    const { init_point } = await preferenceClient.create({
-      body: {
-        items: [
-          {
-            id: booking.court?.id || "court",
-            title: title,
-            description: `Club: ${booking.club?.name || ""} | fecha: ${booking.date} | Superficie: ${booking.court?.surface || ""} | Duracion: ${booking.startTime}-${booking.endTime}`,
-            quantity: 1,
-            category_id: 'services',
-            currency_id: 'PEN',
-            unit_price: finalAmount,
-          },
-        ],
-        payer: {
-          email: email,
+    const preferencePayload: any = {
+      items: [
+        {
+          id: booking.court?.id || "court",
+          title: title,
+          description: `Club: ${booking.club?.name || booking.court?.club?.name || ""} | Fecha: ${booking.date} | Superficie: ${booking.court?.surface || ""} | Horario: ${booking.startTime}-${booking.endTime}`,
+          quantity: 1,
+          category_id: 'services',
+          currency_id: 'PEN',
+          unit_price: Number(finalAmount),
         },
-        metadata: {
-          email
-        },
-        back_urls: {
-          success: `${process.env.WEB_SERVICES_URL}/user/payments/success`,
-          failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
-          pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
-        },
-        // auto_return: 'approved',
-        external_reference: `${bookingId}`,
-        marketplace_fee: 5, // 💰 comisión
+      ],
+      payer: {
+        email: email || undefined,
       },
+      metadata: {
+        email,
+        bookingId,
+      },
+      back_urls: {
+        success: `${webUrl}/user/payments/success`,
+        failure: `${webUrl}/user/payments/failure`,
+        pending: `${webUrl}/user/payments/pending`,
+      },
+      auto_return: 'approved',
+      external_reference: `${bookingId}`,
+      notification_url: `${servicesUrl}/payments/webhook`,
+    };
+
+    // Comisión Marketplace sólo si el monto es significativo
+    if (finalAmount >= 10) {
+      preferencePayload.marketplace_fee = 5;
+    }
+
+    const { init_point, id: preferenceId } = await preferenceClient.create({
+      body: preferencePayload,
     });
-  
-    // 4. Retornar el enlace
-    return { init_point };
+
+    return { init_point, preferenceId };
   }
-  
+
   async confirmPreferenceMulti(bookings: Booking[]) {
     if (!bookings.length) throw new BadRequestException('No hay reservas creadas');
     const firstBooking = bookings[0];
-    if (!firstBooking.club || !firstBooking.club.mpAccessToken) {
+    const mpAccessToken = await this.resolveMpTokenForBooking(firstBooking);
+    if (!mpAccessToken) {
       throw new BadRequestException('El club no tiene Mercado Pago conectado');
     }
-    
-    const mpAccessToken = firstBooking.club.mpAccessToken;
-    const email = firstBooking.user.email;
+
+    const email = firstBooking.customerInfo?.email || firstBooking.user?.email || "";
     const bookingIds = bookings.map(b => b.id).join(',');
-    
+    const totalMulti = bookings.reduce((sum, b) => sum + Number(b.pricing?.totalPrice || 0), 0);
+
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
     });
     const preferenceClient = new Preference(client);
-    
-    // Generar un item por cada reserva
+
+    const webUrl = this.getWebUrl();
+    const servicesUrl = this.getServicesUrl();
+
     const items = bookings.map(b => ({
-      id: b.court.id,
-      title: `Reserva en ${b.court.name}`,
-      description: `Club: ${b.club.name} | fecha: ${b.date} | Superficie: ${b.court.surface} | Duracion: ${b.startTime}-${b.endTime}`,
+      id: b.court?.id || 'court',
+      title: `Reserva en ${b.court?.name || 'Cancha'}`,
+      description: `Club: ${b.club?.name || b.court?.club?.name || ""} | Fecha: ${b.date} | Horario: ${b.startTime}-${b.endTime}`,
       quantity: 1,
       category_id: 'services',
       currency_id: 'PEN',
-      unit_price: b.pricing.totalPrice,
+      unit_price: Number(b.pricing?.totalPrice || 0),
     }));
-    
-    const { init_point } = await preferenceClient.create({
-      body: {
-        items: items,
-        payer: {
-          email: email,
-        },
-        metadata: {
-          email
-        },
-        back_urls: {
-          success: `${process.env.WEB_SERVICES_URL}/user/payments/success`,
-          failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
-          pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
-        },
-        external_reference: bookingIds, // Pasamos la lista de IDs separados por coma
-        marketplace_fee: 5,
+
+    const preferencePayload: any = {
+      items,
+      payer: {
+        email: email || undefined,
       },
+      metadata: {
+        email,
+        bookingIds,
+      },
+      back_urls: {
+        success: `${webUrl}/user/payments/success`,
+        failure: `${webUrl}/user/payments/failure`,
+        pending: `${webUrl}/user/payments/pending`,
+      },
+      auto_return: 'approved',
+      external_reference: bookingIds,
+      notification_url: `${servicesUrl}/payments/webhook`,
+    };
+
+    if (totalMulti >= 10) {
+      preferencePayload.marketplace_fee = 5;
+    }
+
+    const { init_point, id: preferenceId } = await preferenceClient.create({
+      body: preferencePayload,
     });
-  
-    return { init_point };
+
+    return { init_point, preferenceId };
   }
-  
-  async handleMercadoPagoWebhook(query: any) {
-    const { type, 'data.id': paymentId } = query;
-  
-    if (type !== 'payment' || !paymentId) {
-      return;
+
+  async handleMercadoPagoWebhook(query: any, body?: any) {
+    const paymentId = query?.['data.id'] || query?.id || body?.data?.id || body?.id;
+    const type = query?.type || body?.type || query?.topic || (body?.action?.startsWith('payment') ? 'payment' : undefined);
+
+    if ((type && type !== 'payment') || !paymentId) {
+      return { received: true, ignored: true };
     }
 
     try {
       // 1. Verificación rápida de idempotencia por transactionId existente
       const existingPayment = await this.paymentRepo.findOne({
         where: { transactionId: String(paymentId) },
-        relations: ['booking'],
+        relations: ['booking', 'bookings', 'bookings.club', 'bookings.court'],
       });
 
       if (existingPayment && existingPayment.status === PaymentStatus.PAID) {
         console.log(`ℹ️ [Webhook Idempotente] El pago ${paymentId} ya fue procesado y aprobado previamente.`);
-        return;
+        return { received: true, idempotent: true };
       }
 
-      // 2. Obtener datos del pago desde la API de Mercado Pago
-      const mpPayment = await new PaymentMp(this.mercadopago).get({ id: paymentId });
+      // 2. Obtener datos del pago desde la API de Mercado Pago con fallback resiliente
+      let mpPayment: any = null;
+      // Intento 1: Con token de plataforma
+      try {
+        mpPayment = await new PaymentMp(this.mercadopago).get({ id: String(paymentId) });
+      } catch (errPlat: any) {
+        console.warn(`[Webhook MP] Consulta con token maestro falló para ID ${paymentId}: ${errPlat.message}. Intentando token del Club...`);
+      }
+
+      // Intento 2: Con token del Club si viene user_id (collector) en el webhook
+      if (!mpPayment && body?.user_id) {
+        const clubCollector = await this.clubRepo.findOne({ where: { mpUserId: String(body.user_id) } });
+        if (clubCollector?.mpAccessToken) {
+          try {
+            const clubClient = new MercadoPagoConfig({ accessToken: clubCollector.mpAccessToken });
+            mpPayment = await new PaymentMp(clubClient).get({ id: String(paymentId) });
+          } catch (errClub: any) {
+            console.warn(`[Webhook MP] Consulta con token de club collector falló: ${errClub.message}`);
+          }
+        }
+      }
+
+      // Intento 3: Con token del Club del pago existente si estaba precargado
+      if (!mpPayment && existingPayment?.bookings?.[0]?.club?.mpAccessToken) {
+        try {
+          const clubClient = new MercadoPagoConfig({ accessToken: existingPayment.bookings[0].club.mpAccessToken });
+          mpPayment = await new PaymentMp(clubClient).get({ id: String(paymentId) });
+        } catch (errExist: any) {
+          console.warn(`[Webhook MP] Consulta con token de pago existente falló: ${errExist.message}`);
+        }
+      }
+
+      if (!mpPayment) {
+        console.error(`❌ [Webhook MP] Imposible obtener datos del pago ${paymentId} desde Mercado Pago.`);
+        return { received: true, error: 'payment_not_retrievable' };
+      }
+
       const externalRef = mpPayment.external_reference;
       const status = mpPayment.status;
-  
+
       if (!externalRef) {
-        console.warn(`⚠️ Pago recibido sin external_reference, ID: ${paymentId}`);
-        return;
+        console.warn(`⚠️ [Webhook MP] Pago recibido sin external_reference, ID: ${paymentId}`);
+        return { received: true, error: 'no_external_reference' };
       }
-  
+
       // 3. Extraer datos financieros y método de pago
       const totalPagado = mpPayment.transaction_amount ?? 0;
       const netoVendedor = mpPayment.transaction_details?.net_received_amount ?? 0;
-      const comisionMp = mpPayment.fee_details?.find(f => f.type === 'mercadopago_fee')?.amount ?? 0;
-      const comisionApp = (mpPayment as any).application_fee ?? 0;
-  
+      const comisionMp = mpPayment.fee_details?.find((f: any) => f.type === 'mercadopago_fee')?.amount ?? 0;
+      const comisionApp = (mpPayment as any).application_fee ?? (mpPayment as any).marketplace_fee ?? 0;
+
       const paymentType = mpPayment.payment_type_id || '';
       const paymentMethod = mpPayment.payment_method_id || '';
 
@@ -319,24 +422,48 @@ export class PaymentService {
       } else {
         mappedMethod = PaymentMethod.CARD;
       }
-  
+
       let targetPaymentStatus: PaymentStatus;
       let targetBookingStatus: BookingStatus;
       let correoAEnviar: 'pago_exitoso' | 'pago_rechazado' | null = null;
-  
+      let shouldLiberateSlots = false;
+
       switch (status) {
         case 'approved':
           targetPaymentStatus = PaymentStatus.PAID;
           targetBookingStatus = BookingStatus.CONFIRMED;
           correoAEnviar = 'pago_exitoso';
           break;
-  
+
         case 'rejected':
           targetPaymentStatus = PaymentStatus.REJECTED;
           targetBookingStatus = BookingStatus.CANCELLED;
           correoAEnviar = 'pago_rechazado';
+          shouldLiberateSlots = true;
           break;
-  
+
+        case 'cancelled':
+          targetPaymentStatus = PaymentStatus.REJECTED;
+          targetBookingStatus = BookingStatus.CANCELLED;
+          correoAEnviar = 'pago_rechazado';
+          shouldLiberateSlots = true;
+          break;
+
+        case 'refunded':
+          targetPaymentStatus = PaymentStatus.REFUNDED;
+          targetBookingStatus = BookingStatus.CANCELLED;
+          shouldLiberateSlots = true;
+          break;
+
+        case 'charged_back':
+          targetPaymentStatus = PaymentStatus.REFUNDED;
+          targetBookingStatus = BookingStatus.CANCELLED;
+          shouldLiberateSlots = true;
+          break;
+
+        case 'in_process':
+        case 'pending':
+        case 'authorized':
         default:
           targetPaymentStatus = PaymentStatus.PENDING;
           targetBookingStatus = BookingStatus.PENDING;
@@ -344,22 +471,27 @@ export class PaymentService {
       }
 
       // 4. Ejecución atómica en transacción
+      let isFirstTimeConfirmed = false;
       const updatedBookings = await this.paymentRepo.manager.transaction(async (trxManager) => {
-        const bookingIds = externalRef.split(',');
+        const bookingIds = externalRef.split(',').map((s: string) => s.trim()).filter(Boolean);
         const bookings = await trxManager.find(Booking, {
           where: { id: In(bookingIds) },
-          relations: ['user', 'court', 'club']
+          relations: ['user', 'court', 'court.club', 'club'],
         });
-        
+
         if (!bookings.length) {
           console.warn(`Reserva no encontrada para referencia externa: ${externalRef}`);
           return null;
         }
 
-        // Si ya está pagado por otra solicitud concurrente, abortar
+        // Si ya está pagado por otra solicitud concurrente, abortar sin duplicar efectos
         if (bookings[0].paymentStatus === PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
           console.log(`ℹ️ [Concurrencia] Reservas ya marcadas como PAID.`);
           return bookings;
+        }
+
+        if (bookings[0].paymentStatus !== PaymentStatus.PAID && targetPaymentStatus === PaymentStatus.PAID) {
+          isFirstTimeConfirmed = true;
         }
 
         let paymentRecord = existingPayment || await trxManager.findOne(Payment, {
@@ -401,6 +533,7 @@ export class PaymentService {
         for (let booking of bookings) {
           booking.paymentStatus = targetPaymentStatus;
           booking.status = targetBookingStatus;
+          booking.paymentMethod = 'online';
           // Preservar precio total de la reserva y registrar monto pagado
           if (bookings.length === 1) {
             const currentTotal = (booking.pricing as any)?.totalPrice;
@@ -413,44 +546,135 @@ export class PaymentService {
           booking.payment = paymentRecord;
           await trxManager.save(Booking, booking);
         }
-        
+
         return bookings;
       });
 
       if (!updatedBookings) {
-        return;
+        return { received: true, error: 'booking_not_found' };
       }
-  
-      // 5. Ocupar slots en calendario si el pago fue aprobado
-      if (status === 'approved') {
+
+      // 5. Ocupar slots en calendario si el pago fue aprobado por primera vez
+      if (status === 'approved' && isFirstTimeConfirmed) {
         for (let booking of updatedBookings) {
-          await this.generateSlotOccupied(
-            booking.court.id,
-            booking.date,
-            booking.startTime,
-            booking.duration
-          );
+          if (booking.court?.id) {
+            await this.generateSlotOccupied(
+              booking.court.id,
+              booking.date,
+              booking.startTime,
+              booking.duration
+            );
+          }
         }
       }
-  
-      // 6. Enviar correos informativos sin bloquear la respuesta del webhook
-      try {
-        if (correoAEnviar === 'pago_exitoso') {
-          // Send for the first one as representative or a group email
-          await this.mailerService.sendBookingConfirmationEmail(updatedBookings[0].customerInfo.email, updatedBookings[0]);
-          await this.mailerService.sendBookingPaidNotifications(updatedBookings[0]);
-        } else if (correoAEnviar === 'pago_rechazado') {
-          await this.mailerService.sendBookingCancelledEmail(updatedBookings[0].customerInfo.email, updatedBookings[0]);
+
+      // 6. Liberar slots si el pago fue rechazado, cancelado o devuelto
+      if (shouldLiberateSlots) {
+        for (let booking of updatedBookings) {
+          if (booking.court?.id) {
+            await this.generateSlotAvailable(
+              booking.court.id,
+              booking.date,
+              booking.startTime,
+              booking.duration
+            );
+          }
         }
-      } catch (mailErr) {
-        console.error(`⚠️ Error al enviar correos de confirmación: ${mailErr.message}`);
       }
-  
-      console.log(`✅ Webhook procesado correctamente con idempotencia para booking ${updatedBookings[0].id}`);
-    } catch (error) {
-      console.error(`Error al procesar webhook para ID ${paymentId}:`, error);
-      throw error;
+
+      // 7. Enviar correos informativos sólo en la primera transición de estado
+      if (isFirstTimeConfirmed && correoAEnviar === 'pago_exitoso') {
+        try {
+          const target = updatedBookings[0];
+          const emailDestino = target.customerInfo?.email || target.user?.email;
+          if (emailDestino) {
+            await this.mailerService.sendBookingConfirmationEmail(emailDestino, target);
+            await this.mailerService.sendBookingPaidNotifications(target);
+          }
+        } catch (mailErr: any) {
+          console.error(`⚠️ Error al enviar correos de confirmación: ${mailErr.message}`);
+        }
+      } else if (correoAEnviar === 'pago_rechazado' && shouldLiberateSlots) {
+        try {
+          const target = updatedBookings[0];
+          const emailDestino = target.customerInfo?.email || target.user?.email;
+          if (emailDestino) {
+            await this.mailerService.sendBookingCancelledEmail(emailDestino, target);
+          }
+        } catch (mailErr: any) {
+          console.error(`⚠️ Error al enviar correos de cancelación: ${mailErr.message}`);
+        }
+      }
+
+      console.log(`✅ [Webhook MP] Pago ${paymentId} procesado exitosamente como ${targetPaymentStatus} para booking(s): ${externalRef}`);
+      return { received: true, status: targetPaymentStatus };
+    } catch (error: any) {
+      console.error(`Error al procesar webhook para ID ${paymentId}:`, error?.message || error);
+      return { received: true, error: error?.message || 'internal_error' };
     }
+  }
+
+  /**
+   * Endpoint de sincronización y verificación inmediata llamado al retornar de Mercado Pago
+   */
+  async verifyPayment(dto: { paymentId: string; externalReference?: string }, user?: User) {
+    const { paymentId, externalReference } = dto;
+    if (!paymentId) throw new BadRequestException('Se requiere paymentId');
+
+    // Procesar con la lógica del webhook de forma sincrónica
+    await this.handleMercadoPagoWebhook({ id: paymentId }, { data: { id: paymentId } });
+
+    // Consultar el estado actualizado en la BD
+    let booking: Booking | null = null;
+    if (externalReference) {
+      const firstId = externalReference.split(',')[0].trim();
+      booking = await this.bookingService.findOneComplete(firstId);
+    }
+    if (!booking) {
+      const payment = await this.paymentRepo.findOne({
+        where: { transactionId: String(paymentId) },
+        relations: ['bookings', 'bookings.court', 'bookings.court.club', 'bookings.club', 'user'],
+      });
+      booking = payment?.bookings?.[0] || null;
+    }
+
+    const isPaid = booking?.paymentStatus === PaymentStatus.PAID;
+    return {
+      success: isPaid,
+      status: booking?.paymentStatus || 'pending',
+      bookingStatus: booking?.status || 'pending',
+      booking: booking
+        ? {
+            id: booking.id,
+            bookingReference: booking.bookingReference,
+            date: booking.date,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            courtName: booking.court?.name,
+            clubName: booking.club?.name || booking.court?.club?.name,
+            totalPrice: booking.pricing?.totalPrice,
+            paymentStatus: booking.paymentStatus,
+          }
+        : null,
+    };
+  }
+
+  async generateSlotAvailable(courtId: string, date: any, startTime: string, duration: any) {
+    const dateStr = typeof date === 'string'
+      ? date.substring(0, 10)
+      : (date instanceof Date
+          ? (date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0
+              ? date.toISOString().substring(0, 10)
+              : format(date, 'yyyy-MM-dd'))
+          : format(new Date(date), 'yyyy-MM-dd'));
+    const times = this.generateTimeSlots(startTime, duration);
+    const payload = times.map((t) => ({
+      courtId,
+      date: dateStr,
+      time: t,
+      status: 'available',
+    }));
+    await this.scheduleTemplateService.bulkUpdate(payload as any);
   }
 
   // ─── MÉTRICAS DEL CLUB ─────────────────────────────────────────────────────

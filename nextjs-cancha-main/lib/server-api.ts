@@ -4,7 +4,7 @@ function getServerApiBaseUrl(): string {
   const url =
     process.env.API_INTERNAL_BASE_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
-    "http://127.0.0.1:3001";
+    (process.env.NODE_ENV === "production" ? "https://api.tucancha.com.pe" : "http://127.0.0.1:3001");
   return url.replace("localhost", "127.0.0.1");
 }
 

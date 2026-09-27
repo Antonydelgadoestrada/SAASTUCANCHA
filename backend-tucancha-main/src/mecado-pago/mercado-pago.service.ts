@@ -1,18 +1,18 @@
 // mercado-pago.service.ts
 import { Injectable } from '@nestjs/common';
-
-import { MercadoPagoConfig, Order } from "mercadopago";
-
+import { MercadoPagoConfig, Preference } from "mercadopago";
 
 @Injectable()
 export class MercadoPagoService {
-  private client;
-  private order;
+  private client: MercadoPagoConfig;
+  private preference: Preference;
+
   constructor() {
-   this.client = new MercadoPagoConfig({
-      accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN!,
+    const accessToken = process.env.MP_ACCESS_TOKEN || process.env.MERCADO_PAGO_ACCESS_TOKEN || '';
+    this.client = new MercadoPagoConfig({
+      accessToken: accessToken,
     });
-    this.order =  new Order(this.client);
+    this.preference = new Preference(this.client);
   }
 
   async createPreference(booking: {
@@ -22,9 +22,13 @@ export class MercadoPagoService {
     quantity: number;
     unit_price: number;
   }) {
+    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000')).replace(/\/+$/, '');
+    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001')).replace(/\/+$/, '');
+
     const preference = {
       items: [
         {
+          id: booking.id,
           title: booking.title,
           description: booking.description,
           quantity: booking.quantity,
@@ -33,15 +37,20 @@ export class MercadoPagoService {
         },
       ],
       external_reference: booking.id,
+      notification_url: `${servicesUrl}/payments/webhook`,
       back_urls: {
-        success: `${process.env.FRONTEND_URL}/payment/success`,
-        failure: `${process.env.FRONTEND_URL}/payment/failure`,
-        pending: `${process.env.FRONTEND_URL}/payment/pending`,
+        success: `${webUrl}/user/payments/success`,
+        failure: `${webUrl}/user/payments/failure`,
+        pending: `${webUrl}/user/payments/pending`,
       },
       auto_return: 'approved',
     };
 
-    const response = await this.order.create(preference);
-    return response.body;
+    const response = await this.preference.create({ body: preference });
+    return {
+      id: response.id,
+      init_point: response.init_point,
+    };
   }
 }
+

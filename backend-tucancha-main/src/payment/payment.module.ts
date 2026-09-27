@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Payment } from './payment.entity';
 import { Booking } from '../booking/booking.entity';
+import { Club } from '../club/club.entity';
 import { PaymentService } from './payment.service';
 import { PaymentController } from './payment.controller';
 import { ScheduleCalendarModule } from '../schedule/schedule.module';
@@ -13,7 +14,7 @@ import { MembershipModule } from '../membership/membership.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Booking]),
+    TypeOrmModule.forFeature([Payment, Booking, Club]),
     ScheduleCalendarModule,
     BookingModule,
     ClubModule,

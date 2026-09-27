@@ -16,6 +16,11 @@ export const confirmPayment= async(data:any)=>{
     return result.data 
 }
 
+export const verifyPayment = async(data: { paymentId: string; externalReference?: string })=>{
+    const result = await api.post("/payments/verify", data);
+    return result.data;
+}
+
 export const createReservation = async(data:any)=>{
     const result = await api.post("/bookings/online", data);
     return result.data 

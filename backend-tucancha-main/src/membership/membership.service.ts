@@ -48,6 +48,16 @@ export class MembershipService implements OnModuleInit {
     });
   }
 
+  private getWebUrl(): string {
+    const raw = process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000');
+    return raw.replace(/\/+$/, '');
+  }
+
+  private getServicesUrl(): string {
+    const raw = process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001');
+    return raw.replace(/\/+$/, '');
+  }
+
   async onModuleInit() {
     try {
       // 1. Asegurar que membershipId en membership_payments sea NULLABLE en base de datos
@@ -436,8 +446,9 @@ export class MembershipService implements OnModuleInit {
         ? 'Semestral'
         : 'Mensual';
 
-    const webUrl = process.env.WEB_SERVICES_URL || 'http://localhost:3000';
-    const servicesUrl = process.env.SERVICES_URL || 'http://localhost:3001';
+    const webUrl = this.getWebUrl();
+    const servicesUrl = this.getServicesUrl();
+
 
     try {
       const response = await preferenceClient.create({
@@ -1069,7 +1080,7 @@ export class MembershipService implements OnModuleInit {
       source: isConnected ? 'database' : hasEnvFallback ? 'environment' : 'unconfigured',
       hasEnvFallback,
       hasClientIdAndSecret,
-      redirectUri: `${process.env.SERVICES_URL || 'http://localhost:3001'}/payments/oauth/callback`,
+      redirectUri: `${this.getServicesUrl()}/payments/oauth/callback`,
     };
   }
 
@@ -1078,7 +1089,7 @@ export class MembershipService implements OnModuleInit {
    */
   async getAdminAuthorizeUrl(adminUserId: string): Promise<string> {
     const clientId = process.env.MP_CLIENT_ID;
-    const servicesUrl = process.env.SERVICES_URL || 'http://localhost:3001';
+    const servicesUrl = this.getServicesUrl();
 
     if (!clientId) {
       throw new BadRequestException(
@@ -1107,8 +1118,9 @@ export class MembershipService implements OnModuleInit {
     code: string,
     state: string,
   ): Promise<{ redirect: string }> {
-    const webUrl = process.env.WEB_SERVICES_URL || 'http://localhost:3000';
-    const servicesUrl = process.env.SERVICES_URL || 'http://localhost:3001';
+    const webUrl = this.getWebUrl();
+    const servicesUrl = this.getServicesUrl();
+
 
     // 1. Validar Anti-CSRF
     const verification = this.verifyAdminOAuthState(state);

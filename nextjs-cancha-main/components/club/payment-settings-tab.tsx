@@ -459,10 +459,11 @@ export function PaymentSettingsTab() {
     } catch {
       // Fallback a navegación directa
     }
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
+    const base = (process.env.NEXT_PUBLIC_API_BASE_URL || (process.env.NODE_ENV === "production" ? "https://api.tucancha.com.pe" : "http://localhost:3001")).replace(/\/+$/, "")
     window.location.href = clubId
       ? `${base}/payments/authorize?clubId=${clubId}`
       : `${base}/payments/authorize`
+
   }
 
   const copyToClipboard = (text: string, field: string) => {

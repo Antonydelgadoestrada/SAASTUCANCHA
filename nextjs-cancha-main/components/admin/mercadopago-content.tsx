@@ -6,24 +6,15 @@ import { format, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
 import {
   CreditCardIcon,
-  ShieldCheckIcon,
-  CheckCircle2Icon,
   XCircleIcon,
   AlertTriangleIcon,
   RefreshCwIcon,
-  CopyIcon,
   CheckIcon,
   ExternalLinkIcon,
   KeyRoundIcon,
-  ServerIcon,
-  ArrowRightIcon,
-  LockIcon,
   EyeIcon,
   EyeOffIcon,
-  ZapIcon,
-  HelpCircleIcon,
   WifiIcon,
-  Building2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -80,10 +71,6 @@ export function AdminMercadopagoContent() {
   const [manualPublicKey, setManualPublicKey] = useState("")
   const [showTokenText, setShowTokenText] = useState(false)
   const [savingManual, setSavingManual] = useState(false)
-
-  // Estados de copiado
-  const [copiedRedirect, setCopiedRedirect] = useState(false)
-  const [copiedWebhook, setCopiedWebhook] = useState(false)
 
   const fetchStatus = async () => {
     try {
@@ -200,23 +187,7 @@ export function AdminMercadopagoContent() {
     }
   }
 
-  const handleCopy = (text: string, type: "redirect" | "webhook") => {
-    navigator.clipboard.writeText(text)
-    if (type === "redirect") {
-      setCopiedRedirect(true)
-      setTimeout(() => setCopiedRedirect(false), 2000)
-    } else {
-      setCopiedWebhook(true)
-      setTimeout(() => setCopiedWebhook(false), 2000)
-    }
-    toast.info("Copiado al portapapeles")
-  }
-
   const isConnected = status?.isConnected ?? false
-  const isEnvFallback = !isConnected && (status?.hasEnvFallback ?? false)
-  const webhookUrl = status?.redirectUri
-    ? status.redirectUri.replace("/payments/oauth/callback", "/memberships/webhook")
-    : "http://localhost:3001/memberships/webhook"
 
   return (
     <div className="space-y-6">
@@ -232,16 +203,10 @@ export function AdminMercadopagoContent() {
               className={
                 isConnected
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : isEnvFallback
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
                   : "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
               }
             >
-              {isConnected
-                ? "Conectado vía OAuth"
-                : isEnvFallback
-                ? "Fallback Activo (.env)"
-                : "Sin Conexión"}
+              {isConnected ? "Conectado" : "No conectado"}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -270,7 +235,7 @@ export function AdminMercadopagoContent() {
               className="gap-2 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
             >
               <WifiIcon className={`h-4 w-4 ${testingPing ? "animate-pulse" : ""}`} />
-              {testingPing ? "Probando..." : "Test Ping"}
+              {testingPing ? "Probando..." : "Probar Conexión"}
             </Button>
           )}
         </div>
@@ -282,8 +247,6 @@ export function AdminMercadopagoContent() {
           className={`h-2 w-full ${
             isConnected
               ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-              : isEnvFallback
-              ? "bg-gradient-to-r from-amber-500 to-yellow-400"
               : "bg-gradient-to-r from-red-500 to-orange-400"
           }`}
         />
@@ -302,7 +265,7 @@ export function AdminMercadopagoContent() {
                     </h2>
                     {status?.environment && (
                       <Badge variant="secondary" className="uppercase text-xs font-mono">
-                        {status.environment}
+                        {status.environment === "production" ? "Producción" : status.environment === "sandbox" ? "Pruebas" : status.environment}
                       </Badge>
                     )}
                   </div>
@@ -324,13 +287,9 @@ export function AdminMercadopagoContent() {
               {/* Grid de metadata operativa */}
               <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-3">
                 <div className="rounded-lg border bg-muted/30 p-3">
-                  <span className="text-xs text-muted-foreground">Origen Credenciales</span>
-                  <p className="mt-1 font-semibold text-xs capitalize text-foreground">
-                    {status?.source === "database"
-                      ? "Base de Datos (OAuth Dinámico)"
-                      : status?.source === "environment"
-                      ? "Archivo .env (Estático)"
-                      : "No configurado"}
+                  <span className="text-xs text-muted-foreground">Estado</span>
+                  <p className="mt-1 font-semibold text-xs text-foreground">
+                    {isConnected ? "Conectado" : "No conectado"}
                   </p>
                 </div>
 
@@ -350,7 +309,7 @@ export function AdminMercadopagoContent() {
                       ? `${status.expiresInDays} días restantes`
                       : isConnected
                       ? "Indefinida / Auto-renovable"
-                      : "N/A"}
+                      : "No disponible"}
                   </p>
                 </div>
               </div>
@@ -424,156 +383,6 @@ export function AdminMercadopagoContent() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Grid de Seguridad e Infraestructura */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* Pilares de Seguridad */}
-        <Card className="border border-border">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <ShieldCheckIcon className="h-5 w-5 text-emerald-500" />
-              <CardTitle className="text-base">Arquitectura y Seguridad Criptográfica</CardTitle>
-            </div>
-            <CardDescription>
-              Garantías de protección aplicadas en el backend según estándares bancarios y PCI DSS.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2Icon className="h-4 w-4" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold">Protección Anti-CSRF OAuth v2</p>
-                <p className="text-xs text-muted-foreground">
-                  El parámetro <code>state</code> utiliza un nonce aleatorio de 128 bits firmado con HMAC-SHA256 y ventana estricta de 15 minutos.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2Icon className="h-4 w-4" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold">Zero-Leakage (Cero Filtración de Tokens)</p>
-                <p className="text-xs text-muted-foreground">
-                  Los tokens <code>mpAccessToken</code> y <code>mpRefreshToken</code> están excluidos por defecto (<code>select: false</code>) en ORM y nunca se exponen al navegador.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2Icon className="h-4 w-4" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold">Daemon de Auto-Renovación Proactivo</p>
-                <p className="text-xs text-muted-foreground">
-                  Un trabajo cron programado cada 4 horas y gatillos en tiempo de ejecución renuevan el token antes de vencer sin interrumpir pagos.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2Icon className="h-4 w-4" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold">Segregación de Pagos (Marketplace vs Plataforma)</p>
-                <p className="text-xs text-muted-foreground">
-                  Los pagos de canchas de deportistas van a los clubes. Las suscripciones de membresía de los clubes se abonan a esta cuenta matriz.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* URLs de Integración en Mercado Pago Developers */}
-        <Card className="border border-border">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <ServerIcon className="h-5 w-5 text-blue-500" />
-              <CardTitle className="text-base">Endpoints de Mercado Pago Developers</CardTitle>
-            </div>
-            <CardDescription>
-              Configura estas rutas en tu aplicación en el portal de desarrolladores de Mercado Pago.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                URL de Redirección OAuth (Redirect URI)
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={status?.redirectUri || "http://localhost:3001/payments/oauth/callback"}
-                  className="font-mono text-xs bg-muted/40"
-                />
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={() =>
-                    handleCopy(
-                      status?.redirectUri || "http://localhost:3001/payments/oauth/callback",
-                      "redirect"
-                    )
-                  }
-                  className="shrink-0"
-                >
-                  {copiedRedirect ? (
-                    <CheckIcon className="h-4 w-4 text-emerald-500" />
-                  ) : (
-                    <CopyIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Agrega esta URL exacta en la sección "URLs de redireccionamiento" de tu app MP.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                Webhook de Notificaciones de Membresías
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={webhookUrl}
-                  className="font-mono text-xs bg-muted/40"
-                />
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={() => handleCopy(webhookUrl, "webhook")}
-                  className="shrink-0"
-                >
-                  {copiedWebhook ? (
-                    <CheckIcon className="h-4 w-4 text-emerald-500" />
-                  ) : (
-                    <CopyIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Ruta independiente para notificaciones IPN/Webhooks de pagos de suscripción.
-              </p>
-            </div>
-
-            <div className="rounded-lg border bg-blue-500/5 border-blue-500/20 p-3 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2 font-medium text-foreground">
-                <Building2Icon className="h-4 w-4 text-blue-500" />
-                <span>¿Cómo funciona el flujo de cobros?</span>
-              </div>
-              <p className="mt-1">
-                Cuando un club suscribe un plan mensual o anual (Yape, Plin o Mercado Pago Checkout Pro), el abono se procesa y se acredita directamente en esta cuenta receptora vinculada.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Modal de Credenciales Manuales */}
       <Dialog open={showManualModal} onOpenChange={setShowManualModal}>
@@ -666,7 +475,7 @@ export function AdminMercadopagoContent() {
               ¿Desconectar cuenta de Mercado Pago?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Al desconectar la cuenta, los nuevos pagos de suscripciones de clubes se pausarán o conmutarán al token definido en el archivo <code>.env</code> si existe. Puedes volver a conectarla en cualquier momento.
+              Al desconectar la cuenta, los nuevos pagos de suscripciones de clubes se pausarán. Puedes volver a conectarla en cualquier momento.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

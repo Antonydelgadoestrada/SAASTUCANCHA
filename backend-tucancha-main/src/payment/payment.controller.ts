@@ -8,6 +8,7 @@ import {
     Param,
     Body,
     NotFoundException,
+    ForbiddenException,
     Query,
     Res,
     Req,
@@ -21,6 +22,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { GetUser } from '../auth/get-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, File as MulterFile } from 'multer';
@@ -29,10 +31,15 @@ import { memoryStorage, File as MulterFile } from 'multer';
   export class PaymentController {
     constructor(private readonly service: PaymentService) {}
   
+    @UseGuards(JwtAuthGuard)
     @Get()
-    findAll(): Promise<Payment[]> {
+    findAll(@GetUser() user: User): Promise<Payment[]> {
+      if (user.role !== UserRole.ADMIN && user.role !== UserRole.CLUB) {
+        throw new ForbiddenException('No tienes permisos para listar todos los pagos');
+      }
       return this.service.findAll();
     }
+
     // payments.controller.ts
     @Get('oauth/callback')
     async handleOAuthCallback(
@@ -40,8 +47,8 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Query('state') clubId: string,
       @Res() res: Response
     ) {
-     const result = await  this.service.handleOauthCallback(code, clubId)
-     return res.redirect(result.redirect)
+     const result = await this.service.handleOauthCallback(code, clubId);
+     return res.redirect(result.redirect);
     }
 
     @UseGuards(JwtAuthGuard)
@@ -50,7 +57,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: any,
       @GetUser() user: User
     ) {
-      return this.service.createPreference(dto,user)
+      return this.service.createPreference(dto, user);
     }
 
     @UseGuards(JwtAuthGuard)
@@ -59,12 +66,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: any,
       @GetUser() user: User
     ) {
-      return this.service.confirmPayment(dto)
+      return this.service.confirmPayment(dto);
     }
 
     @Cron('0 0 2 * * *') // A las 2:00 AM todos los días
     async updateTokens() {
-      return this.service.updateToken()
+      return this.service.updateToken();
     }
 
     @Get('authorize')
@@ -81,33 +88,63 @@ import { memoryStorage, File as MulterFile } from 'multer';
       return res.json({ url });
     }
     
+    @Get('webhook')
+    async webhookPing() {
+      return { status: 'ok', service: 'MercadoPago Webhook', timestamp: new Date().toISOString() };
+    }
+
     @Post('webhook')
-    async webhook(@Query() query: any) {
-      await this.service.handleMercadoPagoWebhook(query);
-      return { received: true };
+    async webhook(@Query() query: any, @Body() body: any) {
+      return await this.service.handleMercadoPagoWebhook(query, body);
+    }
+
+    /**
+     * POST /payments/verify
+     * Verificación y sincronización en tiempo real llamada desde la pantalla de éxito
+     */
+    @Post('verify')
+    async verifyPayment(
+      @Body() dto: { paymentId: string; externalReference?: string },
+      @Req() req: any,
+    ) {
+      return this.service.verifyPayment(dto, req.user);
     }
   
+    @UseGuards(JwtAuthGuard)
     @Post()
-    create(@Body() data: Partial<Payment>) {
+    create(@Body() data: Partial<Payment>, @GetUser() user: User) {
+      if (user.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('Solo administradores pueden crear pagos manualmente');
+      }
       return this.service.create(data);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Get(':id')
-    async findOne(@Param('id') id: string): Promise<Payment> {
+    async findOne(@Param('id') id: string, @GetUser() user: User): Promise<Payment> {
       const payment = await this.service.findOne(id);
       if (!payment) throw new NotFoundException('Payment not found');
       return payment;
     }
   
+    @UseGuards(JwtAuthGuard)
     @Put(':id')
-    update(@Param('id') id: string, @Body() data: Partial<Payment>) {
+    update(@Param('id') id: string, @Body() data: Partial<Payment>, @GetUser() user: User) {
+      if (user.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('Solo administradores pueden modificar pagos');
+      }
       return this.service.update(id, data);
     }
   
+    @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    remove(@Param('id') id: string) {
+    remove(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('Solo administradores pueden eliminar pagos');
+      }
       return this.service.remove(id);
     }
+
 
     // ─── ENDPOINTS DEL CLUB (Métricas, Lista, Auditoría, Comprobante) ─────
 
