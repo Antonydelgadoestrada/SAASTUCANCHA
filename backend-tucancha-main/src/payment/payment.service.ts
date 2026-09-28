@@ -285,9 +285,9 @@ export class PaymentService {
     };
 
     // Comisión Marketplace sólo si el monto es significativo
-    if (finalAmount >= 10) {
-      preferencePayload.marketplace_fee = 5;
-    }
+    // if (finalAmount >= 10) {
+    //   preferencePayload.marketplace_fee = 5;
+    // }
 
     const { init_point, id: preferenceId } = await preferenceClient.create({
       body: preferencePayload,
@@ -345,9 +345,9 @@ export class PaymentService {
       notification_url: `${servicesUrl}/payments/webhook`,
     };
 
-    if (totalMulti >= 10) {
-      preferencePayload.marketplace_fee = 5;
-    }
+    // if (totalMulti >= 10) {
+    //   preferencePayload.marketplace_fee = 5;
+    // }
 
     const { init_point, id: preferenceId } = await preferenceClient.create({
       body: preferencePayload,
