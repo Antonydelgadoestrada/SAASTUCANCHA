@@ -139,6 +139,7 @@ export class ClubService {
     const club = await this.repo.findOne({ where: { id } });
     if (!club) throw new NotFoundException('Club no encontrado');
     return {
+      mpUserId: club.mpUserId || null,
       aceptaMercadopago: club.aceptaMercadopago ?? false,
       aceptaYape: club.aceptaYape ?? true,
       aceptaPlin: club.aceptaPlin ?? true,
