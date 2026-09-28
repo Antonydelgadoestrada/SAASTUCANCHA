@@ -25,6 +25,71 @@ import { SavePlatformCredentialsDto } from './dto/save-platform-credentials.dto'
 import { S3Service } from '../aws/s3.service';
 import { Club } from '../club/club.entity';
 
+export interface MpStatusDetailMapping {
+  code: 'APRO' | 'CONT' | 'FUND' | 'SECU' | 'EXPI' | 'FORM' | 'CALL' | 'OTHE';
+  label: string;
+  description: string;
+}
+
+export function mapMpStatusDetail(status?: string, statusDetail?: string): MpStatusDetailMapping {
+  if (status === 'approved') {
+    return {
+      code: 'APRO',
+      label: 'Pago Aprobado',
+      description: 'El abono fue procesado y acreditado con éxito.',
+    };
+  }
+
+  if (status === 'in_process' || status === 'pending' || status === 'authorized') {
+    return {
+      code: 'CONT',
+      label: 'Pendiente de Pago',
+      description: 'La transacción está en proceso de validación o acreditación bancaria.',
+    };
+  }
+
+  switch (statusDetail) {
+    case 'cc_rejected_insufficient_amount':
+      return {
+        code: 'FUND',
+        label: 'Fondos Insuficientes',
+        description: 'Rechazado por saldo insuficiente o límite de crédito alcanzado.',
+      };
+    case 'cc_rejected_bad_filled_security_code':
+      return {
+        code: 'SECU',
+        label: 'Código de Seguridad Inválido',
+        description: 'Rechazado por código de seguridad (CVV) erróneo.',
+      };
+    case 'cc_rejected_bad_filled_date':
+      return {
+        code: 'EXPI',
+        label: 'Tarjeta Vencida',
+        description: 'Rechazado debido a tarjeta vencida o fecha de expiración incorrecta.',
+      };
+    case 'cc_rejected_bad_filled_card_number':
+    case 'cc_rejected_bad_filled_other':
+    case 'cc_rejected_invalid_installments':
+      return {
+        code: 'FORM',
+        label: 'Error de Formulario',
+        description: 'Rechazado por datos de formulario o número de tarjeta incorrectos.',
+      };
+    case 'cc_rejected_call_for_authorize':
+      return {
+        code: 'CALL',
+        label: 'Autorización Requerida',
+        description: 'El banco emisor requiere que el titular llame para autorizar la compra.',
+      };
+    default:
+      return {
+        code: 'OTHE',
+        label: 'Rechazo General',
+        description: 'Rechazado por error general o bloqueo de seguridad bancaria.',
+      };
+  }
+}
+
 @Injectable()
 export class MembershipService implements OnModuleInit {
   private mercadopago: MercadoPagoConfig;
@@ -483,6 +548,7 @@ export class MembershipService implements OnModuleInit {
             failure: `${webUrl}/club/membership?payment=failure&payment_id=${savedPayment.id}`,
             pending: `${webUrl}/club/membership?payment=pending&payment_id=${savedPayment.id}`,
           },
+          auto_return: 'approved',
         },
       });
 
@@ -570,12 +636,15 @@ export class MembershipService implements OnModuleInit {
           targetStatus = MembershipPaymentStatus.REFUNDED;
         }
 
+        const mappedDetail = mapMpStatusDetail(status, mpPayment.status_detail);
+
         paymentRecord.status = targetStatus;
         paymentRecord.mpPaymentId = String(mpPayment.id);
         paymentRecord.mpMerchantOrderId = String(mpPayment.order?.id || '');
         paymentRecord.paymentType = mpPayment.payment_type_id || '';
         paymentRecord.paymentMethod = mpPayment.payment_method_id || '';
         paymentRecord.gatewayResponse = mpPayment;
+        paymentRecord.notes = `[${mappedDetail.code}] ${mappedDetail.label}: ${mappedDetail.description}`;
 
         if (status === 'approved') {
           paymentRecord.paidAt = new Date();
@@ -591,7 +660,7 @@ export class MembershipService implements OnModuleInit {
 
         await trxManager.save(MembershipPayment, paymentRecord);
         console.log(
-          `✅ [Webhook Membresía] Pago ${paymentId} procesado exitosamente como ${targetStatus} para club ${paymentRecord.clubId}`,
+          `✅ [Webhook Membresía] Pago ${paymentId} procesado exitosamente como ${targetStatus} [${mappedDetail.code}] para club ${paymentRecord.clubId}`,
         );
       });
     } catch (error) {
@@ -873,31 +942,47 @@ export class MembershipService implements OnModuleInit {
     const skip = (page - 1) * limit;
     const paginatedPayments = await query.skip(skip).take(limit).getMany();
 
-    const formattedPayments = paginatedPayments.map((p) => ({
-      id: p.id,
-      clubId: p.clubId,
-      clubName: p.club?.name || 'Club desconocido',
-      clubEmail: p.club?.email || '',
-      clubLogo: p.club?.logo || null,
-      clubDistrict: p.club?.district || null,
-      planId: p.planId,
-      planName: p.plan?.name || 'Plan de Membresía',
-      interval: p.plan?.interval || 'MONTHLY',
-      amount: Number(p.amount),
-      currency: p.currency || 'PEN',
-      status: p.status,
-      mpPaymentId: p.mpPaymentId || null,
-      mpPreferenceId: p.mpPreferenceId || null,
-      mpMerchantOrderId: p.mpMerchantOrderId || null,
-      paymentMethod: p.paymentMethod || 'mercadopago',
-      paymentType: p.paymentType || 'automatic',
-      paidAt: p.paidAt,
-      createdAt: p.createdAt,
-      comprobanteUrl: p.comprobanteUrl,
-      referenceNumber: p.referenceNumber,
-      notes: p.notes,
-      gatewayResponse: p.gatewayResponse,
-    }));
+    const formattedPayments = paginatedPayments.map((p) => {
+      const gwStatus =
+        p.gatewayResponse?.status ||
+        (p.status === MembershipPaymentStatus.PAID
+          ? 'approved'
+          : p.status === MembershipPaymentStatus.REJECTED
+          ? 'rejected'
+          : 'pending');
+      const gwDetail = p.gatewayResponse?.status_detail;
+      const mapped = mapMpStatusDetail(gwStatus, gwDetail);
+
+      return {
+        id: p.id,
+        clubId: p.clubId,
+        clubName: p.club?.name || 'Club desconocido',
+        clubEmail: p.club?.email || '',
+        clubLogo: p.club?.logo || null,
+        clubDistrict: p.club?.district || null,
+        planId: p.planId,
+        planName: p.plan?.name || 'Plan de Membresía',
+        interval: p.plan?.interval || 'MONTHLY',
+        amount: Number(p.amount),
+        currency: p.currency || 'PEN',
+        status: p.status,
+        statusCode: mapped.code,
+        statusLabel: mapped.label,
+        statusDescription: mapped.description,
+        statusDetail: gwDetail || null,
+        mpPaymentId: p.mpPaymentId || null,
+        mpPreferenceId: p.mpPreferenceId || null,
+        mpMerchantOrderId: p.mpMerchantOrderId || null,
+        paymentMethod: p.paymentMethod || 'mercadopago',
+        paymentType: p.paymentType || 'automatic',
+        paidAt: p.paidAt,
+        createdAt: p.createdAt,
+        comprobanteUrl: p.comprobanteUrl,
+        referenceNumber: p.referenceNumber,
+        notes: p.notes,
+        gatewayResponse: p.gatewayResponse,
+      };
+    });
 
     return {
       payments: formattedPayments,

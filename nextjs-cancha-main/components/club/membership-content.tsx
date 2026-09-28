@@ -132,9 +132,13 @@ export function MembershipContent() {
           setIsCheckingPayment(false)
         })
     } else if (paymentQueryParam === "failure") {
-      toast.error("El pago no se pudo completar. Por favor intenta nuevamente.")
+      toast.error("La operación de pago no se completó o fue cancelada. Puedes reintentar cuando desees.")
+      router.replace("/club/membership")
+    } else if (paymentQueryParam === "pending") {
+      toast.info("Tu pago está pendiente o en proceso de acreditación por Mercado Pago.")
+      router.replace("/club/membership")
     }
-  }, [paymentQueryParam, paymentIdParam, refetchMembership, refetchPayments, queryClient])
+  }, [paymentQueryParam, paymentIdParam, refetchMembership, refetchPayments, queryClient, router])
 
   // 5. Mutación para crear preferencia de Mercado Pago
   const checkoutMutation = useMutation({

@@ -166,6 +166,10 @@ export interface AdminMembershipPaymentItem {
   amount: number;
   currency: string;
   status: "PENDING" | "PAID" | "REJECTED" | "REFUNDED";
+  statusCode?: "APRO" | "CONT" | "FUND" | "SECU" | "EXPI" | "FORM" | "CALL" | "OTHE";
+  statusLabel?: string;
+  statusDescription?: string;
+  statusDetail?: string | null;
   mpPaymentId?: string | null;
   mpPreferenceId?: string | null;
   mpMerchantOrderId?: string | null;

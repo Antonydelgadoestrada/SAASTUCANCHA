@@ -51,6 +51,74 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
+const MP_CODE_CONFIG: Record<
+  string,
+  {
+    code: string;
+    label: string;
+    description: string;
+    recommendation: string;
+    badgeClass: string;
+  }
+> = {
+  APRO: {
+    code: "APRO",
+    label: "Pago Aprobado",
+    description: "El abono fue procesado y acreditado con éxito en Mercado Pago.",
+    recommendation: "La membresía del club se encuentra activa y renovada en la plataforma.",
+    badgeClass: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+  },
+  CONT: {
+    code: "CONT",
+    label: "Pendiente de Pago",
+    description: "La transacción está en proceso de validación o el club abandonó la pasarela sin completar el pago.",
+    recommendation: "Si el club canceló en la pasarela, la operación queda registrada como pendiente sin cobro. Si abonó vía transferencia o efectivo, se actualizará al confirmarse.",
+    badgeClass: "bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  },
+  FUND: {
+    code: "FUND",
+    label: "Fondos Insuficientes",
+    description: "Rechazado por saldo insuficiente en la cuenta o límite de crédito alcanzado.",
+    recommendation: "El club debe verificar los fondos de su tarjeta de débito o límite disponible en su tarjeta de crédito.",
+    badgeClass: "bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-500/30",
+  },
+  SECU: {
+    code: "SECU",
+    label: "Código de Seguridad Inválido",
+    description: "El CVV (código de 3 o 4 dígitos de la tarjeta) fue ingresado incorrectamente.",
+    recommendation: "El club debe reintentar el pago ingresando el código de seguridad correcto que figura al reverso de la tarjeta.",
+    badgeClass: "bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-500/30",
+  },
+  EXPI: {
+    code: "EXPI",
+    label: "Tarjeta Vencida",
+    description: "La tarjeta utilizada por el club está vencida o el mes/año fue digitado incorrectamente.",
+    recommendation: "El club debe ingresar una tarjeta vigente y revisar la fecha de vencimiento (MM/AA).",
+    badgeClass: "bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-500/30",
+  },
+  FORM: {
+    code: "FORM",
+    label: "Error de Formulario",
+    description: "Rechazado por datos de formulario incorrectos (número de tarjeta, cuotas, DNI erróneo).",
+    recommendation: "El club debe revisar los 16 dígitos de su tarjeta y los datos ingresados en el formulario de pago.",
+    badgeClass: "bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/30",
+  },
+  CALL: {
+    code: "CALL",
+    label: "Autorización Requerida",
+    description: "El banco emisor retuvo la operación preventiva por seguridad.",
+    recommendation: "El titular de la tarjeta debe llamar a su banco para autorizar el cobro de la membresía y reintentar.",
+    badgeClass: "bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  },
+  OTHE: {
+    code: "OTHE",
+    label: "Rechazo General",
+    description: "Operación rechazada por políticas de seguridad o error general del banco emisor.",
+    recommendation: "Recomendar al club comunicarse con su banco emisor o intentar abonar con otro método de pago.",
+    badgeClass: "bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-500/30",
+  },
+};
+
 export function AdminPaymentsContent() {
   const [payments, setPayments] = useState<AdminMembershipPaymentItem[]>([])
   const [summary, setSummary] = useState<AdminPaymentsSummary>({
@@ -457,19 +525,26 @@ export function AdminPaymentsContent() {
 
                         {/* Estado */}
                         <TableCell>
-                          {isPaid && (
+                          {payment.statusCode && MP_CODE_CONFIG[payment.statusCode] ? (
+                            <Badge className={`${MP_CODE_CONFIG[payment.statusCode].badgeClass} text-xs flex items-center gap-1 font-semibold whitespace-nowrap`}>
+                              {payment.statusCode === "APRO" && <CheckCircle2Icon className="w-3 h-3" />}
+                              {payment.statusCode === "CONT" && <ClockIcon className="w-3 h-3" />}
+                              {["FUND", "SECU", "EXPI", "FORM", "CALL", "OTHE"].includes(payment.statusCode) && (
+                                <XCircleIcon className="w-3 h-3" />
+                              )}
+                              [{payment.statusCode}] {payment.statusLabel || MP_CODE_CONFIG[payment.statusCode].label}
+                            </Badge>
+                          ) : isPaid ? (
                             <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-xs flex items-center gap-1">
                               <CheckCircle2Icon className="w-3 h-3" />
                               Aprobado
                             </Badge>
-                          )}
-                          {isPending && (
+                          ) : isPending ? (
                             <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30 text-xs flex items-center gap-1">
                               <ClockIcon className="w-3 h-3" />
                               Pendiente
                             </Badge>
-                          )}
-                          {isRejected && (
+                          ) : (
                             <Badge variant="destructive" className="text-xs flex items-center gap-1">
                               <XCircleIcon className="w-3 h-3" />
                               Rechazado
@@ -517,14 +592,18 @@ export function AdminPaymentsContent() {
                       Transacción de Membresía
                       <Badge
                         className={
-                          selectedPayment.status === "PAID"
+                          selectedPayment.statusCode && MP_CODE_CONFIG[selectedPayment.statusCode]
+                            ? MP_CODE_CONFIG[selectedPayment.statusCode].badgeClass
+                            : selectedPayment.status === "PAID"
                             ? "bg-emerald-500/20 text-emerald-700 border-emerald-500/30"
                             : selectedPayment.status === "PENDING"
                             ? "bg-amber-500/20 text-amber-700 border-amber-500/30"
                             : "bg-rose-500/20 text-rose-700 border-rose-500/30"
                         }
                       >
-                        {selectedPayment.status}
+                        {selectedPayment.statusCode
+                          ? `[${selectedPayment.statusCode}] ${selectedPayment.statusLabel || selectedPayment.status}`
+                          : selectedPayment.status}
                       </Badge>
                     </DialogTitle>
                     <DialogDescription className="text-xs">
@@ -535,6 +614,63 @@ export function AdminPaymentsContent() {
               </DialogHeader>
 
               <div className="space-y-4 py-2">
+                {/* Diagnóstico de Pasarela y Código de Respuesta Mercado Pago */}
+                {(() => {
+                  const mpCode =
+                    selectedPayment.statusCode ||
+                    (selectedPayment.status === "PAID"
+                      ? "APRO"
+                      : selectedPayment.status === "REJECTED"
+                      ? "OTHE"
+                      : "CONT");
+                  const diag = MP_CODE_CONFIG[mpCode] || {
+                    code: mpCode,
+                    label: selectedPayment.statusLabel || selectedPayment.status,
+                    description: selectedPayment.statusDescription || "Estado registrado en la pasarela.",
+                    recommendation: "Sin acción adicional requerida.",
+                    badgeClass: "bg-muted text-foreground border-border",
+                  };
+                  return (
+                    <Card className="border-2 border-primary/20 bg-primary/5">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                            <CreditCardIcon className="w-4 h-4" />
+                            Diagnóstico de Pasarela (Mercado Pago)
+                          </CardTitle>
+                          <Badge className={`${diag.badgeClass} font-mono font-bold`}>
+                            [{diag.code}] {diag.label}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        <div>
+                          <span className="text-xs text-muted-foreground font-semibold">Explicación del Estado:</span>
+                          <p className="text-foreground text-xs mt-0.5 font-medium">
+                            {selectedPayment.statusDescription || diag.description}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground font-semibold">Acción Recomendada / Próximo Paso:</span>
+                          <p className="text-foreground text-xs mt-0.5">
+                            {diag.recommendation}
+                          </p>
+                        </div>
+                        {selectedPayment.statusDetail && (
+                          <div className="pt-1 border-t border-border/40 text-[11px] text-muted-foreground font-mono">
+                            Código interno MP: <span className="font-semibold text-foreground">{selectedPayment.statusDetail}</span>
+                          </div>
+                        )}
+                        {selectedPayment.notes && (
+                          <div className="pt-1 text-[11px] text-muted-foreground">
+                            Nota de auditoría: <span className="italic">{selectedPayment.notes}</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
                 {/* Desglose principal */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Card className="bg-muted/40 border">
