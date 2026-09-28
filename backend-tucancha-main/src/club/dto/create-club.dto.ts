@@ -132,4 +132,5 @@ export class ClubPublicDto {
   @Expose() trialEndDate?: Date;
   @Expose() createdAt: Date;
   @Expose() updatedAt: Date;
+  @Expose() mpUserId?: string;
 }
