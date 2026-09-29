@@ -73,6 +73,21 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
     toast.success(`Horario marcado como ${statusLabels[newStatus].toLowerCase()}`)
   }
 
+  const getEndTime = (startTime: string) => {
+    const parts = startTime.split(':');
+    if(parts.length !== 2) return startTime;
+    let h = parseInt(parts[0], 10);
+    let m = parseInt(parts[1], 10);
+    m += 30;
+    if (m >= 60) {
+      h += 1;
+      m -= 60;
+    }
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  };
+
+  const displayTime = `${time} - ${getEndTime(time)}`;
+
   if (compact) {
     return (
       <Button
@@ -86,15 +101,15 @@ export function ScheduleTimeSlot({ status, time, date, onStatusChange, compact =
             setIsDialogOpen(true);
           }
         }}
-        title={reservedByName ? `Reservado: ${reservedByName} (${time})` : time}
+        title={reservedByName ? `Reservado: ${reservedByName} (${displayTime})` : displayTime}
       >
         {reservedByName ? (
           <div className="flex flex-col items-center justify-center leading-none px-0.5 overflow-hidden w-full">
-            <span className="text-[10px] font-medium opacity-85 truncate">{time}</span>
+            <span className="text-[10px] font-medium opacity-85 truncate">{displayTime}</span>
             <span className="text-[11px] font-semibold truncate max-w-full">{reservedByName}</span>
           </div>
         ) : (
-          time
+          <span className="text-xs font-medium">{displayTime}</span>
         )}
       </Button>
     )
