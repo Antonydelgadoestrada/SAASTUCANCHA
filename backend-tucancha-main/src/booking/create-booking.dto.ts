@@ -133,5 +133,8 @@ export class CreateManualBookingDto {
   paymentMethod?: string;
 
   @IsOptional()
+  posCommission?: number;
+
+  @IsOptional()
   amountPaid?: number | string;
 }

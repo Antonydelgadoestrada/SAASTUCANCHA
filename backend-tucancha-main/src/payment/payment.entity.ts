@@ -109,6 +109,12 @@ export class Payment {
   @Column({ type: 'float', default: 0, nullable: true })
   saldoAmount?: number;
 
+  @Column({ type: 'float', nullable: true })
+  saldoNetAmount?: number;
+
+  @Column({ type: 'float', nullable: true })
+  saldoFeeAmount?: number;
+
   // Método con el que se cobró el saldo restante (EFECTIVO, YAPE, PLIN, TRANSFERENCIA, MERCADOPAGO)
   @Column({ nullable: true })
   saldoMethod?: string;

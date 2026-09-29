@@ -306,6 +306,7 @@ export class BookingService implements OnModuleInit {
     else if (rawMethod.includes('TRANSFER')) safeMethod = PaymentMethod.TRANSFERENCIA;
     else if (rawMethod.includes('CASH') || rawMethod.includes('EFECTIVO')) safeMethod = PaymentMethod.EFECTIVO;
     else if (rawMethod.includes('MERCADO')) safeMethod = PaymentMethod.MERCADOPAGO;
+    else if (rawMethod === 'POS') safeMethod = PaymentMethod.POS;
 
     // Determinar si es pago completo, adelanto o pendiente
     const rawAmountPaid =
@@ -395,10 +396,19 @@ export class BookingService implements OnModuleInit {
 
       // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
       if (!isUnpaid) {
+        let netAmount = amountPaidPerBooking;
+        let feeAmount = 0;
+        if (safeMethod === PaymentMethod.POS && dto.posCommission) {
+          feeAmount = amountPaidPerBooking * (Number(dto.posCommission) / 100);
+          netAmount = amountPaidPerBooking - feeAmount;
+        }
+
         const payment = this.paymentRepo.create({
           bookings: [savedBooking],
           user: userReservation,
           amount: amountPaidPerBooking,
+          netAmount: Number(netAmount.toFixed(2)),
+          feeAmount: Number(feeAmount.toFixed(2)),
           currency: 'PEN',
           method: safeMethod,
           paymentMethod: safeMethod,

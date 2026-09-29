@@ -171,6 +171,7 @@ export const settlePaymentSaldo = async (
     metodo: PaymentMethodEnum | string
     comprobanteUrl?: string
     notas?: string
+    posCommission?: number
   }
 ): Promise<{ status: string; message: string; payment: PaymentItem }> => {
   const res = await api.patch(`/payments/${paymentId}/settle-saldo`, data)

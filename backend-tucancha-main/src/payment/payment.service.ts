@@ -727,6 +727,7 @@ export class PaymentService {
     let recaudadoPlin = 0;
     let recaudadoTransfer = 0;
     let recaudadoEfectivo = 0;
+    let recaudadoPOS = 0;
     let comprobantesPendientesCount = 0;
     let totalConfirmadosCount = 0;
     let totalRechazadosCount = 0;
@@ -774,23 +775,27 @@ export class PaymentService {
       }
 
       if (isConfirmed) {
-        totalRecaudado += amount;
+        const trueAmount = p.netAmount ?? amount;
+        totalRecaudado += trueAmount;
         totalConfirmadosCount++;
-        if (p.method === PaymentMethod.YAPE) recaudadoYape += amount;
-        else if (p.method === PaymentMethod.PLIN) recaudadoPlin += amount;
-        else if ((p.method as string) === 'TRANSFERENCIA') recaudadoTransfer += amount;
-        else if ((p.method as string) === 'EFECTIVO') recaudadoEfectivo += amount;
-        else recaudadoMercadoPago += amount;
+        if (p.method === PaymentMethod.YAPE) recaudadoYape += trueAmount;
+        else if (p.method === PaymentMethod.PLIN) recaudadoPlin += trueAmount;
+        else if ((p.method as string) === 'TRANSFERENCIA') recaudadoTransfer += trueAmount;
+        else if ((p.method as string) === 'EFECTIVO') recaudadoEfectivo += trueAmount;
+        else if ((p.method as string) === 'POS') recaudadoPOS += trueAmount;
+        else recaudadoMercadoPago += trueAmount;
 
         // Si se cobró saldo restante adicional, sumarlo a recaudación y al método correspondiente
         if (isSaldoPaid && saldoAmount > 0) {
-          totalRecaudado += saldoAmount;
+          const trueSaldo = p.saldoNetAmount ?? saldoAmount;
+          totalRecaudado += trueSaldo;
           const sMethod = (p.saldoMethod || 'EFECTIVO').toUpperCase();
-          if (sMethod.includes('YAPE')) recaudadoYape += saldoAmount;
-          else if (sMethod.includes('PLIN')) recaudadoPlin += saldoAmount;
-          else if (sMethod.includes('TRANSFER')) recaudadoTransfer += saldoAmount;
-          else if (sMethod.includes('EFECTIVO')) recaudadoEfectivo += saldoAmount;
-          else recaudadoMercadoPago += saldoAmount;
+          if (sMethod.includes('YAPE')) recaudadoYape += trueSaldo;
+          else if (sMethod.includes('PLIN')) recaudadoPlin += trueSaldo;
+          else if (sMethod.includes('TRANSFER')) recaudadoTransfer += trueSaldo;
+          else if (sMethod.includes('POS')) recaudadoPOS += trueSaldo;
+          else if (sMethod.includes('EFECTIVO')) recaudadoEfectivo += trueSaldo;
+          else recaudadoMercadoPago += trueSaldo;
         }
       } else if (isPending) {
         comprobantesPendientesCount++;
@@ -836,7 +841,7 @@ export class PaymentService {
       }
     }
 
-    const recaudadoManual = recaudadoYape + recaudadoPlin + recaudadoTransfer + recaudadoEfectivo;
+    const recaudadoManual = recaudadoYape + recaudadoPlin + recaudadoTransfer + recaudadoEfectivo + recaudadoPOS;
 
     return {
       clubId,
@@ -853,6 +858,7 @@ export class PaymentService {
         plin: Number(recaudadoPlin.toFixed(2)),
         transferencia: Number(recaudadoTransfer.toFixed(2)),
         efectivo: Number(recaudadoEfectivo.toFixed(2)),
+        pos: Number(recaudadoPOS.toFixed(2)),
       },
     };
   }
@@ -1603,6 +1609,7 @@ export class PaymentService {
       metodo?: string;
       comprobanteUrl?: string;
       notas?: string;
+      posCommission?: number;
     },
     auditor: User,
   ) {
@@ -1647,12 +1654,22 @@ export class PaymentService {
     if (rawMethod.includes('YAPE')) safeMethod = 'YAPE';
     else if (rawMethod.includes('PLIN')) safeMethod = 'PLIN';
     else if (rawMethod.includes('TRANSFER')) safeMethod = 'TRANSFERENCIA';
-    else if (rawMethod.includes('CARD') || rawMethod.includes('POS') || rawMethod.includes('TARJETA')) safeMethod = 'CARD';
+    else if (rawMethod.includes('CARD') || rawMethod.includes('TARJETA')) safeMethod = 'CARD';
+    else if (rawMethod.includes('POS')) safeMethod = 'POS';
     else if (rawMethod.includes('MERCADO')) safeMethod = 'MERCADOPAGO';
     else safeMethod = 'EFECTIVO';
 
+    let saldoNetAmount = settleAmount;
+    let saldoFeeAmount = 0;
+    if (safeMethod === 'POS' && dto.posCommission) {
+      saldoFeeAmount = settleAmount * (Number(dto.posCommission) / 100);
+      saldoNetAmount = settleAmount - saldoFeeAmount;
+    }
+
     payment.saldoStatus = 'PAGADO';
     payment.saldoAmount = settleAmount;
+    payment.saldoNetAmount = Number(saldoNetAmount.toFixed(2));
+    payment.saldoFeeAmount = Number(saldoFeeAmount.toFixed(2));
     payment.saldoMethod = safeMethod;
     payment.saldoComprobanteUrl = dto.comprobanteUrl || null;
     payment.saldoNotas = dto.notas || null;

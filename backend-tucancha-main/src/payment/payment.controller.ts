@@ -209,7 +209,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     @Patch(':id/settle-saldo')
     async settleSaldoPatch(
       @Param('id') id: string,
-      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string },
+      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string; posCommission?: number },
       @GetUser() user: User,
     ) {
       return this.service.settleManualSaldo(id, dto, user);
@@ -219,7 +219,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     @Post(':id/settle-saldo')
     async settleSaldoPost(
       @Param('id') id: string,
-      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string },
+      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string; posCommission?: number },
       @GetUser() user: User,
     ) {
       return this.service.settleManualSaldo(id, dto, user);
