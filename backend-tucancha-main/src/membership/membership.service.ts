@@ -538,8 +538,10 @@ export class MembershipService implements OnModuleInit {
               unit_price: Number(plan.price),
             },
           ],
-          payer: {
+          metadata: {
             email: club.email,
+            clubId: club.id,
+            paymentId: savedPayment.id,
           },
           external_reference: `membership_${savedPayment.id}`,
           notification_url: `${servicesUrl}/memberships/webhook`,

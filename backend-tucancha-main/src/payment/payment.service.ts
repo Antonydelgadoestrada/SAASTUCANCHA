@@ -267,9 +267,6 @@ export class PaymentService {
           unit_price: Number(finalAmount),
         },
       ],
-      payer: {
-        email: email || undefined,
-      },
       metadata: {
         email,
         bookingId,
@@ -328,9 +325,6 @@ export class PaymentService {
 
     const preferencePayload: any = {
       items,
-      payer: {
-        email: email || undefined,
-      },
       metadata: {
         email,
         bookingIds,

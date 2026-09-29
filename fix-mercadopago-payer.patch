@@ -1,0 +1,40 @@
+diff --git a/backend-tucancha-main/src/membership/membership.service.ts b/backend-tucancha-main/src/membership/membership.service.ts
+index 9d216ef..9c7f12c 100644
+--- a/backend-tucancha-main/src/membership/membership.service.ts
++++ b/backend-tucancha-main/src/membership/membership.service.ts
+@@ -538,8 +538,10 @@ export class MembershipService implements OnModuleInit {
+               unit_price: Number(plan.price),
+             },
+           ],
+-          payer: {
++          metadata: {
+             email: club.email,
++            clubId: club.id,
++            paymentId: savedPayment.id,
+           },
+           external_reference: `membership_${savedPayment.id}`,
+           notification_url: `${servicesUrl}/memberships/webhook`,
+diff --git a/backend-tucancha-main/src/payment/payment.service.ts b/backend-tucancha-main/src/payment/payment.service.ts
+index 1235ba0..21f1806 100644
+--- a/backend-tucancha-main/src/payment/payment.service.ts
++++ b/backend-tucancha-main/src/payment/payment.service.ts
+@@ -267,9 +267,6 @@ export class PaymentService {
+           unit_price: Number(finalAmount),
+         },
+       ],
+-      payer: {
+-        email: email || undefined,
+-      },
+       metadata: {
+         email,
+         bookingId,
+@@ -328,9 +325,6 @@ export class PaymentService {
+ 
+     const preferencePayload: any = {
+       items,
+-      payer: {
+-        email: email || undefined,
+-      },
+       metadata: {
+         email,
+         bookingIds,
