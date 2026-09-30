@@ -116,13 +116,13 @@ export class MembershipService implements OnModuleInit {
   private getWebUrl(): string {
     let raw = (process.env.WEB_SERVICES_URL || '').trim();
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-      raw = process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000';
+      raw = process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000';
     }
     return raw.replace(/\/+$/, '');
   }
 
   private getServicesUrl(): string {
-    let raw = (process.env.SERVICES_URL || '').trim();
+    let raw = (process.env.SERVICES_URL || process.env.RENDER_EXTERNAL_URL || '').trim();
     const domainFlagMatch = raw.match(/--domain=([a-zA-Z0-9.-]+)/);
     if (domainFlagMatch) {
       raw = `https://${domainFlagMatch[1]}`;
@@ -557,8 +557,11 @@ export class MembershipService implements OnModuleInit {
       savedPayment.mpPreferenceId = response.id;
       await this.paymentRepo.save(savedPayment);
 
+      const isSandbox = (mpConfigClient.accessToken || '').startsWith('TEST-') || process.env.MP_SANDBOX === 'true';
+      const finalInitPoint = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : (response.init_point || '');
+
       return {
-        init_point: response.init_point || '',
+        init_point: finalInitPoint,
         preferenceId: response.id || '',
         paymentId: savedPayment.id,
       };

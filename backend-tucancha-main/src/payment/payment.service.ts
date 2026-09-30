@@ -47,13 +47,13 @@ export class PaymentService {
   private getWebUrl(): string {
     let raw = (process.env.WEB_SERVICES_URL || '').trim();
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-      raw = process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000';
+      raw = process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000';
     }
     return raw.replace(/\/+$/, '');
   }
 
   private getServicesUrl(): string {
-    let raw = (process.env.SERVICES_URL || '').trim();
+    let raw = (process.env.SERVICES_URL || process.env.RENDER_EXTERNAL_URL || '').trim();
     const domainFlagMatch = raw.match(/--domain=([a-zA-Z0-9.-]+)/);
     if (domainFlagMatch) {
       raw = `https://${domainFlagMatch[1]}`;
@@ -286,11 +286,14 @@ export class PaymentService {
     //   preferencePayload.marketplace_fee = 5;
     // }
 
-    const { init_point, id: preferenceId } = await preferenceClient.create({
+    const response: any = await preferenceClient.create({
       body: preferencePayload,
     });
 
-    return { init_point, preferenceId };
+    const isSandbox = mpAccessToken.startsWith('TEST-') || process.env.MP_SANDBOX === 'true';
+    const finalInitPoint = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : (response.init_point || '');
+
+    return { init_point: finalInitPoint, preferenceId: response.id };
   }
 
   async confirmPreferenceMulti(bookings: Booking[]) {
@@ -343,11 +346,14 @@ export class PaymentService {
     //   preferencePayload.marketplace_fee = 5;
     // }
 
-    const { init_point, id: preferenceId } = await preferenceClient.create({
+    const response: any = await preferenceClient.create({
       body: preferencePayload,
     });
 
-    return { init_point, preferenceId };
+    const isSandbox = mpAccessToken.startsWith('TEST-') || process.env.MP_SANDBOX === 'true';
+    const finalInitPoint = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : (response.init_point || '');
+
+    return { init_point: finalInitPoint, preferenceId: response.id };
   }
 
   async handleMercadoPagoWebhook(query: any, body?: any) {

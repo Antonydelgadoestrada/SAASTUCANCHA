@@ -22,8 +22,8 @@ export class MercadoPagoService {
     quantity: number;
     unit_price: number;
   }) {
-    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000')).replace(/\/+$/, '');
-    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001')).replace(/\/+$/, '');
+    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000')).replace(/\/+$/, '');
+    const servicesUrl = (process.env.SERVICES_URL || process.env.RENDER_EXTERNAL_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001')).replace(/\/+$/, '');
 
     const preference = {
       items: [
@@ -47,9 +47,12 @@ export class MercadoPagoService {
     };
 
     const response = await this.preference.create({ body: preference });
+    const isSandbox = (process.env.MP_ACCESS_TOKEN || '').startsWith('TEST-') || process.env.MP_SANDBOX === 'true';
+    const init_point = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : response.init_point;
+
     return {
       id: response.id,
-      init_point: response.init_point,
+      init_point,
     };
   }
 }
