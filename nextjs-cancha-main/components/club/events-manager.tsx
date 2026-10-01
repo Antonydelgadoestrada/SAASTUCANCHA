@@ -629,7 +629,7 @@ export function EventsManager({
             </div>
             <div>
               <Label className="text-sm font-medium mb-2 block">Fecha Límite (Opcional)</Label>
-              <Popover>
+              <Popover modal={true}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -690,7 +690,7 @@ export function EventsManager({
             </div>
             <div>
               <Label className="text-sm font-medium mb-2 block">Fecha Límite (Opcional)</Label>
-              <Popover>
+              <Popover modal={true}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -727,7 +727,7 @@ export function EventsManager({
           <div className="space-y-4">
             <div>
               <Label className="text-sm font-medium mb-2 block">Fechas específicas</Label>
-              <Popover>
+              <Popover modal={true}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
