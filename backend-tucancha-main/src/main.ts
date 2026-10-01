@@ -17,6 +17,7 @@ async function bootstrap() {
     const corsOrigins = process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
       : [
+          'https://saastucancha.vercel.app',
           'https://tucancha.com.pe',
           'https://www.tucancha.com.pe',
           process.env.WEB_SERVICES_URL,
