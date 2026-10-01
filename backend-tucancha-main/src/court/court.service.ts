@@ -300,14 +300,18 @@ export class CourtService {
         const latitude = parseFloat(lat);
         const longitude = parseFloat(lng);
   
+        qb.andWhere(`club.coordinates IS NOT NULL AND club.coordinates->>'lat' IS NOT NULL AND club.coordinates->>'lng' IS NOT NULL`);
+        
         qb.andWhere(`
           (
             6371 * acos(
-              cos(radians(:lat)) *
-              cos(radians((club.coordinates->>'lat')::float)) *
-              cos(radians((club.coordinates->>'lng')::float) - radians(:lng)) +
-              sin(radians(:lat)) *
-              sin(radians((club.coordinates->>'lat')::float))
+              LEAST(1.0, GREATEST(-1.0, 
+                cos(radians(:lat)) *
+                cos(radians((club.coordinates->>'lat')::float)) *
+                cos(radians((club.coordinates->>'lng')::float) - radians(:lng)) +
+                sin(radians(:lat)) *
+                sin(radians((club.coordinates->>'lat')::float))
+              ))
             )
           ) <= :radius
         `, { lat: latitude, lng: longitude, radius: radiusKm });
@@ -315,11 +319,13 @@ export class CourtService {
         qb.addOrderBy(`
           (
             6371 * acos(
-              cos(radians(:lat)) *
-              cos(radians((club.coordinates->>'lat')::float)) *
-              cos(radians((club.coordinates->>'lng')::float) - radians(:lng)) +
-              sin(radians(:lat)) *
-              sin(radians((club.coordinates->>'lat')::float))
+              LEAST(1.0, GREATEST(-1.0, 
+                cos(radians(:lat)) *
+                cos(radians((club.coordinates->>'lat')::float)) *
+                cos(radians((club.coordinates->>'lng')::float) - radians(:lng)) +
+                sin(radians(:lat)) *
+                sin(radians((club.coordinates->>'lat')::float))
+              ))
             )
           )
         `, "ASC");
