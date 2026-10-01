@@ -421,6 +421,13 @@ export class PaymentService {
         return { received: true, error: 'no_external_reference' };
       }
 
+      if (externalRef.startsWith('membership_')) {
+        console.log(`🎟️ [Webhook MP] Delegando pago de membresía ID ${paymentId} a MembershipService`);
+        await this.membershipService.handleMembershipWebhook(query, body);
+        return { received: true, membership: true };
+      }
+
+
       // 3. Extraer datos financieros y método de pago
       const totalPagado = mpPayment.transaction_amount ?? 0;
       const netoVendedor = mpPayment.transaction_details?.net_received_amount ?? 0;
