@@ -492,7 +492,7 @@ export class BookingService implements OnModuleInit {
           await manager.save(Booking, savedBooking);
 
           // Inyectar al Libro de Transacciones (Ojo: llamando al servicio inyectado)
-          this.transactionsService.recordFromManualPayment(savedPayment, savedBooking, false).catch(() => {});
+          this.transactionsService.recordFromManualReservationPayment(savedPayment, savedBooking, userReservation.id).catch(() => {});
         }
 
         createdBookings.push(savedBooking);

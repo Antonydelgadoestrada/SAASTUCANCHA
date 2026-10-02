@@ -18,6 +18,7 @@ import { MailerService } from '../mailer/mailer.service';
 import { Booking } from '../booking/booking.entity';
 import { S3Service } from '../aws/s3.service';
 import { CourtService } from '../court/court.service';
+import { TransactionsService } from '../transactions/transactions.service';
 
 @Injectable()
 export class PaymentService {
@@ -32,6 +33,7 @@ export class PaymentService {
     private readonly scheduleTemplateService: ScheduleTemplateService,
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
+    private readonly transactionsService: TransactionsService,
   ) {
     this.mercadopago = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN})
   }
@@ -448,6 +450,14 @@ export class PaymentService {
         console.error(`⚠️ Error al enviar correos de confirmación: ${mailErr.message}`);
       }
   
+      if (status === 'approved' || status === 'authorized') {
+        for (const bk of updatedBookings) {
+          if (bk.payment) {
+            this.transactionsService.recordFromMercadoPago(bk.payment, bk).catch(() => {});
+          }
+        }
+      }
+
       console.log(`✅ Webhook procesado correctamente con idempotencia para booking ${updatedBookings[0].id}`);
     } catch (error) {
       console.error(`Error al procesar webhook para ID ${paymentId}:`, error);
@@ -1146,6 +1156,9 @@ export class PaymentService {
     }
     await this.bookingRepo.save(booking);
 
+    // Inyectar al Libro de Transacciones
+    this.transactionsService.recordVoucherSubmitted(savedPayment, booking, isSaldoPayment).catch(() => {});
+
     // Retener slots en calendario
     if (booking.court && booking.court.id && booking.date && booking.startTime) {
       try {
@@ -1354,6 +1367,11 @@ export class PaymentService {
 
     const saved = await this.paymentRepo.save(payment);
 
+    // Inyectar al Libro de Transacciones (Audit Voucher)
+    if (saved.bookings && saved.bookings.length > 0) {
+      this.transactionsService.recordVoucherReviewed(saved, action, auditor.id, saved.bookings[0], false).catch(() => {});
+    }
+
     // Disparar notificaciones por correo de auditoría finalizada (sin bloquear el response)
     try {
       if (saved.bookings && saved.bookings.length > 0) {
@@ -1433,6 +1451,10 @@ export class PaymentService {
 
     const saved = await this.paymentRepo.save(payment);
 
+    // Inyectar al Libro de Transacciones (Audit Voucher Saldo)
+    if (saved.bookings && saved.bookings.length > 0) {
+      this.transactionsService.recordVoucherReviewed(saved, action, auditor.id, saved.bookings[0], true).catch(() => {});
+    }
     return {
       status: saved.saldoStatus,
       message: action === 'CONFIRMAR'
@@ -1518,6 +1540,11 @@ export class PaymentService {
     }
 
     const saved = await this.paymentRepo.save(payment);
+
+    // Inyectar al Libro de Transacciones (Saldo)
+    if (saved.bookings && saved.bookings.length > 0) {
+      this.transactionsService.recordBalancePayment(saved, saved.bookings[0], auditor.id).catch(() => {});
+    }
 
     return {
       status: 'PAGADO',
