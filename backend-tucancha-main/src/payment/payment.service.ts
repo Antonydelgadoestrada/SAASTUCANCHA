@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, Brackets } from 'typeorm';
 import { Payment, PaymentType } from './payment.entity';
@@ -19,6 +19,7 @@ import { Booking } from '../booking/booking.entity';
 import { S3Service } from '../aws/s3.service';
 import { CourtService } from '../court/court.service';
 import { TransactionsService } from '../transactions/transactions.service';
+import { MembershipService } from '../membership/membership.service';
 
 @Injectable()
 export class PaymentService {
@@ -34,6 +35,8 @@ export class PaymentService {
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
     private readonly transactionsService: TransactionsService,
+    @Inject(forwardRef(() => MembershipService))
+    private readonly membershipService: MembershipService,
   ) {
     this.mercadopago = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN})
   }
@@ -264,9 +267,9 @@ export class PaymentService {
   
     return { init_point };
   }
-  
-  async handleMercadoPagoWebhook(query: any) {
-    const { type, 'data.id': paymentId, clubId } = query;
+  async handleMercadoPagoWebhook(query: any, body?: any) {
+    const { type, 'data.id': paymentIdQuery, clubId } = query;
+    const paymentId = paymentIdQuery || query?.id || body?.data?.id || body?.id;
   
     if (type !== 'payment' || !paymentId) {
       return;

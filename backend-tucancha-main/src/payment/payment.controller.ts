@@ -84,8 +84,8 @@ import { memoryStorage, File as MulterFile } from 'multer';
     }
     
     @Post('webhook')
-    async webhook(@Query() query: any) {
-      await this.service.handleMercadoPagoWebhook(query);
+    async webhook(@Query() query: any, @Body() body: any) {
+      await this.service.handleMercadoPagoWebhook(query, body);
       return { received: true };
     }
     @UseGuards(JwtAuthGuard)
