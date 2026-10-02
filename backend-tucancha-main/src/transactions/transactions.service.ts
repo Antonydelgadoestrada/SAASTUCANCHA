@@ -36,7 +36,7 @@ export class TransactionsService {
       const category = isAdvance ? TransactionCategory.RESERVATION_ADVANCE : TransactionCategory.RESERVATION_FULL;
       
       await this.upsertTransaction('RESERVATION', `${booking.id}:MP`, {
-        clubId: booking.club.id || booking.club,
+        clubId: booking?.club?.id || booking?.club,
         reservationId: booking.id,
         occurredAt: new Date(),
         direction: TransactionDirection.IN,
@@ -73,7 +73,7 @@ export class TransactionsService {
       const grossAmount = isSaldo ? (payment.saldoAmount || 0) : payment.amount;
 
       await this.upsertTransaction('RESERVATION', sourceId, {
-        clubId: booking.club.id || booking.club,
+        clubId: booking?.club?.id || booking?.club,
         reservationId: booking.id,
         submittedAt: new Date(),
         direction: TransactionDirection.IN,
@@ -143,7 +143,7 @@ export class TransactionsService {
       const category = isAdvance ? TransactionCategory.RESERVATION_ADVANCE : TransactionCategory.RESERVATION_FULL;
 
       await this.upsertTransaction('RESERVATION', `${booking.id}:MANUAL`, {
-        clubId: booking.club.id || booking.club,
+        clubId: booking?.club?.id || booking?.club,
         reservationId: booking.id,
         occurredAt: new Date(),
         direction: TransactionDirection.IN,
@@ -175,7 +175,7 @@ export class TransactionsService {
       const paidAccumulated = (payment.amount || 0) + payment.saldoAmount;
 
       await this.upsertTransaction('RESERVATION', `${booking.id}:SALDO_MANUAL`, {
-        clubId: booking.club.id || booking.club,
+        clubId: booking?.club?.id || booking?.club,
         reservationId: booking.id,
         occurredAt: new Date(),
         direction: TransactionDirection.IN,

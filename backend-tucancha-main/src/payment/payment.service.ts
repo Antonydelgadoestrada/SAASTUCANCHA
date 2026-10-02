@@ -1214,7 +1214,7 @@ export class PaymentService {
   private async findOrCreatePaymentForAudit(paymentId: string): Promise<Payment> {
     let payment = await this.paymentRepo.findOne({
       where: { id: paymentId },
-      relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
+      relations: ['bookings', 'bookings.user', 'bookings.court', 'bookings.club', 'user'],
     });
     if (!payment) {
       const booking = await this.bookingRepo.findOne({
@@ -1225,7 +1225,7 @@ export class PaymentService {
         if (booking.payment) {
           payment = await this.paymentRepo.findOne({
             where: { id: booking.payment.id },
-            relations: ['bookings', 'bookings.user', 'bookings.court', 'user'],
+            relations: ['bookings', 'bookings.user', 'bookings.court', 'bookings.club', 'user'],
           });
         }
         if (!payment) {
