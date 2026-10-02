@@ -13,7 +13,8 @@ import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { GooglePlacesAutocomplete } from "@/components/google-places-autocomplete"
+import dynamic from 'next/dynamic'
+const GooglePlacesAutocomplete = dynamic(() => import('@/components/google-places-autocomplete').then(mod => mod.GooglePlacesAutocomplete), { ssr: false })
 import { cn } from "@/lib/utils"
 import { sportTypes, timeSlots } from "@/lib/sports"
 import { toast } from "sonner"

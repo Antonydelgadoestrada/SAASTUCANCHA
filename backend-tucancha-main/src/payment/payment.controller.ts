@@ -8,13 +8,13 @@ import {
     Param,
     Body,
     NotFoundException,
-    ForbiddenException,
     Query,
     Res,
     Req,
     UseGuards,
     UseInterceptors,
     UploadedFile,
+    UnauthorizedException,
   } from '@nestjs/common';
   import { PaymentService } from './payment.service';
   import { Payment } from './payment.entity';
@@ -22,7 +22,6 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../user/user.entity';
-import { UserRole } from '../user/user-role.enum';
 import { GetUser } from '../auth/get-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, File as MulterFile } from 'multer';
@@ -30,16 +29,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
   @Controller('payments')
   export class PaymentController {
     constructor(private readonly service: PaymentService) {}
-  
     @UseGuards(JwtAuthGuard)
     @Get()
     findAll(@GetUser() user: User): Promise<Payment[]> {
-      if (user.role !== UserRole.ADMIN && user.role !== UserRole.CLUB) {
-        throw new ForbiddenException('No tienes permisos para listar todos los pagos');
-      }
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.findAll();
     }
-
     // payments.controller.ts
     @Get('oauth/callback')
     async handleOAuthCallback(
@@ -47,8 +42,8 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Query('state') clubId: string,
       @Res() res: Response
     ) {
-     const result = await this.service.handleOauthCallback(code, clubId);
-     return res.redirect(result.redirect);
+     const result = await  this.service.handleOauthCallback(code, clubId)
+     return res.redirect(result.redirect)
     }
 
     @UseGuards(JwtAuthGuard)
@@ -57,7 +52,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: any,
       @GetUser() user: User
     ) {
-      return this.service.createPreference(dto, user);
+      return this.service.createPreference(dto,user)
     }
 
     @UseGuards(JwtAuthGuard)
@@ -66,12 +61,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: any,
       @GetUser() user: User
     ) {
-      return this.service.confirmPayment(dto);
+      return this.service.confirmPayment(dto)
     }
 
     @Cron('0 0 2 * * *') // A las 2:00 AM todos los días
     async updateTokens() {
-      return this.service.updateToken();
+      return this.service.updateToken()
     }
 
     @Get('authorize')
@@ -88,63 +83,38 @@ import { memoryStorage, File as MulterFile } from 'multer';
       return res.json({ url });
     }
     
-    @Get('webhook')
-    async webhookPing() {
-      return { status: 'ok', service: 'MercadoPago Webhook', timestamp: new Date().toISOString() };
-    }
-
     @Post('webhook')
-    async webhook(@Query() query: any, @Body() body: any) {
-      return await this.service.handleMercadoPagoWebhook(query, body);
+    async webhook(@Query() query: any) {
+      await this.service.handleMercadoPagoWebhook(query);
+      return { received: true };
     }
-
-    /**
-     * POST /payments/verify
-     * Verificación y sincronización en tiempo real llamada desde la pantalla de éxito
-     */
-    @Post('verify')
-    async verifyPayment(
-      @Body() dto: { paymentId: string; externalReference?: string },
-      @Req() req: any,
-    ) {
-      return this.service.verifyPayment(dto, req.user);
-    }
-  
     @UseGuards(JwtAuthGuard)
     @Post()
     create(@Body() data: Partial<Payment>, @GetUser() user: User) {
-      if (user.role !== UserRole.ADMIN) {
-        throw new ForbiddenException('Solo administradores pueden crear pagos manualmente');
-      }
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.create(data);
     }
 
     @UseGuards(JwtAuthGuard)
     @Get(':id')
     async findOne(@Param('id') id: string, @GetUser() user: User): Promise<Payment> {
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       const payment = await this.service.findOne(id);
       if (!payment) throw new NotFoundException('Payment not found');
       return payment;
     }
-  
     @UseGuards(JwtAuthGuard)
     @Put(':id')
     update(@Param('id') id: string, @Body() data: Partial<Payment>, @GetUser() user: User) {
-      if (user.role !== UserRole.ADMIN) {
-        throw new ForbiddenException('Solo administradores pueden modificar pagos');
-      }
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.update(id, data);
     }
-  
     @UseGuards(JwtAuthGuard)
     @Delete(':id')
     remove(@Param('id') id: string, @GetUser() user: User) {
-      if (user.role !== UserRole.ADMIN) {
-        throw new ForbiddenException('Solo administradores pueden eliminar pagos');
-      }
+      if (user.role !== 'ADMIN') throw new UnauthorizedException('Solo administradores pueden acceder a este recurso');
       return this.service.remove(id);
     }
-
 
     // ─── ENDPOINTS DEL CLUB (Métricas, Lista, Auditoría, Comprobante) ─────
 
@@ -209,7 +179,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     @Patch(':id/settle-saldo')
     async settleSaldoPatch(
       @Param('id') id: string,
-      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string; posCommission?: number },
+      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string },
       @GetUser() user: User,
     ) {
       return this.service.settleManualSaldo(id, dto, user);
@@ -219,7 +189,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     @Post(':id/settle-saldo')
     async settleSaldoPost(
       @Param('id') id: string,
-      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string; posCommission?: number },
+      @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string },
       @GetUser() user: User,
     ) {
       return this.service.settleManualSaldo(id, dto, user);

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Booking } from './booking.entity';
 import { Repository } from 'typeorm';
@@ -234,7 +234,10 @@ export class BookingService implements OnModuleInit {
     };
     
     let datesToProcess = dto.dates && dto.dates.length > 0 ? dto.dates : [dto.date];
-    let createdBookings = [];
+    
+    // 1. Validar disponibilidad de todas las fechas primero (Falla rápido)
+    const allBookingsToCreate = [];
+    const allSlotsPayload = [];
 
     for (const date of datesToProcess) {
       if (!date) continue;
@@ -245,14 +248,52 @@ export class BookingService implements OnModuleInit {
       let booking = await this.createObjectBooking(currentDto, user);
       booking = Object.assign(booking, statusManual);
       
-      const saveBooking = await this.bookingRepo.create(booking);
-      const result = await this.bookingRepo.save(saveBooking);
+      allBookingsToCreate.push(booking);
       
       slots = slots.map((slot) => (Object.assign(slot, { status: 'on-hold' })));
-      await this.scheduleTemplateService.bulkUpdate(slots);
-      
-      createdBookings.push(result);
+      allSlotsPayload.push(...slots);
     }
+
+    // 2. Guardar todo atómicamente en una sola transacción
+    let createdBookings = [];
+    await this.bookingRepo.manager.transaction(async (manager) => {
+      // Guardar reservas
+      for (const bookingData of allBookingsToCreate) {
+        const saveBooking = manager.create(Booking, bookingData);
+        try {
+          const result = await manager.save(saveBooking);
+          createdBookings.push(result);
+        } catch (error: any) {
+          if (error.code === '23505') {
+            throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+          }
+          throw error;
+        }
+      }
+
+      // Actualizar slots (Equivalente inline de bulkUpdate para usar el mismo manager)
+      for (const slot of allSlotsPayload) {
+        if (slot.id) {
+          await manager.update('CourtScheduleAvailability', slot.id, { status: slot.status });
+        } else {
+          const existing: any = await manager.findOne('CourtScheduleAvailability', {
+            where: { courtId: slot.courtId, date: slot.date, time: slot.time },
+          });
+          if (existing) {
+            await manager.update('CourtScheduleAvailability', existing.id, { status: slot.status });
+          } else {
+            const newSlot = manager.create('CourtScheduleAvailability', {
+              courtId: slot.courtId,
+              date: slot.date,
+              time: slot.time,
+              status: slot.status,
+              templateId: slot.templateId,
+            });
+            await manager.save(newSlot);
+          }
+        }
+      }
+    });
 
     if (createdBookings.length > 0) {
       try {
@@ -263,8 +304,6 @@ export class BookingService implements OnModuleInit {
       }
     }
     
-    // Si solo hay una, retornamos el objeto para no romper flujos que esperen un solo objeto
-    // Si hay multiples, retornamos el array
     return createdBookings.length === 1 ? createdBookings[0] : createdBookings;
  }
 
@@ -372,9 +411,14 @@ export class BookingService implements OnModuleInit {
       }
     }
 
+    // 1. Validar disponibilidad de todas las fechas primero (Falla rápido)
+    const allBookingsToCreate = [];
+    const allSlotsPayload = [];
+
     for (let currentdate of datesToBook) {
       let slots = await this.checkAvailability(dto.courtId, currentdate, dto.startTime, parsedDuration);
-      const booking = this.bookingRepo.create({
+      
+      const bookingData = {
         user: userReservation,
         court,
         club: user.club || court.club,
@@ -393,45 +437,90 @@ export class BookingService implements OnModuleInit {
         paymentMethod: safeMethod.toLowerCase(),
         paymentStatus: initialPaymentStatus,
         bookingReference: `REF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      });
-      const savedBooking = await this.bookingRepo.save(booking);
+      };
 
-      // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
-      if (!isUnpaid) {
-        let netAmount = amountPaidPerBooking;
-        let feeAmount = 0;
-        if (safeMethod === PaymentMethod.POS && dto.posCommission) {
-          feeAmount = amountPaidPerBooking * (Number(dto.posCommission) / 100);
-          netAmount = amountPaidPerBooking - feeAmount;
+      allBookingsToCreate.push(bookingData);
+
+      slots = slots.map((slot) => Object.assign(slot, { status: isUnpaid ? 'on-hold' : 'occupied' }));
+      allSlotsPayload.push(...slots);
+    }
+
+    // 2. Guardar todo atómicamente en una sola transacción
+    await this.bookingRepo.manager.transaction(async (manager) => {
+      // Guardar reservas y pagos
+      for (let i = 0; i < allBookingsToCreate.length; i++) {
+        const bookingData = allBookingsToCreate[i];
+        const saveBooking = manager.create(Booking, bookingData);
+        let savedBooking;
+        try {
+          savedBooking = await manager.save(Booking, saveBooking);
+        } catch (error: any) {
+          if (error.code === '23505') {
+            throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+          }
+          throw error;
         }
 
-        const payment = this.paymentRepo.create({
-          bookings: [savedBooking],
-          user: userReservation,
-          amount: amountPaidPerBooking,
-          netAmount: Number(netAmount.toFixed(2)),
-          feeAmount: Number(feeAmount.toFixed(2)),
-          currency: 'PEN',
-          method: safeMethod,
-          paymentMethod: safeMethod,
-          status: PaymentStatus.PAID,
-          type: isFullPaid ? PaymentType.PAGO_COMPLETO : PaymentType.ADELANTO,
-          saldoStatus: isFullPaid ? 'NO_APLICA' : 'PENDIENTE',
-          saldoAmount: isFullPaid ? 0 : Math.max(0, Number((singleTotalPrice - amountPaidPerBooking).toFixed(2))),
-          pendingAudit: false,
-          confirmadoPor: user,
-          fechaConfirmacion: new Date(),
-        });
-        const savedPayment = await this.paymentRepo.save(payment);
-        savedBooking.payment = savedPayment;
-        await this.bookingRepo.save(savedBooking);
+        // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
+        if (!isUnpaid) {
+          let netAmount = amountPaidPerBooking;
+          let feeAmount = 0;
+          if (safeMethod === PaymentMethod.POS && dto.posCommission) {
+            feeAmount = amountPaidPerBooking * (Number(dto.posCommission) / 100);
+            netAmount = amountPaidPerBooking - feeAmount;
+          }
+
+          const paymentData = manager.create(Payment, {
+            bookings: [savedBooking],
+            user: userReservation,
+            amount: amountPaidPerBooking,
+            netAmount: Number(netAmount.toFixed(2)),
+            feeAmount: Number(feeAmount.toFixed(2)),
+            currency: 'PEN',
+            method: safeMethod,
+            paymentMethod: safeMethod,
+            status: PaymentStatus.PAID,
+            type: isFullPaid ? PaymentType.PAGO_COMPLETO : PaymentType.ADELANTO,
+            saldoStatus: isFullPaid ? 'NO_APLICA' : 'PENDIENTE',
+            saldoAmount: isFullPaid ? 0 : Math.max(0, Number((singleTotalPrice - amountPaidPerBooking).toFixed(2))),
+            pendingAudit: false,
+            confirmadoPor: user,
+            fechaConfirmacion: new Date(),
+          });
+          const savedPayment = await manager.save(Payment, paymentData);
+          savedBooking.payment = savedPayment;
+          await manager.save(Booking, savedBooking);
+
+          // Inyectar al Libro de Transacciones (Ojo: llamando al servicio inyectado)
+          this.transactionsService.recordFromManualPayment(savedPayment, savedBooking, false).catch(() => {});
+        }
+
+        createdBookings.push(savedBooking);
       }
 
-      // Ocupar o retener slots en el calendario
-      slots = slots.map((slot) => Object.assign(slot, { status: isUnpaid ? 'on-hold' : 'occupied' }));
-      await this.scheduleTemplateService.bulkUpdate(slots);
-      createdBookings.push(savedBooking);
-    }
+      // Actualizar slots (Equivalente inline de bulkUpdate para usar el mismo manager)
+      for (const slot of allSlotsPayload) {
+        if (slot.id) {
+          await manager.update('CourtScheduleAvailability', slot.id, { status: slot.status });
+        } else {
+          const existing: any = await manager.findOne('CourtScheduleAvailability', {
+            where: { courtId: slot.courtId, date: slot.date, time: slot.time },
+          });
+          if (existing) {
+            await manager.update('CourtScheduleAvailability', existing.id, { status: slot.status });
+          } else {
+            const newSlot = manager.create('CourtScheduleAvailability', {
+              courtId: slot.courtId,
+              date: slot.date,
+              time: slot.time,
+              status: slot.status,
+              templateId: slot.templateId,
+            });
+            await manager.save(newSlot);
+          }
+        }
+      }
+    });
 
     // Despachar notificaciones correspondientes
     for (const b of createdBookings) {
@@ -477,7 +566,14 @@ export class BookingService implements OnModuleInit {
       bookingReference: `REF-${Date.now()}`,
     });
 
-    await this.bookingRepo.save(booking);
+    try {
+      await this.bookingRepo.save(booking);
+    } catch (error: any) {
+      if (error.code === '23505') {
+        throw new ConflictException(`El horario de las ${dto.startTime} acaba de ser reservado. Por favor, selecciona otro.`);
+      }
+      throw error;
+    }
 
     slots = slots.map((slot) => Object.assign(slot, { status: 'on-hold' }));
     await this.scheduleTemplateService.bulkUpdate(slots);
@@ -724,19 +820,25 @@ export class BookingService implements OnModuleInit {
       if (!dayOfWeekOccurrences[d]) dayOfWeekOccurrences[d] = 1;
     }
 
-    // 3. Buscar todas las reservas del club en el rango de fechas y canchas seleccionadas
-    let bookings: Booking[] = [];
+    // 3. Buscar todas las reservas del club en el rango de fechas y canchas seleccionadas (optimizado)
+    let rawBookings: any[] = [];
     if (filteredCourtIds.length > 0) {
       const bookingQuery = this.bookingRepo
         .createQueryBuilder('booking')
-        .leftJoinAndSelect('booking.court', 'court')
+        .leftJoin('booking.court', 'court')
         .leftJoin('booking.club', 'club')
+        .select([
+          'booking.date AS date',
+          'booking.startTime AS starttime',
+          'booking.duration AS duration',
+          'booking.pricing AS pricing',
+        ])
         .where('club.id = :clubId', { clubId })
         .andWhere('booking.date BETWEEN :startDate AND :endDate', { startDate, endDate })
         .andWhere('booking.status != :cancelled', { cancelled: 'cancelled' })
         .andWhere('court.id IN (:...filteredCourtIds)', { filteredCourtIds });
 
-      bookings = await bookingQuery.getMany();
+      rawBookings = await bookingQuery.getRawMany();
     }
 
     // 4. Inicializar Matriz 7 Días x 18 Horas (06:00 a 23:00)
@@ -781,17 +883,24 @@ export class BookingService implements OnModuleInit {
       }
     }
 
-    // 5. Poblar la matriz con las reservas reales
-    for (const b of bookings) {
+    // 5. Poblar la matriz con las reservas reales (procesando crudos)
+    for (const b of rawBookings) {
       const bDate = new Date(b.date);
       const utcDate = new Date(bDate.getUTCFullYear(), bDate.getUTCMonth(), bDate.getUTCDate());
       const dayOfWeek = utcDate.getDay();
 
       if (!matrix[dayOfWeek]) continue;
 
-      const startH = b.startTime ? parseInt(b.startTime.split(':')[0], 10) : 0;
+      const startH = b.starttime ? parseInt(b.starttime.split(':')[0], 10) : 0;
       const duration = b.duration ? Number(b.duration) : 1;
-      const totalPrice = Number(b.pricing?.totalPrice ?? (b as any).price ?? 0);
+      
+      let pricingObj: any = {};
+      if (typeof b.pricing === 'string') {
+        try { pricingObj = JSON.parse(b.pricing); } catch (e) {}
+      } else if (typeof b.pricing === 'object') {
+        pricingObj = b.pricing;
+      }
+      const totalPrice = Number(pricingObj?.totalPrice ?? b.price ?? 0);
       const revenuePerHour = duration > 0 ? totalPrice / duration : totalPrice;
 
       for (let h = startH; h < startH + duration; h++) {
@@ -1006,7 +1115,7 @@ export class BookingService implements OnModuleInit {
         totalDeadHours: deadHoursCount,
         totalPeakHours: peakHoursCount,
         estimatedRevenueGain,
-        totalBookingsEvaluated: bookings.length,
+        totalBookingsEvaluated: rawBookings.length,
         courtCount,
       },
       deadBlocks: deadBlocks.slice(0, 8),

@@ -85,6 +85,7 @@ export class ScheduleTemplateService {
       return this.findOne(id);
     }
     await this.templateRepo.update(id, patch as Partial<ScheduleTemplate>);
+    this.courtsService.invalidateTemplateCache(id);
     return this.findOne(id);
   }
   
