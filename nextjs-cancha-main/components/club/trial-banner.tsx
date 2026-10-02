@@ -46,7 +46,8 @@ export function TrialBanner() {
           setClubStatus(club?.status)
 
           if (club && club.trialEndDate) {
-            const diffTime = new Date(club.trialEndDate).getTime() - Date.now()
+            const serverDate = club.serverTime ? new Date(club.serverTime) : new Date()
+            const diffTime = new Date(club.trialEndDate).getTime() - serverDate.getTime()
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
             setTrialDaysLeft(diffDays >= 0 ? diffDays : 0)
           }

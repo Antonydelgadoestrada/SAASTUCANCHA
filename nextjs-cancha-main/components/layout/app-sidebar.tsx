@@ -81,7 +81,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   const isTrialActive = Boolean(
     clubData?.trialEndDate &&
-    new Date(clubData.trialEndDate) > new Date() &&
+    new Date(clubData.trialEndDate) > (clubData?.serverTime ? new Date(clubData.serverTime) : new Date()) &&
     clubData.status === "APPROVED"
   )
 
