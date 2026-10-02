@@ -984,6 +984,28 @@ export function EventsManager({
           </DialogHeader>
           <div className="space-y-6">
             <div className="space-y-4">
+              {(!eventCourtId || courts.length > 1) && !editingEventId && (
+                <div>
+                  <Label className="text-sm font-medium">Selecciona la cancha para el evento *</Label>
+                  <Select value={eventCourtId} onValueChange={setEventCourtId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una cancha" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {courts.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                          {c.venue?.name ? ` — ${c.venue.name}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!eventCourtId && (
+                    <p className="text-xs text-red-500 mt-1">Debes seleccionar una cancha para ver los horarios disponibles.</p>
+                  )}
+                </div>
+              )}
+              
               <div>
                 <Label htmlFor="nombre">Nombre del evento *</Label>
                 <Input
