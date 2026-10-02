@@ -9,6 +9,7 @@ import { FeaturedCourtDto } from './court.dto';
 import { ScheduleTemplate } from '../schedule/schedule_template.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
 import { ScheduleTemplateService } from '../schedule/schedule-template.service';
+import { CourtScheduleEventService } from '../schedule/court-schedule-event.service';
 
 @Injectable()
 export class CourtService {
@@ -24,6 +25,8 @@ export class CourtService {
     private readonly s3Service: S3Service,
     @Inject(forwardRef(() => ScheduleTemplateService))
     private readonly scheduleTemplateService: ScheduleTemplateService,
+    @Inject(forwardRef(() => CourtScheduleEventService))
+    private readonly courtScheduleEventService: CourtScheduleEventService,
   ) {}
 
   private async getFirstTemplateIdByClubId(clubId: string): Promise<string | null> {
@@ -420,6 +423,30 @@ export class CourtService {
         (court as any).availabilities = virtualSlots;
         return court;
       });
+
+      // Expandir eventos para cada cancha y fusionar
+      await Promise.all(courtsWithVirtual.map(async (court) => {
+        try {
+          const expandedEvents = await this.courtScheduleEventService.expandForCourt(court.id, targetDate, targetDate);
+          if (expandedEvents && expandedEvents.length > 0) {
+            for (const ev of expandedEvents) {
+              const targetSlot = (court as any).availabilities.find((s: any) => s.date === ev.date && s.time === ev.time);
+              if (targetSlot) {
+                targetSlot.status = 'event';
+              } else {
+                (court as any).availabilities.push({
+                  courtId: court.id,
+                  date: ev.date,
+                  time: ev.time,
+                  status: 'event'
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`Error fetching events for court ${court.id} in getAllCourtsByQuery`, e);
+        }
+      }));
   
       let transformed = this.transformCourts(courtsWithVirtual);
 
