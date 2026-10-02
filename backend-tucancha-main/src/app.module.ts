@@ -16,6 +16,7 @@ import { ScheduleCalendarModule } from './schedule/schedule.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { QrModule } from './qr/qr.module';
 import { MembershipModule } from './membership/membership.module';
+import { TransactionsModule } from './transactions/transactions.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -51,7 +52,8 @@ import { MembershipModule } from './membership/membership.module';
     UserModule, BookingModule, ClubModule, CourtModule, 
     PaymentModule, ReviewModule, PromotionModule, AuthModule, 
     MailerModule, ScheduleCalendarModule, QrModule,
-    MembershipModule
+    MembershipModule,
+    TransactionsModule
   ],
   controllers: [AppController],
   providers: [AppService],

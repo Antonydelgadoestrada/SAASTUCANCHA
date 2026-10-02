@@ -13,6 +13,7 @@ import { UserModule } from '../user/user.module';
 import { AwsModule } from '../aws/aws.module';
 import { MailerModule } from '../mailer/mailer.module';
 import { Payment } from '../payment/payment.entity';
+import { TransactionsModule } from '../transactions/transactions.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { Payment } from '../payment/payment.entity';
     AwsModule, 
     MailerModule,
     UserModule, 
+    TransactionsModule,
   ],
   providers: [BookingService, BookingCronService],
   controllers: [BookingController],

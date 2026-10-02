@@ -20,6 +20,7 @@ import { Booking } from '../booking/booking.entity';
 import { S3Service } from '../aws/s3.service';
 import { CourtService } from '../court/court.service';
 import { MembershipService } from '../membership/membership.service';
+import { TransactionsService } from '../transactions/transactions.service';
 
 @Injectable()
 export class PaymentService {
@@ -38,6 +39,7 @@ export class PaymentService {
     private readonly s3Service: S3Service,
     @Inject(forwardRef(() => MembershipService))
     private readonly membershipService: MembershipService,
+    private readonly transactionsService: TransactionsService,
   ) {
     this.mercadopago = new MercadoPagoConfig({
       accessToken: process.env.MP_ACCESS_TOKEN || '',
@@ -623,6 +625,14 @@ export class PaymentService {
           }
         } catch (mailErr: any) {
           console.error(`⚠️ Error al enviar correos de cancelación: ${mailErr.message}`);
+        }
+      }
+      
+      if (targetPaymentStatus === PaymentStatus.PAID) {
+        for (const bk of updatedBookings) {
+          if (bk.payment) {
+            this.transactionsService.recordFromMercadoPago(bk.payment, bk).catch(() => {});
+          }
         }
       }
 
@@ -1303,6 +1313,10 @@ export class PaymentService {
     }
     await this.bookingRepo.save(booking);
 
+    // Inyectar al Libro de Transacciones
+    this.transactionsService.recordVoucherSubmitted(savedPayment, booking, isSaldoPayment).catch(() => {});
+
+
     // Retener slots en calendario
     if (booking.court && booking.court.id && booking.date && booking.startTime) {
       try {
@@ -1510,6 +1524,11 @@ export class PaymentService {
     }
 
     const saved = await this.paymentRepo.save(payment);
+    
+    // Inyectar al Libro de Transacciones
+    if (saved.bookings && saved.bookings.length > 0) {
+      this.transactionsService.recordVoucherReviewed(saved, action, auditor.id, saved.bookings[0], false).catch(() => {});
+    }
 
     // Disparar notificaciones por correo de auditoría finalizada (sin bloquear el response)
     try {
@@ -1589,6 +1608,11 @@ export class PaymentService {
     }
 
     const saved = await this.paymentRepo.save(payment);
+    
+    // Inyectar al Libro de Transacciones
+    if (saved.bookings && saved.bookings.length > 0) {
+      this.transactionsService.recordVoucherReviewed(saved, action, auditor.id, saved.bookings[0], true).catch(() => {});
+    }
 
     return {
       status: saved.saldoStatus,
@@ -1686,6 +1710,11 @@ export class PaymentService {
     }
 
     const saved = await this.paymentRepo.save(payment);
+    
+    // Inyectar al Libro de Transacciones
+    if (saved.bookings && saved.bookings.length > 0) {
+      this.transactionsService.recordBalancePayment(saved, saved.bookings[0], auditor.id).catch(() => {});
+    }
 
     return {
       status: 'PAGADO',

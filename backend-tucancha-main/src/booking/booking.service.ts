@@ -20,6 +20,7 @@ import { MailerService } from '../mailer/mailer.service';
 import { isNight } from '../helpers/helpers';
 import { Payment, PaymentType } from '../payment/payment.entity';
 import { PaymentMethod } from '../payment/payment-method.enum';
+import { TransactionsService } from '../transactions/transactions.service';
 
 function generateTimeSlots(start: string, duration: number): string[] {
   const [hours, minutes] = start.split(':').map(Number);
@@ -66,6 +67,7 @@ export class BookingService implements OnModuleInit {
 
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async onModuleInit() {
