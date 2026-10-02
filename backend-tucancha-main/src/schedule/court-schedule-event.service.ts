@@ -3,6 +3,8 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -42,6 +44,7 @@ export class CourtScheduleEventService {
   constructor(
     @InjectRepository(CourtScheduleEvent)
     private readonly eventRepo: Repository<CourtScheduleEvent>,
+    @Inject(forwardRef(() => CourtService))
     private readonly courtService: CourtService,
   ) {}
 
