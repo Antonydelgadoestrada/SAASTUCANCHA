@@ -116,10 +116,11 @@ import { UpdateClubPaymentConfigDto } from './dto/update-club-payment-config.dto
     }
   
     @Get(':id')
-    async findOne(@Param('id') id: string): Promise<ClubPublicDto> {
+    async findOne(@Param('id') id: string): Promise<any> {
       const club = await this.service.findOne(id);
       if (!club) throw new NotFoundException('Club not found');
-      return plainToInstance(ClubPublicDto, club, { excludeExtraneousValues: true });
+      const dto = plainToInstance(ClubPublicDto, club, { excludeExtraneousValues: true });
+      return { ...dto, serverTime: new Date() };
     }
 
     @UseGuards(JwtAuthGuard)

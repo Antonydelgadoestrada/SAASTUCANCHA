@@ -81,7 +81,7 @@ export class MembershipController {
       throw new ForbiddenException('Club no disponible para este usuario');
     }
     const membership = await this.membershipService.getClubActiveMembership(user.club.id);
-    return { membership };
+    return { membership, serverTime: new Date() };
   }
 
   // Historial de membresías del club
