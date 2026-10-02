@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, Not, IsNull } from 'typeorm';
 import { Payment, PaymentType } from './payment.entity';
 import { PaymentStatus } from './payment-status.enum';
 import { BookingStatus } from '../booking/booking-status.enum';
@@ -378,27 +378,49 @@ export class PaymentService {
 
       // 2. Obtener datos del pago desde la API de Mercado Pago con fallback resiliente
       let mpPayment: any = null;
-      // Intento 1: Con token de plataforma
+      // Intento 1: Con token maestro de plataforma
       try {
         mpPayment = await new PaymentMp(this.mercadopago).get({ id: String(paymentId) });
       } catch (errPlat: any) {
         console.warn(`[Webhook MP] Consulta con token maestro falló para ID ${paymentId}: ${errPlat.message}. Intentando token del Club...`);
       }
 
-      // Intento 2: Con token del Club si viene user_id (collector) en el webhook
-      if (!mpPayment && body?.user_id) {
-        const clubCollector = await this.clubRepo.findOne({ where: { mpUserId: String(body.user_id) } });
+      // Intento 2: Con token del Club si viene user_id (collector) en query o body
+      const collectorUserId = body?.user_id || query?.user_id || query?.['user_id'];
+      if (!mpPayment && collectorUserId) {
+        const clubCollector = await this.clubRepo.findOne({ where: { mpUserId: String(collectorUserId) } });
         if (clubCollector?.mpAccessToken) {
           try {
             const clubClient = new MercadoPagoConfig({ accessToken: clubCollector.mpAccessToken });
             mpPayment = await new PaymentMp(clubClient).get({ id: String(paymentId) });
           } catch (errClub: any) {
-            console.warn(`[Webhook MP] Consulta con token de club collector falló: ${errClub.message}`);
+            console.warn(`[Webhook MP] Consulta con token de club collector (${collectorUserId}) falló: ${errClub.message}`);
           }
         }
       }
 
-      // Intento 3: Con token del Club del pago existente si estaba precargado
+      // Intento 3: Con token del Club derivado de external_reference
+      const externalRefHint = query?.external_reference || body?.external_reference || body?.data?.external_reference;
+      if (!mpPayment && externalRefHint) {
+        const bookingIds = String(externalRefHint).split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (bookingIds.length > 0 && !bookingIds[0].startsWith('membership_')) {
+          try {
+            const refBooking = await this.bookingRepo.findOne({
+              where: { id: bookingIds[0] },
+              relations: ['club', 'court', 'court.club'],
+            });
+            const clubToken = refBooking?.club?.mpAccessToken || refBooking?.court?.club?.mpAccessToken;
+            if (clubToken && clubToken !== process.env.MP_ACCESS_TOKEN) {
+              const clubClient = new MercadoPagoConfig({ accessToken: clubToken });
+              mpPayment = await new PaymentMp(clubClient).get({ id: String(paymentId) });
+            }
+          } catch (errRef: any) {
+            console.warn(`[Webhook MP] Consulta con token de club por external_reference falló: ${errRef.message}`);
+          }
+        }
+      }
+
+      // Intento 4: Con token del Club del pago existente si estaba precargado
       if (!mpPayment && existingPayment?.bookings?.[0]?.club?.mpAccessToken) {
         try {
           const clubClient = new MercadoPagoConfig({ accessToken: existingPayment.bookings[0].club.mpAccessToken });
@@ -408,12 +430,33 @@ export class PaymentService {
         }
       }
 
+      // Intento 5: Fallback recorriendo los clubes con credenciales de Mercado Pago guardadas
+      if (!mpPayment) {
+        try {
+          const clubsWithTokens = await this.clubRepo.find({
+            where: { mpAccessToken: Not(IsNull()) },
+          });
+          for (const club of clubsWithTokens) {
+            if (club.mpAccessToken && club.mpAccessToken !== process.env.MP_ACCESS_TOKEN) {
+              try {
+                const cClient = new MercadoPagoConfig({ accessToken: club.mpAccessToken });
+                const found = await new PaymentMp(cClient).get({ id: String(paymentId) });
+                if (found) {
+                  mpPayment = found;
+                  break;
+                }
+              } catch (errC: any) {}
+            }
+          }
+        } catch (errClubsSearch: any) {}
+      }
+
       if (!mpPayment) {
         console.error(`❌ [Webhook MP] Imposible obtener datos del pago ${paymentId} desde Mercado Pago.`);
         return { received: true, error: 'payment_not_retrievable' };
       }
 
-      const externalRef = mpPayment.external_reference;
+      const externalRef = mpPayment.external_reference || externalRefHint;
       const status = mpPayment.status;
 
       if (!externalRef) {
@@ -644,12 +687,15 @@ export class PaymentService {
   /**
    * Endpoint de sincronización y verificación inmediata llamado al retornar de Mercado Pago
    */
-  async verifyPayment(dto: { paymentId: string; externalReference?: string }, user?: User) {
-    const { paymentId, externalReference } = dto;
+  async verifyPayment(dto: { paymentId: string; externalReference?: string; status?: string }, user?: User) {
+    const { paymentId, externalReference, status } = dto;
     if (!paymentId) throw new BadRequestException('Se requiere paymentId');
 
-    // Procesar con la lógica del webhook de forma sincrónica
-    await this.handleMercadoPagoWebhook({ id: paymentId }, { data: { id: paymentId } });
+    // Procesar con la lógica del webhook de forma sincrónica con externalReference y status
+    await this.handleMercadoPagoWebhook(
+      { id: paymentId, external_reference: externalReference, status },
+      { data: { id: paymentId }, external_reference: externalReference, status },
+    );
 
     // Consultar el estado actualizado en la BD
     let booking: Booking | null = null;
@@ -665,7 +711,58 @@ export class PaymentService {
       booking = payment?.bookings?.[0] || null;
     }
 
-    const isPaid = booking?.paymentStatus === PaymentStatus.PAID;
+    // Fallback de confirmación directa si el webhook no pudo consultar MP API pero MP ya redirigió con approved
+    let isPaid = booking?.paymentStatus === PaymentStatus.PAID;
+    if (!isPaid && (status === 'approved' || status === 'paid') && booking) {
+      console.log(`ℹ️ [verifyPayment] Confirmando reserva ${booking.id} directamente desde redirección con status approved`);
+      booking.paymentStatus = PaymentStatus.PAID;
+      booking.status = BookingStatus.CONFIRMED;
+      await this.bookingRepo.save(booking);
+      isPaid = true;
+
+      // Registrar o actualizar entidad Payment
+      let paymentRecord = await this.paymentRepo.findOne({
+        where: { transactionId: String(paymentId) },
+      });
+      if (!paymentRecord) {
+        paymentRecord = this.paymentRepo.create({
+          transactionId: String(paymentId),
+          status: PaymentStatus.PAID,
+          amount: Number(booking.pricing?.totalPrice ?? 0),
+          currency: 'PEN',
+          method: PaymentMethod.MERCADOPAGO,
+          type: PaymentType.PAGO_COMPLETO,
+          bookings: [booking],
+          user: booking.user,
+        });
+        await this.paymentRepo.save(paymentRecord);
+      } else if (paymentRecord.status !== PaymentStatus.PAID) {
+        paymentRecord.status = PaymentStatus.PAID;
+        await this.paymentRepo.save(paymentRecord);
+      }
+
+      // Ocupar slot en calendario
+      if (booking.court?.id) {
+        await this.generateSlotOccupied(
+          booking.court.id,
+          booking.date,
+          booking.startTime,
+          booking.duration,
+        );
+      }
+
+      // Notificaciones por correo
+      try {
+        const emailDestino = booking.customerInfo?.email || booking.user?.email;
+        if (emailDestino) {
+          await this.mailerService.sendBookingConfirmationEmail(emailDestino, booking);
+          await this.mailerService.sendBookingPaidNotifications(booking);
+        }
+      } catch (mailErr: any) {
+        console.warn('⚠️ Error enviando emails en verifyPayment:', mailErr?.message);
+      }
+    }
+
     return {
       success: isPaid,
       status: booking?.paymentStatus || 'pending',

@@ -233,7 +233,7 @@ export function PaymentSettingsTab() {
         })
       } else {
         toast.error("No se pudo completar la conexión con Mercado Pago", {
-          description: "Revisa la configuración o intenta de nuevo.",
+          description: decodeURIComponent(mpError) || "Revisa la configuración o intenta de nuevo.",
         })
       }
       window.history.replaceState({}, document.title, window.location.pathname)

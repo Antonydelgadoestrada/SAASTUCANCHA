@@ -33,6 +33,7 @@ function PaymentSuccessContent() {
         const result = await verifyPayment({
           paymentId: String(paymentId),
           externalReference: externalReference || undefined,
+          status: status || undefined,
         })
         if (isMounted) {
           setVerificationResult(result)

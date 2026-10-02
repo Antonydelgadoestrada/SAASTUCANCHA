@@ -16,7 +16,7 @@ export const confirmPayment= async(data:any)=>{
     return result.data 
 }
 
-export const verifyPayment = async(data: { paymentId: string; externalReference?: string })=>{
+export const verifyPayment = async(data: { paymentId: string; externalReference?: string; status?: string })=>{
     const result = await api.post("/payments/verify", data);
     return result.data;
 }
