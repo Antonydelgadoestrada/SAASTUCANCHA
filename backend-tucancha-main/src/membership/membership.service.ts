@@ -480,7 +480,7 @@ export class MembershipService implements OnModuleInit {
 
   /**
    * Crea una preferencia de pago en Mercado Pago para la membresía del club.
-   * El cobro va directamente a la cuenta del dueño de la plataforma.
+   * Aplica reglas estrictas de Sandbox para Perú (Checkout Pro).
    */
   async createMembershipPreference(
     clubId: string,
@@ -513,9 +513,26 @@ export class MembershipService implements OnModuleInit {
     });
     const savedPayment = await this.paymentRepo.save(payment);
 
-    // 2. Crear la preferencia de Mercado Pago con credenciales de la plataforma
-    const { client: mpConfigClient } = await this.getActivePlatformMercadoPagoConfig();
+    // 4. Inicializar SDK leyendo Access Token desde variables de entorno
+    const accessToken =
+      process.env.MP_ACCESS_TOKEN ||
+      (await this.getActivePlatformMercadoPagoConfig()).accessToken ||
+      '';
+
+    if (!accessToken) {
+      throw new BadRequestException(
+        'Falta configurar MP_ACCESS_TOKEN en las variables de entorno del servidor',
+      );
+    }
+
+    const mpConfigClient = new MercadoPagoConfig({ accessToken });
     const preferenceClient = new Preference(mpConfigClient);
+
+    const isSandbox =
+      accessToken.startsWith('TEST-') ||
+      process.env.MP_SANDBOX === 'true' ||
+      process.env.NODE_ENV !== 'production';
+
     const intervalLabel =
       plan.interval === BillingInterval.ANNUAL
         ? 'Anual'
@@ -526,21 +543,43 @@ export class MembershipService implements OnModuleInit {
     const webUrl = this.getWebUrl();
     const servicesUrl = this.getServicesUrl();
 
+    // 1. Nodo payer obligatorio con email de prueba válido
+    // En Sandbox de Mercado Pago, el pagador nunca puede ser el mismo usuario vendedor
+    const testPayerEmail =
+      process.env.MP_TEST_PAYER_EMAIL ||
+      (club.email && club.email.includes('testuser.com') ? club.email : 'test_user_123@testuser.com');
+
+    const payerEmail = isSandbox ? testPayerEmail : (club.email || testPayerEmail);
+
+    // 2. Items con unit_price y quantity estrictamente como números
+    const unitPriceNumber = Number(Number(plan.price).toFixed(2));
+    const quantityNumber = 1;
+
+    // 3. Nodo back_urls con success, failure y pending, y auto_return: "approved"
+    const backUrls = {
+      success: `${webUrl}/club/membership?payment=success&payment_id=${savedPayment.id}`,
+      failure: `${webUrl}/club/membership?payment=failure&payment_id=${savedPayment.id}`,
+      pending: `${webUrl}/club/membership?payment=pending&payment_id=${savedPayment.id}`,
+    };
 
     try {
       const response = await preferenceClient.create({
         body: {
           items: [
             {
-              id: plan.id,
+              id: String(plan.id),
               title: `Membresía ${plan.name} (${intervalLabel}) - ${club.name}`,
               description: `Suscripción ${intervalLabel} a la plataforma TuCancha para el club ${club.name}`,
-              quantity: 1,
+              quantity: quantityNumber,
               category_id: 'services',
               currency_id: plan.currency || 'PEN',
-              unit_price: Number(plan.price),
+              unit_price: unitPriceNumber,
             },
           ],
+          payer: {
+            email: payerEmail,
+            name: club.name || 'Usuario Club',
+          },
           metadata: {
             email: club.email,
             clubId: club.id,
@@ -548,11 +587,7 @@ export class MembershipService implements OnModuleInit {
           },
           external_reference: `membership_${savedPayment.id}`,
           notification_url: `${servicesUrl}/memberships/webhook`,
-          back_urls: {
-            success: `${webUrl}/club/membership?payment=success&payment_id=${savedPayment.id}`,
-            failure: `${webUrl}/club/membership?payment=failure&payment_id=${savedPayment.id}`,
-            pending: `${webUrl}/club/membership?payment=pending&payment_id=${savedPayment.id}`,
-          },
+          back_urls: backUrls,
           auto_return: 'approved',
         },
       });
@@ -560,18 +595,20 @@ export class MembershipService implements OnModuleInit {
       savedPayment.mpPreferenceId = response.id;
       await this.paymentRepo.save(savedPayment);
 
-      const isSandbox = (mpConfigClient.accessToken || '').startsWith('TEST-') || process.env.MP_SANDBOX === 'true';
-      const finalInitPoint = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : (response.init_point || '');
+      const finalInitPoint =
+        (isSandbox && response.sandbox_init_point)
+          ? response.sandbox_init_point
+          : (response.init_point || response.sandbox_init_point || '');
 
       return {
         init_point: finalInitPoint,
         preferenceId: response.id || '',
         paymentId: savedPayment.id,
       };
-    } catch (error) {
-      console.error('Error al crear preferencia de membresía en Mercado Pago:', error);
+    } catch (error: any) {
+      console.error('Error al crear preferencia de membresía en Mercado Pago:', error?.response?.data || error?.message || error);
       throw new BadRequestException(
-        `Error al comunicarse con Mercado Pago: ${error?.message || error}`,
+        `Error al comunicarse con Mercado Pago: ${error?.response?.data?.message || error?.message || error}`,
       );
     }
   }

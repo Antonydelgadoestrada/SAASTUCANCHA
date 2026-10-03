@@ -168,10 +168,10 @@ export class PaymentService {
   }
 
   async confirmPreference(booking: Booking, customAmount?: number){
-    if (!booking.club || !booking.club.mpAccessToken) {
-      throw new BadRequestException('El club no tiene Mercado Pago conectado');
+    const mpAccessToken = booking.club?.mpAccessToken || process.env.MP_ACCESS_TOKEN;
+    if (!mpAccessToken) {
+      throw new BadRequestException('El club no tiene Mercado Pago conectado y no se encontró token por defecto');
     }
-    const mpAccessToken = booking.club.mpAccessToken;
     const finalAmount = customAmount && customAmount > 0 ? customAmount : (booking.pricing?.totalPrice ?? 0);
     const isSaldo = customAmount && booking.pricing?.totalPrice && customAmount < booking.pricing.totalPrice;
     const title = isSaldo
@@ -179,6 +179,20 @@ export class PaymentService {
       : `Reserva en ${booking.court?.name || "Cancha"}`;
     const bookingId = booking.id;
     const email = booking.user?.email || "";
+
+    const isSandbox =
+      mpAccessToken.startsWith('TEST-') ||
+      process.env.MP_SANDBOX === 'true' ||
+      process.env.NODE_ENV !== 'production';
+
+    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000')).replace(/\/+$/, '');
+    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.onrender.com' : 'http://localhost:3001')).replace(/\/+$/, '');
+
+    const testPayerEmail =
+      process.env.MP_TEST_PAYER_EMAIL ||
+      (email && email.includes('testuser.com') ? email : 'test_user_123@testuser.com');
+    const payerEmail = isSandbox ? testPayerEmail : (email || testPayerEmail);
+
     // 2. Crear una instancia temporal de MercadoPago con el token del club
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
@@ -186,51 +200,65 @@ export class PaymentService {
   
     // 3. Crear la preferencia de pago
     const preferenceClient = new Preference(client);
-    const { init_point } = await preferenceClient.create({
+    const response = await preferenceClient.create({
       body: {
         items: [
           {
-            id: booking.court?.id || "court",
+            id: String(booking.court?.id || "court"),
             title: title,
             description: `Club: ${booking.club?.name || ""} | fecha: ${booking.date} | Superficie: ${booking.court?.surface || ""} | Duracion: ${booking.startTime}-${booking.endTime}`,
             quantity: 1,
             category_id: 'services',
             currency_id: 'PEN',
-            unit_price: finalAmount,
+            unit_price: Number(Number(finalAmount).toFixed(2)),
           },
         ],
         payer: {
-          email: email,
+          email: payerEmail,
         },
         metadata: {
-          email
+          email: payerEmail,
         },
         back_urls: {
-          success: `${process.env.WEB_SERVICES_URL}/user/payments/success`,
-          failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
-          pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
+          success: `${webUrl}/user/payments/success`,
+          failure: `${webUrl}/user/payments/failure`,
+          pending: `${webUrl}/user/payments/pending`,
         },
-        notification_url: `${process.env.SERVICES_URL}/payments/webhook?clubId=${booking.club?.id}`,
-        // auto_return: 'approved',
+        notification_url: `${servicesUrl}/payments/webhook?clubId=${booking.club?.id}`,
+        auto_return: 'approved',
         external_reference: `${bookingId}`,
         marketplace_fee: 5, // 💰 comisión
       },
     });
   
+    const finalInitPoint = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : (response.init_point || response.sandbox_init_point);
     // 4. Retornar el enlace
-    return { init_point };
+    return { init_point: finalInitPoint };
   }
   
   async confirmPreferenceMulti(bookings: Booking[]) {
     if (!bookings.length) throw new BadRequestException('No hay reservas creadas');
     const firstBooking = bookings[0];
-    if (!firstBooking.club || !firstBooking.club.mpAccessToken) {
-      throw new BadRequestException('El club no tiene Mercado Pago conectado');
+    const mpAccessToken = firstBooking.club?.mpAccessToken || process.env.MP_ACCESS_TOKEN;
+    if (!mpAccessToken) {
+      throw new BadRequestException('El club no tiene Mercado Pago conectado y no se encontró token por defecto');
     }
     
-    const mpAccessToken = firstBooking.club.mpAccessToken;
-    const email = firstBooking.user.email;
+    const email = firstBooking.user?.email || "";
     const bookingIds = bookings.map(b => b.id).join(',');
+
+    const isSandbox =
+      mpAccessToken.startsWith('TEST-') ||
+      process.env.MP_SANDBOX === 'true' ||
+      process.env.NODE_ENV !== 'production';
+
+    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000')).replace(/\/+$/, '');
+    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.onrender.com' : 'http://localhost:3001')).replace(/\/+$/, '');
+
+    const testPayerEmail =
+      process.env.MP_TEST_PAYER_EMAIL ||
+      (email && email.includes('testuser.com') ? email : 'test_user_123@testuser.com');
+    const payerEmail = isSandbox ? testPayerEmail : (email || testPayerEmail);
     
     const client = new MercadoPagoConfig({
       accessToken: mpAccessToken,
@@ -239,36 +267,38 @@ export class PaymentService {
     
     // Generar un item por cada reserva
     const items = bookings.map(b => ({
-      id: b.court.id,
-      title: `Reserva en ${b.court.name}`,
-      description: `Club: ${b.club.name} | fecha: ${b.date} | Superficie: ${b.court.surface} | Duracion: ${b.startTime}-${b.endTime}`,
+      id: String(b.court?.id || "court"),
+      title: `Reserva en ${b.court?.name || "Cancha"}`,
+      description: `Club: ${b.club?.name || ""} | fecha: ${b.date} | Superficie: ${b.court?.surface || ""} | Duracion: ${b.startTime}-${b.endTime}`,
       quantity: 1,
       category_id: 'services',
       currency_id: 'PEN',
-      unit_price: b.pricing.totalPrice,
+      unit_price: Number(Number(b.pricing?.totalPrice || 0).toFixed(2)),
     }));
     
-    const { init_point } = await preferenceClient.create({
+    const response = await preferenceClient.create({
       body: {
         items: items,
         payer: {
-          email: email,
+          email: payerEmail,
         },
         metadata: {
-          email
+          email: payerEmail,
         },
         back_urls: {
-          success: `${process.env.WEB_SERVICES_URL}/user/payments/success`,
-          failure: `${process.env.WEB_SERVICES_URL}/user/payments/failure`,
-          pending: `${process.env.WEB_SERVICES_URL}/user/payments/pending`,
+          success: `${webUrl}/user/payments/success`,
+          failure: `${webUrl}/user/payments/failure`,
+          pending: `${webUrl}/user/payments/pending`,
         },
-        notification_url: `${process.env.SERVICES_URL}/payments/webhook?clubId=${firstBooking.club?.id}`,
+        notification_url: `${servicesUrl}/payments/webhook?clubId=${firstBooking.club?.id}`,
+        auto_return: 'approved',
         external_reference: bookingIds, // Pasamos la lista de IDs separados por coma
         marketplace_fee: 5,
       },
     });
   
-    return { init_point };
+    const finalInitPoint = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : (response.init_point || response.sandbox_init_point);
+    return { init_point: finalInitPoint };
   }
   async handleMercadoPagoWebhook(query: any, body?: any) {
     const { type, 'data.id': paymentIdQuery, clubId } = query;
