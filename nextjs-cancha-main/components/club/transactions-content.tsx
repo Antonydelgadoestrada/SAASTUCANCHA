@@ -19,19 +19,26 @@ export function TransactionsContent() {
   const [page, setPage] = useState(1)
   const [dateStr, setDateStr] = useState<string>("")
   const limit = 10
+  const [statusFilter, setStatusFilter] = useState<string>("ALL")
+  const [methodFilter, setMethodFilter] = useState<string>("ALL")
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL")
 
   // Si hay fecha seleccionada, filtramos desde las 00:00 hasta las 23:59 de ese día local (convertimos a ISO)
   const startDate = dateStr ? new Date(`${dateStr}T00:00:00`).toISOString() : undefined
   const endDate = dateStr ? new Date(`${dateStr}T23:59:59`).toISOString() : undefined
 
+  const activeStatus = statusFilter === 'ALL' ? undefined : statusFilter
+  const activeMethod = methodFilter === 'ALL' ? undefined : methodFilter
+  const activeCategory = categoryFilter === 'ALL' ? undefined : categoryFilter
+
   const { data: metricsData, isLoading: isLoadingMetrics } = useQuery({
-    queryKey: ['transaction-metrics', startDate, endDate],
-    queryFn: () => getTransactionMetrics(startDate, endDate),
+    queryKey: ['transaction-metrics', startDate, endDate, activeMethod, activeCategory],
+    queryFn: () => getTransactionMetrics(startDate, endDate, activeMethod, activeCategory),
   })
 
   const { data: txData, isLoading } = useQuery({
-    queryKey: ['transactions', page, limit, startDate, endDate],
-    queryFn: () => getTransactions(page, limit, startDate, endDate),
+    queryKey: ['transactions', page, limit, startDate, endDate, activeStatus, activeMethod, activeCategory],
+    queryFn: () => getTransactions(page, limit, startDate, endDate, activeStatus, activeMethod, activeCategory),
   })
 
   const getStatusBadge = (status: string) => {
@@ -106,25 +113,65 @@ export function TransactionsContent() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <CardHeader className="flex flex-col gap-4 pb-4">
           <div>
             <CardTitle>Historial de Movimientos</CardTitle>
             <CardDescription>Visualiza y filtra todas las transacciones generadas en tu club.</CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por fecha:</span>
-            <Input 
-              type="date" 
-              value={dateStr}
-              onChange={(e) => {
-                setDateStr(e.target.value)
-                setPage(1) // reset page when filter changes
-              }}
-              className="w-[160px]"
-            />
-            {dateStr && (
-              <Button variant="ghost" size="sm" onClick={() => setDateStr("")} className="text-xs">
-                Limpiar
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Fecha:</span>
+              <Input 
+                type="date" 
+                value={dateStr}
+                onChange={(e) => { setDateStr(e.target.value); setPage(1); }}
+                className="w-[140px] h-9"
+              />
+            </div>
+            
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos (Estado)</SelectItem>
+                <SelectItem value="APPROVED">Aprobados</SelectItem>
+                <SelectItem value="PENDING">Pendientes</SelectItem>
+                <SelectItem value="REJECTED">Rechazados</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={methodFilter} onValueChange={(v) => { setMethodFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Método" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos (Método)</SelectItem>
+                <SelectItem value="MERCADOPAGO">Mercado Pago</SelectItem>
+                <SelectItem value="YAPE">Yape</SelectItem>
+                <SelectItem value="PLIN">Plin</SelectItem>
+                <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+                <SelectItem value="CASH">Efectivo</SelectItem>
+                <SelectItem value="POS">POS</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Concepto" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos (Concepto)</SelectItem>
+                <SelectItem value="RESERVATION_FULL">Reserva (Completo)</SelectItem>
+                <SelectItem value="RESERVATION_ADVANCE">Reserva (Adelanto)</SelectItem>
+                <SelectItem value="RESERVATION_BALANCE">Reserva (Saldo)</SelectItem>
+                <SelectItem value="MEMBERSHIP_PAYMENT">Membresía</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {(dateStr || statusFilter !== 'ALL' || methodFilter !== 'ALL' || categoryFilter !== 'ALL') && (
+              <Button variant="ghost" size="sm" onClick={() => {
+                setDateStr("");
+                setStatusFilter("ALL");
+                setMethodFilter("ALL");
+                setCategoryFilter("ALL");
+                setPage(1);
+              }} className="text-xs h-9">
+                Limpiar Filtros
               </Button>
             )}
           </div>

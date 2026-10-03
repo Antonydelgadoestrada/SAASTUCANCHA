@@ -232,7 +232,7 @@ export class TransactionsService {
      // Optional refund implementation
   }
 
-  async findAllByClub(clubId: string, page: number = 1, limit: number = 10, startDate?: string, endDate?: string) {
+  async findAllByClub(clubId: string, page: number = 1, limit: number = 10, startDate?: string, endDate?: string, status?: string, paymentMethod?: string, category?: string) {
     const query = this.transactionRepo.createQueryBuilder('tx')
       .where('tx.clubId = :clubId', { clubId });
 
@@ -241,6 +241,15 @@ export class TransactionsService {
     }
     if (endDate) {
       query.andWhere('(tx.occurredAt <= :endDate OR (tx.occurredAt IS NULL AND tx.submittedAt <= :endDate))', { endDate });
+    }
+    if (status) {
+      query.andWhere('tx.status = :status', { status });
+    }
+    if (paymentMethod) {
+      query.andWhere('tx.paymentMethod = :paymentMethod', { paymentMethod });
+    }
+    if (category) {
+      query.andWhere('tx.category = :category', { category });
     }
 
     query.orderBy('tx.occurredAt', 'DESC', 'NULLS LAST')
@@ -259,7 +268,7 @@ export class TransactionsService {
     };
   }
 
-  async getMetrics(clubId: string, startDate?: string, endDate?: string) {
+  async getMetrics(clubId: string, startDate?: string, endDate?: string, paymentMethod?: string, category?: string) {
     const query = this.transactionRepo.createQueryBuilder('tx')
       .select('SUM(tx.netAmount)', 'totalIngresosNetos')
       .addSelect('SUM(tx.grossAmount)', 'totalIngresosBrutos')
@@ -273,6 +282,12 @@ export class TransactionsService {
     }
     if (endDate) {
       query.andWhere('tx.occurredAt <= :endDate', { endDate });
+    }
+    if (paymentMethod) {
+      query.andWhere('tx.paymentMethod = :paymentMethod', { paymentMethod });
+    }
+    if (category) {
+      query.andWhere('tx.category = :category', { category });
     }
 
     const res = await query.getRawOne();

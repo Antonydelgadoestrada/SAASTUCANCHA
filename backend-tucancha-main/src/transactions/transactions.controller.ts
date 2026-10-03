@@ -14,6 +14,9 @@ export class TransactionsController {
     @Query('limit') limitStr?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('status') status?: string,
+    @Query('paymentMethod') paymentMethod?: string,
+    @Query('category') category?: string,
   ) {
     const user = req.user;
     if (!user || user.role !== 'CLUB' || !user.club) {
@@ -24,7 +27,7 @@ export class TransactionsController {
     const limit = limitStr ? parseInt(limitStr, 10) : 10;
     
     const clubId = typeof user.club === 'string' ? user.club : user.club?.id || user.club;
-    return this.transactionsService.findAllByClub(clubId, page, limit, startDate, endDate);
+    return this.transactionsService.findAllByClub(clubId, page, limit, startDate, endDate, status, paymentMethod, category);
   }
 
   @Get('metrics')
@@ -32,6 +35,8 @@ export class TransactionsController {
     @Req() req: any,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('paymentMethod') paymentMethod?: string,
+    @Query('category') category?: string,
   ) {
     const user = req.user;
     if (!user || user.role !== 'CLUB' || !user.club) {
@@ -39,6 +44,6 @@ export class TransactionsController {
     }
     
     const clubId = typeof user.club === 'string' ? user.club : user.club?.id || user.club;
-    return this.transactionsService.getMetrics(clubId, startDate, endDate);
+    return this.transactionsService.getMetrics(clubId, startDate, endDate, paymentMethod, category);
   }
 }
