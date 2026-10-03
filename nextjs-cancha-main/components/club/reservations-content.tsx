@@ -1310,43 +1310,7 @@ function MetricsAuditTab() {
 
   return (
     <div className="space-y-6">
-      {/* Tarjetas de métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <MetricCard
-          title="Total Recaudado"
-          value={fmt(metrics?.totalRecaudado ?? 0)}
-          sub={`${metrics?.totalConfirmadosCount ?? 0} transacciones confirmadas`}
-          icon={DollarSignIcon}
-          iconClass="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600"
-          valueClass="text-emerald-600"
-          loading={loadingMetrics}
-        />
-        <MetricCard
-          title="Mercado Pago"
-          value={fmt(metrics?.recaudadoMercadoPago ?? 0)}
-          sub="Cobros automáticos procesados"
-          icon={CreditCardIcon}
-          iconClass="bg-blue-100 dark:bg-blue-950/50 text-blue-600"
-          loading={loadingMetrics}
-        />
-        <MetricCard
-          title="Yape / Plin / Manual"
-          value={fmt(metrics?.recaudadoManual ?? 0)}
-          sub={`Yape: ${fmt(metrics?.desgloseMetodos?.yape ?? 0)} | Plin: ${fmt(metrics?.desgloseMetodos?.plin ?? 0)} | Efec: ${fmt(metrics?.desgloseMetodos?.efectivo ?? 0)}`}
-          icon={SmartphoneIcon}
-          iconClass="bg-purple-100 dark:bg-purple-950/50 text-purple-600"
-          loading={loadingMetrics}
-        />
-        <MetricCard
-          title="Saldo por Cobrar"
-          value={fmt(metrics?.saldoPendienteTotal ?? 0)}
-          sub="A cobrar en cancha / reservas activas"
-          icon={ClockIcon}
-          iconClass="bg-amber-100 dark:bg-amber-950/50 text-amber-600"
-          valueClass="text-amber-600"
-          loading={loadingMetrics}
-        />
-      </div>
+
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">

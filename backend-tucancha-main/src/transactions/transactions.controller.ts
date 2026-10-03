@@ -23,7 +23,8 @@ export class TransactionsController {
     const page = pageStr ? parseInt(pageStr, 10) : 1;
     const limit = limitStr ? parseInt(limitStr, 10) : 10;
     
-    return this.transactionsService.findAllByClub(user.club, page, limit, startDate, endDate);
+    const clubId = typeof user.club === 'string' ? user.club : user.club?.id || user.club;
+    return this.transactionsService.findAllByClub(clubId, page, limit, startDate, endDate);
   }
 
   @Get('metrics')
@@ -37,6 +38,7 @@ export class TransactionsController {
       throw new UnauthorizedException('Solo el rol CLUB tiene acceso a sus métricas de transacciones.');
     }
     
-    return this.transactionsService.getMetrics(user.club, startDate, endDate);
+    const clubId = typeof user.club === 'string' ? user.club : user.club?.id || user.club;
+    return this.transactionsService.getMetrics(clubId, startDate, endDate);
   }
 }
