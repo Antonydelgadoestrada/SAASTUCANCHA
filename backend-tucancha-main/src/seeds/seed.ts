@@ -120,7 +120,7 @@ await AppDataSource.query(`
     currency: 'PEN',
     interval: BillingInterval.MONTHLY,
     graceDays: 7,
-    maxCourts: 10,
+    maxCourts: 6,
     features: ['Gestión de horarios', 'Pasarela de pago', 'Soporte prioritario'],
     isActive: true,
   });

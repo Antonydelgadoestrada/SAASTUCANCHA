@@ -25,6 +25,7 @@ import { GetUser } from '../auth/get-user.decorator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Club } from '../club/club.entity';
+import { MembershipService } from '../membership/membership.service';
 
   @Controller('courts')
   export class CourtController {
@@ -32,6 +33,7 @@ import { Club } from '../club/club.entity';
       private readonly service: CourtService,
       @InjectRepository(Club)
       private readonly clubRepo: Repository<Club>,
+      private readonly membershipService: MembershipService,
     ) {}
   
     @Get()
@@ -97,6 +99,17 @@ import { Club } from '../club/club.entity';
             'Antes de publicar tus canchas, debes configurar tus métodos de cobro y pago (número de Yape, Plin o Mercado Pago) en el módulo "Pagos y Cobros".'
           );
         }
+
+        // Validate maximum courts allowed by membership plan
+        const activeMembership = await this.membershipService.getClubActiveMembership(user.club.id);
+        const maxCourts = activeMembership?.plan?.maxCourts || 6;
+        const currentCourts = await this.service.totalByClub(user.club.id);
+        if (currentCourts >= maxCourts) {
+          throw new BadRequestException(
+            `Exceso de canchas: tu membresía actual solo permite la creación de un máximo de ${maxCourts} canchas. Contacta con el administrador.`
+          );
+        }
+
         data.club = user.club.id;
       }
 

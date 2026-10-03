@@ -207,6 +207,7 @@ export class MembershipService implements OnModuleInit {
         price: 120.00,
         currency: 'PEN',
         interval: BillingInterval.MONTHLY,
+        maxCourts: 6,
         features: [
           'Publicación y visibilidad de canchas al público',
           'Gestión de reservas en tiempo real y calendario interactivo',

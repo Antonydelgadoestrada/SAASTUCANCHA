@@ -13,8 +13,8 @@ const plans = [
     description: "Perfecto para clubes medianos con múltiples canchas",
     price: 120,
     features: [
-      "Hasta 10 canchas",
-      "2 sedes",
+      "Hasta 6 canchas",
+      "1 sede",
       "Sistema de reservas avanzado",
       "Promociones y descuentos",
       "Estadísticas detalladas",

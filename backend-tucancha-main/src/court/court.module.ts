@@ -9,12 +9,14 @@ import { CourtScheduleAvailability } from '../schedule/court_schedule_availabili
 
 import { Club } from '../club/club.entity';
 import { ScheduleCalendarModule } from '../schedule/schedule.module';
+import { MembershipModule } from '../membership/membership.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Court, ScheduleTemplate, CourtScheduleAvailability, Club]),
     AwsModule,
     forwardRef(() => ScheduleCalendarModule),
+    forwardRef(() => MembershipModule),
   ],
   providers: [CourtService],
   controllers: [CourtController],
