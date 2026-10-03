@@ -76,7 +76,7 @@ export function TransactionsContent() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Ingresos Brutos</CardTitle>
@@ -94,9 +94,20 @@ export function TransactionsContent() {
           </CardHeader>
           <CardContent>
             {isLoadingMetrics ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold text-red-500">-{formatCurrency(metricsData?.totalComisiones || 0)}</div>
+              <div className="text-2xl font-bold text-red-500">-{formatCurrency(metricsData?.comisionesMP || 0)}</div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">Costos de procesamiento</p>
+            <p className="text-xs text-muted-foreground mt-1">Costos de MercadoPago</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-sm font-medium text-orange-500">Comisiones POS</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoadingMetrics ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-orange-500">-{formatCurrency(metricsData?.comisionesPOS || 0)}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">Costos de terminal POS</p>
           </CardContent>
         </Card>
         <Card>

@@ -1592,6 +1592,7 @@ export class PaymentService {
       metodo?: string;
       comprobanteUrl?: string;
       notas?: string;
+      posCommission?: number;
     },
     auditor: User,
   ) {
@@ -1640,8 +1641,18 @@ export class PaymentService {
     else if (rawMethod.includes('MERCADO')) safeMethod = 'MERCADOPAGO';
     else safeMethod = 'EFECTIVO';
 
+    // Compute fee if POS/CARD and commission provided
+    let feeAmount = 0;
+    let netAmount = settleAmount;
+    if (safeMethod === 'CARD' && dto.posCommission && dto.posCommission > 0) {
+      feeAmount = Number(((settleAmount * dto.posCommission) / 100).toFixed(2));
+      netAmount = Number((settleAmount - feeAmount).toFixed(2));
+    }
+
     payment.saldoStatus = 'PAGADO';
     payment.saldoAmount = settleAmount;
+    payment.saldoFeeAmount = feeAmount;
+    payment.saldoNetAmount = netAmount;
     payment.saldoMethod = safeMethod;
     payment.saldoComprobanteUrl = dto.comprobanteUrl || null;
     payment.saldoNotas = dto.notas || null;

@@ -189,7 +189,7 @@ export class TransactionsService implements OnModuleInit {
         channel: 'MANUAL',
         grossAmount: payment.amount,
         feeAmount: payment.feeAmount || 0,
-        feePercent: 0,
+        feePercent: payment.method === 'CARD' && payment.feeAmount > 0 ? Number(((payment.feeAmount / payment.amount) * 100).toFixed(2)) : 0,
         netAmount: payment.netAmount || payment.amount,
         currency: payment.currency || 'PEN',
         reservationTotal: booking.totalPrice,
@@ -221,7 +221,7 @@ export class TransactionsService implements OnModuleInit {
         channel: 'MANUAL',
         grossAmount: payment.saldoAmount,
         feeAmount: payment.saldoFeeAmount || 0,
-        feePercent: 0,
+        feePercent: payment.saldoMethod === 'CARD' && payment.saldoFeeAmount > 0 ? Number(((payment.saldoFeeAmount / payment.saldoAmount) * 100).toFixed(2)) : 0,
         netAmount: payment.saldoNetAmount || payment.saldoAmount,
         currency: payment.currency || 'PEN',
         reservationTotal: booking.totalPrice,
@@ -308,6 +308,8 @@ export class TransactionsService implements OnModuleInit {
       .select('SUM(tx.netAmount)', 'totalIngresosNetos')
       .addSelect('SUM(tx.grossAmount)', 'totalIngresosBrutos')
       .addSelect('SUM(tx.feeAmount)', 'totalComisiones')
+      .addSelect(`SUM(CASE WHEN tx.origin = 'MERCADOPAGO' THEN tx.feeAmount ELSE 0 END)`, 'comisionesMP')
+      .addSelect(`SUM(CASE WHEN tx.paymentMethod = 'CARD' AND tx.origin = 'MANUAL' THEN tx.feeAmount ELSE 0 END)`, 'comisionesPOS')
       .where('tx.clubId = :clubId', { clubId })
       .andWhere('tx.status = :status', { status: TransactionStatus.APPROVED })
       .andWhere('tx.direction = :direction', { direction: TransactionDirection.IN });
@@ -330,7 +332,9 @@ export class TransactionsService implements OnModuleInit {
     return {
       totalIngresosBrutos: Number(res?.totalIngresosBrutos || 0),
       totalIngresosNetos: Number(res?.totalIngresosNetos || 0),
-      totalComisiones: Number(res?.totalComisiones || 0)
+      totalComisiones: Number(res?.totalComisiones || 0),
+      comisionesMP: Number(res?.comisionesMP || 0),
+      comisionesPOS: Number(res?.comisionesPOS || 0)
     };
   }
 }
