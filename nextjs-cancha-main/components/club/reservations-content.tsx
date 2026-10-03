@@ -1273,6 +1273,8 @@ function MetricsAuditTab() {
         return false
       } else if (targetMethod === "EFECTIVO" && !pMethod.includes("EFECTIVO") && !pMethod.includes("CASH")) {
         return false
+      } else if (targetMethod === "POS" && !pMethod.includes("POS")) {
+        return false
       }
     }
 
@@ -1379,6 +1381,7 @@ function MetricsAuditTab() {
             <SelectItem value="PLIN">Plin</SelectItem>
             <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
             <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+            <SelectItem value="POS">POS</SelectItem>
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
