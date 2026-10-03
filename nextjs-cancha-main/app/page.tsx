@@ -9,6 +9,7 @@ import { TestimonialsSection } from "@/components/testimonials-section"
 import { PricingSection } from "@/components/pricing-section"
 import { AuthHeaderButtons } from "@/components/AuthHeaderButtons"
 import { FeaturesCarousel } from "@/components/features-carousel"
+import { FaqSection } from "@/components/faq-section"
 import { LandingNav } from "@/components/landing-nav"
 import { CookieTriggerButton } from "@/components/cookies/cookie-trigger-button"
 export const revalidate = 3600; // SSG con ISR (Revalida cada 1h)
@@ -167,6 +168,9 @@ export default async function HomePage() {
         <section id="pricing" className="py-20 border-t border-border/40">
           <PricingSection />
         </section>
+
+        {/* FAQ Section */}
+        <FaqSection />
 
         {/* Testimonials Section */}
         <section className="bg-muted/30 py-20 border-t border-border/40">
