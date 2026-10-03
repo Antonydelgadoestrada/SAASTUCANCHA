@@ -23,20 +23,21 @@ export class TransactionsService implements OnModuleInit {
   async backfillOldPayments() {
     const payments = await this.paymentRepo.find({
       where: { status: 'PAID' },
-      relations: ['booking', 'booking.club', 'booking.user'],
+      relations: ['bookings', 'bookings.club', 'bookings.user'],
     });
 
     let count = 0;
     for (const payment of payments) {
-      if (!payment.booking) continue;
+      const booking = payment.bookings?.[0];
+      if (!booking) continue;
       
       try {
         if (payment.method === 'MERCADOPAGO') {
-          await this.recordFromMercadoPago(payment, payment.booking);
+          await this.recordFromMercadoPago(payment, booking);
         } else if (payment.method === 'VOUCHER') {
-          await this.recordVoucherReviewed(payment, payment.booking, true, payment.booking?.user?.id);
+          await this.recordVoucherReviewed(payment, booking, true, booking?.user?.id);
         } else {
-          await this.recordFromManualReservationPayment(payment, payment.booking, payment.booking?.user?.id);
+          await this.recordFromManualReservationPayment(payment, booking, booking?.user?.id);
         }
         count++;
       } catch (e) {
