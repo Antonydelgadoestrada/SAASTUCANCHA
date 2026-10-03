@@ -7,6 +7,11 @@ import { AuthGuard } from '@nestjs/passport';
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
+  @Post('admin/backfill')
+  async backfill() {
+    return this.transactionsService.backfillOldPayments();
+  }
+
   @Get()
   async findAll(
     @Req() req: any,

@@ -1,16 +1,51 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ClubTransaction, TransactionDirection, TransactionCategory, TransactionOrigin, TransactionStatus } from './club-transaction.entity';
+import { Payment } from '../payment/payment.entity';
 
 @Injectable()
-export class TransactionsService {
+export class TransactionsService implements OnModuleInit {
   private readonly logger = new Logger(TransactionsService.name);
 
   constructor(
     @InjectRepository(ClubTransaction)
     private readonly transactionRepo: Repository<ClubTransaction>,
+    @InjectRepository(Payment)
+    private readonly paymentRepo: Repository<Payment>,
   ) {}
+
+  async onModuleInit() {
+    // Run backfill once on startup in the background
+    this.backfillOldPayments().catch(e => this.logger.error('Error in automatic backfill:', e));
+  }
+
+  async backfillOldPayments() {
+    const payments = await this.paymentRepo.find({
+      where: { status: 'PAID' },
+      relations: ['booking', 'booking.club', 'booking.user'],
+    });
+
+    let count = 0;
+    for (const payment of payments) {
+      if (!payment.booking) continue;
+      
+      try {
+        if (payment.method === 'MERCADOPAGO') {
+          await this.recordFromMercadoPago(payment, payment.booking);
+        } else if (payment.method === 'VOUCHER') {
+          await this.recordVoucherReviewed(payment, payment.booking, true, payment.booking?.user?.id);
+        } else {
+          await this.recordFromManualReservationPayment(payment, payment.booking, payment.booking?.user?.id);
+        }
+        count++;
+      } catch (e) {
+        this.logger.error(`Failed to backfill payment ${payment.id}`, e);
+      }
+    }
+
+    return { success: true, count };
+  }
 
   private async upsertTransaction(
     sourceType: string,
