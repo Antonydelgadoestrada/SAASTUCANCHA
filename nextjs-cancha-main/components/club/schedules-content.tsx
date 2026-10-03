@@ -811,10 +811,11 @@ export function ClubSchedulesContent() {
                 <span className="text-sm font-medium">Filtrar:</span>
               </div>
               <Select value={selectedCourt} onValueChange={handleCourtChange}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Todas las canchas" />
+                <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectValue placeholder="Selecciona una cancha" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all" className="font-medium text-primary">-- Selecciona una cancha --</SelectItem>
                   {filteredCourts.map((court) => (
                       court.id ? (
                         <SelectItem key={court.id} value={court.id.toString()}>
@@ -845,8 +846,14 @@ export function ClubSchedulesContent() {
 
           {/* Vista para escritorio */}
           {selectedCourt === "all" || !selectedCourt ? (
-            <div className="text-center text-muted-foreground py-4">
-              Selecciona una cancha para ver los horarios disponibles.
+            <div className="flex flex-col items-center justify-center text-center py-20 px-4 bg-muted/20 border-2 border-dashed border-border/50 rounded-xl mt-4">
+              <div className="bg-primary/10 p-5 rounded-full mb-5 shadow-sm ring-1 ring-primary/20">
+                <CalendarIcon className="h-10 w-10 text-primary" />
+              </div>
+              <h3 className="text-2xl font-bold tracking-tight mb-2">Selecciona una cancha</h3>
+              <p className="text-muted-foreground max-w-sm text-base">
+                Usa el selector de arriba para elegir una cancha y empezar a visualizar o gestionar sus horarios.
+              </p>
             </div>
           ) : isCalendarLoading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
