@@ -24,6 +24,7 @@ import { SubmitManualMembershipPaymentDto } from './dto/submit-manual-membership
 import { SavePlatformCredentialsDto } from './dto/save-platform-credentials.dto';
 import { S3Service } from '../aws/s3.service';
 import { Club } from '../club/club.entity';
+import { TransactionsService } from '../transactions/transactions.service';
 
 export interface MpStatusDetailMapping {
   code: 'APRO' | 'CONT' | 'FUND' | 'SECU' | 'EXPI' | 'FORM' | 'CALL' | 'OTHE';
@@ -106,6 +107,7 @@ export class MembershipService implements OnModuleInit {
     @InjectRepository(PlatformPaymentConfig)
     private readonly platformPaymentConfigRepo: Repository<PlatformPaymentConfig>,
     private readonly s3Service: S3Service,
+    private readonly transactionsService: TransactionsService,
   ) {
     // REGLA DE ORO: Las membresías utilizan las credenciales de la plataforma (Dueño)
     this.mercadopago = new MercadoPagoConfig({
@@ -664,6 +666,11 @@ export class MembershipService implements OnModuleInit {
         }
 
         await trxManager.save(MembershipPayment, paymentRecord);
+        
+        if (status === 'approved') {
+          this.transactionsService.recordFromMembershipPayment(paymentRecord).catch(() => {});
+        }
+        
         console.log(
           `✅ [Webhook Membresía] Pago ${paymentId} procesado exitosamente como ${targetStatus} [${mappedDetail.code}] para club ${paymentRecord.clubId}`,
         );

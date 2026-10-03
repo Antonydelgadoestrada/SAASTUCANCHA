@@ -14,8 +14,9 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useToast } from "@/hooks/use-toast"
 import { SearchResults } from "@/components/search-results-advanced"
-import { MapView } from "@/components/map-view"
-import { GooglePlacesAutocomplete } from "@/components/google-places-autocomplete"
+import dynamic from 'next/dynamic'
+const MapView = dynamic(() => import('@/components/map-view').then(mod => mod.MapView), { ssr: false, loading: () => <div className="h-[400px] w-full animate-pulse bg-muted rounded-xl" /> })
+const GooglePlacesAutocomplete = dynamic(() => import('@/components/google-places-autocomplete').then(mod => mod.GooglePlacesAutocomplete), { ssr: false })
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -31,14 +32,14 @@ import { Loader2 } from "lucide-react"
 
 // Datos de ejemplo
 
-export function SearchInterface() {
+export function SearchInterface({ initialClubs = [] }: { initialClubs?: Club[] }) {
   const PERU_TZ = "America/Lima"
   const pathname = usePathname()
   const {user} = useUserStore((state) => state)
   const router = useRouter()
   const urlSearchParams = useSearchParams()
   const { toast } = useToast()
-  const [clubs, setClubs] = useState<Club[]>([])
+  const [clubs, setClubs] = useState<Club[]>(initialClubs)
   const [searchQuery, setSearchQuery] = useState( "")
   const [selectedSport, setSelectedSport] = useState( "all")
   const [selectedTime, setSelectedTime] = useState<string>( "10:00")
@@ -57,20 +58,7 @@ export function SearchInterface() {
   const [isSearching, setIsSearching] = useState(false)
 
 
-  // Verificar usuario logueado
-  useEffect(() => {
- 
-    const fetchClub = async ()=>{
-      try {
-        const result = await getAllClubs()
-        setClubs(result)
-      } catch (error) {
-        console.error("Error al cargar las canchas", error)
-      }
-    }
-    fetchClub()
-  }, [])
-  
+
 
   useEffect(() => {
     const query = urlSearchParams.get("query") || ""

@@ -14,6 +14,7 @@ import {
   UsersIcon,
   SparklesIcon,
   ShieldCheckIcon,
+  BanknoteIcon,
 } from "lucide-react"
 
 import { UserNav } from "@/components/layout/user-nav"
@@ -80,7 +81,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   const isTrialActive = Boolean(
     clubData?.trialEndDate &&
-    new Date(clubData.trialEndDate) > new Date() &&
+    new Date(clubData.trialEndDate) > (clubData?.serverTime ? new Date(clubData.serverTime) : new Date()) &&
     clubData.status === "APPROVED"
   )
 
@@ -127,6 +128,13 @@ export function AppSidebar({ user }: AppSidebarProps) {
       icon: CreditCardIcon,
       href: "/club/payments",
       active: isActive("/club/payments"),
+      locked: isClubSuspended,
+    },
+    {
+      title: "Transacciones",
+      icon: BanknoteIcon,
+      href: "/club/transactions",
+      active: isActive("/club/transactions"),
       locked: isClubSuspended,
     },
     {

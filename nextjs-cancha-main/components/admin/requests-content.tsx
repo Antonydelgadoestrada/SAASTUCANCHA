@@ -345,16 +345,16 @@ export function AdminRequestsContent() {
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-11 w-11 border">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Avatar className="h-11 w-11 border shrink-0">
                           <AvatarImage src={club.logo || club.images?.[0]} alt={club.name} />
                           <AvatarFallback className="font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400">
                             {club.name.substring(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <CardTitle className="text-base font-bold">{club.name}</CardTitle>
-                          <CardDescription className="text-xs truncate max-w-[180px]">{club.email}</CardDescription>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <CardTitle className="text-base font-bold truncate">{club.name}</CardTitle>
+                          <CardDescription className="text-xs truncate">{club.email}</CardDescription>
                         </div>
                       </div>
                       <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-xs flex items-center gap-1 shrink-0">
@@ -466,16 +466,16 @@ export function AdminRequestsContent() {
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-11 w-11 border">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Avatar className="h-11 w-11 border shrink-0">
                           <AvatarImage src={club.logo || club.images?.[0]} alt={club.name} />
                           <AvatarFallback className="font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
                             {club.name.substring(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <CardTitle className="text-base font-bold">{club.name}</CardTitle>
-                          <CardDescription className="text-xs truncate max-w-[180px]">{club.email}</CardDescription>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <CardTitle className="text-base font-bold truncate">{club.name}</CardTitle>
+                          <CardDescription className="text-xs truncate">{club.email}</CardDescription>
                         </div>
                       </div>
                       <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-xs flex items-center gap-1 shrink-0">
@@ -563,16 +563,16 @@ export function AdminRequestsContent() {
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-11 w-11 border">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Avatar className="h-11 w-11 border shrink-0">
                           <AvatarImage src={club.logo || club.images?.[0]} alt={club.name} />
                           <AvatarFallback className="font-bold bg-rose-500/10 text-rose-700 dark:text-rose-400">
                             {club.name.substring(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <CardTitle className="text-base font-bold">{club.name}</CardTitle>
-                          <CardDescription className="text-xs truncate max-w-[180px]">{club.email}</CardDescription>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <CardTitle className="text-base font-bold truncate">{club.name}</CardTitle>
+                          <CardDescription className="text-xs truncate">{club.email}</CardDescription>
                         </div>
                       </div>
                       <Badge variant="destructive" className="text-xs flex items-center gap-1 shrink-0">
@@ -635,16 +635,16 @@ export function AdminRequestsContent() {
                 <Card key={club.id} className="flex flex-col border-border/60 shadow-xs">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-11 w-11 border">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Avatar className="h-11 w-11 border shrink-0">
                           <AvatarImage src={club.logo || club.images?.[0]} alt={club.name} />
                           <AvatarFallback className="font-bold bg-muted text-muted-foreground">
                             {club.name.substring(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <CardTitle className="text-base font-bold">{club.name}</CardTitle>
-                          <CardDescription className="text-xs truncate max-w-[180px]">{club.email}</CardDescription>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <CardTitle className="text-base font-bold truncate">{club.name}</CardTitle>
+                          <CardDescription className="text-xs truncate">{club.email}</CardDescription>
                         </div>
                       </div>
                       <Badge variant="outline" className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">

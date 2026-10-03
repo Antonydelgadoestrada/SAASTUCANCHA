@@ -1497,7 +1497,7 @@ export function SearchResults({
                 </div>
                 <div>
                   <Label>Horarios disponibles</Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 max-h-48 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-2 gap-2 mt-2 max-h-48 overflow-y-auto pr-1">
                     {filteredtimeOptions.map((time: any) => {
                       const [h, m] = time.split(":").map(Number);
                       const d = new Date();
@@ -1508,6 +1508,7 @@ export function SearchResults({
                         key={time}
                         variant={selectedTime === time ? "default" : "outline"}
                         size="sm"
+                        className="w-full text-xs px-2"
                         onClick={() => setSelectedTime(time)}
                       >
                         {time} - {endTime}

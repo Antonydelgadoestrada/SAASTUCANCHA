@@ -30,8 +30,9 @@ export class CreateScheduleTemplateDto {
   @Type(() => SlotDto)
   slots: SlotDto[]
 
+  @IsOptional()
   @IsString()
-  clubId: string
+  clubId?: string
 
 }
 

@@ -11,6 +11,7 @@ import { ClubModule } from '../club/club.module';
 import { MailerModule } from '../mailer/mailer.module';
 import { AwsModule } from '../aws/aws.module';
 import { MembershipModule } from '../membership/membership.module';
+import { TransactionsModule } from '../transactions/transactions.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { MembershipModule } from '../membership/membership.module';
     MailerModule,
     AwsModule,
     forwardRef(() => MembershipModule),
+    TransactionsModule,
   ],
   providers: [PaymentService],
   controllers: [PaymentController],

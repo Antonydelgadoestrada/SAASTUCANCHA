@@ -127,19 +127,18 @@ function subtract30MinutesLabel(time: string): string {
   return minutesToHHmmLabel(timeToMinutes(time) - 30)
 }
 
-/** El API guarda `until` como fin exclusivo [start, until); en lista mostramos el inicio de la última media hora incluida. */
+/** El API guarda `until` como fin exclusivo [start, until), que es exactamente la hora en que termina el evento. */
 function rangeEndLabel(h: { until?: string; end?: string }): string {
   const raw = (h as { until?: string; end?: string }).until ?? (h as { end?: string }).end ?? ""
   const s = String(raw).trim()
   if (!s) return ""
-  return subtract30MinutesLabel(normalizeHHmm(s))
+  return normalizeHHmm(s)
 }
 
 function HorariosFinHint() {
   return (
     <p className="text-muted-foreground text-xs mt-2">
-      En &quot;Fin&quot; elige la hora de inicio de la última fracción de 30 minutos que quieras cubrir (por ejemplo
-      09:30 incluye el tramo hasta las 10:00).
+      En &quot;Fin&quot; elige la hora exacta a la que termina el evento (ej: si seleccionas 12:00, se bloquearán los horarios hasta las 12:00).
     </p>
   )
 }
@@ -461,7 +460,7 @@ export function EventsManager({
 
     const horarios = ev.timeRanges.map(r => ({
       inicio: normalizeHHmm(r.start),
-      fin: add30MinutesLabel(rangeEndLabel(r)), // reconstruct end label for form
+      fin: rangeEndLabel(r), // reconstruct end label for form
     }))
 
     setFormData({
@@ -984,6 +983,28 @@ export function EventsManager({
           </DialogHeader>
           <div className="space-y-6">
             <div className="space-y-4">
+              {(!eventCourtId || courts.length > 1) && !editingEventId && (
+                <div>
+                  <Label className="text-sm font-medium">Selecciona la cancha para el evento *</Label>
+                  <Select value={eventCourtId} onValueChange={setEventCourtId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una cancha" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {courts.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                          {c.venue?.name ? ` — ${c.venue.name}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!eventCourtId && (
+                    <p className="text-xs text-red-500 mt-1">Debes seleccionar una cancha para ver los horarios disponibles.</p>
+                  )}
+                </div>
+              )}
+              
               <div>
                 <Label htmlFor="nombre">Nombre del evento *</Label>
                 <Input

@@ -103,6 +103,7 @@ export function ClubSchedulesContent() {
   const [selectedSlotForAction, setSelectedSlotForAction] = useState<{ time: string; date: Date } | null>(null);
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
   const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
+  const [showAllDaysMobile, setShowAllDaysMobile] = useState(false);
 
 
   const [isTemplateSidebarOpen, setIsTemplateSidebarOpen] = useState(false);
@@ -966,7 +967,7 @@ export function ClubSchedulesContent() {
 
 
                           <div className="space-y-4">
-                            {weekDays.slice(0, 3).map((day, dayIndex) => (
+                            {(showAllDaysMobile ? weekDays : weekDays.slice(0, 3)).map((day, dayIndex) => (
                               <div key={dayIndex} className="space-y-2">
                                 <div className="flex items-center gap-2">
                                   <CalendarIcon className="h-4 w-4 text-muted-foreground" />
@@ -1031,9 +1032,15 @@ export function ClubSchedulesContent() {
                               </div>
                             ))}
 
-                            <Button variant="outline" className="w-full">
-                              Ver todos los horarios
-                            </Button>
+                            {!showAllDaysMobile ? (
+                              <Button variant="outline" className="w-full" onClick={() => setShowAllDaysMobile(true)}>
+                                Ver todos los días
+                              </Button>
+                            ) : (
+                              <Button variant="outline" className="w-full" onClick={() => setShowAllDaysMobile(false)}>
+                                Ocultar días adicionales
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))}

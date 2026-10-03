@@ -51,7 +51,7 @@ export const getActiveMembershipPlans = async (): Promise<MembershipPlan[]> => {
   return result.data;
 };
 
-export const getMyClubMembership = async (): Promise<{ membership: ClubMembership | null }> => {
+export const getMyClubMembership = async (): Promise<{ membership: ClubMembership | null, serverTime?: string }> => {
   const result = await api.get("/memberships/my-membership");
   return result.data;
 };

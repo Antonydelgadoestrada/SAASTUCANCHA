@@ -11,7 +11,7 @@ import { AuthHeaderButtons } from "@/components/AuthHeaderButtons"
 import { FeaturesCarousel } from "@/components/features-carousel"
 import { LandingNav } from "@/components/landing-nav"
 import { CookieTriggerButton } from "@/components/cookies/cookie-trigger-button"
-export const dynamic = "force-dynamic"
+export const revalidate = 3600; // SSG con ISR (Revalida cada 1h)
 
 export default async function HomePage() {
   return (

@@ -284,9 +284,7 @@ export function MembershipContent() {
     )
   }
 
-  const daysRemaining = currentMembership?.endDate
-    ? differenceInDays(new Date(currentMembership.endDate), new Date())
-    : 0
+  const daysRemaining = currentMembership?.daysRemaining ?? 0
 
   const isSuspended = !currentMembership || currentMembership.status === "EXPIRED"
 

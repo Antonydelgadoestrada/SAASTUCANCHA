@@ -5,11 +5,14 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  Index,
 } from 'typeorm'
 import { ScheduleTemplate } from './schedule_template.entity'
 import { Court } from '../court/court.entity'
 
 @Entity('court_schedule_availability')
+@Index('idx_unique_court_date_time', ['courtId', 'date', 'time'], { unique: true })
+@Index('idx_availability_court_date', ['courtId', 'date'])
 export class CourtScheduleAvailability {
   @PrimaryGeneratedColumn('uuid')
   id: string

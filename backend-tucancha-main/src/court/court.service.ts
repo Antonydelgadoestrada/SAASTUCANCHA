@@ -1,7 +1,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Court, CourtUpdateDto } from './court.entity';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { S3Service } from '../aws/s3.service';
 import { format } from 'date-fns'
 import { isNight } from '../helpers/helpers';
@@ -9,9 +9,12 @@ import { FeaturedCourtDto } from './court.dto';
 import { ScheduleTemplate } from '../schedule/schedule_template.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
 import { ScheduleTemplateService } from '../schedule/schedule-template.service';
+import { CourtScheduleEventService } from '../schedule/court-schedule-event.service';
 
 @Injectable()
 export class CourtService {
+  public static templateCache = new Map<string, { data: any; expiry: number }>();
+
   constructor(
     @InjectRepository(Court)
     private readonly courtRepo: Repository<Court>,
@@ -22,6 +25,8 @@ export class CourtService {
     private readonly s3Service: S3Service,
     @Inject(forwardRef(() => ScheduleTemplateService))
     private readonly scheduleTemplateService: ScheduleTemplateService,
+    @Inject(forwardRef(() => CourtScheduleEventService))
+    private readonly courtScheduleEventService: CourtScheduleEventService,
   ) {}
 
   private async getFirstTemplateIdByClubId(clubId: string): Promise<string | null> {
@@ -87,7 +92,7 @@ export class CourtService {
       promoNight: (court as any).promoNight ?? null,
       rating: null,
       reviews: null,
-      time: court.minimumBookingTime,
+      time: court.minimumBookingTime?.toString() || "1",
       club: club
         ? {
             id: club.id,
@@ -149,7 +154,7 @@ export class CourtService {
   async findAll() {
     const courts = await this.courtRepo.find({ 
       where: { isActive: true },
-      relations: ['club'] 
+      // No cargamos relations: ['club'] completo para evitar descargar configuraciones y tokens pesados
     });
     return this.applyScheduleTemplateFallback(courts);
   }
@@ -168,7 +173,6 @@ export class CourtService {
   async findAllByClub(clubId: string) {
     const courts = await this.courtRepo.find({
       where: { club: { id: clubId }, isActive: true },
-      relations: ['club'],
     })
     return this.applyScheduleTemplateFallback(courts, clubId);
   }
@@ -336,13 +340,113 @@ export class CourtService {
       
       const courtsWithFallback = await this.applyScheduleTemplateFallback(result);
   
-      const courtsWithVirtual = await Promise.all(
-        courtsWithFallback.map(async (court) => {
-          const virtualAvailabilities = await this.getVirtualAvailability(court, targetDate);
-          (court as any).availabilities = virtualAvailabilities;
-          return court;
-        }),
-      );
+      const courtIds = courtsWithFallback.map((c) => c.id);
+      const templateIds = Array.from(new Set(courtsWithFallback.map((c: any) => c.schedule_template_id).filter(Boolean)));
+
+      const now = Date.now();
+      const cachedTemplates: any[] = [];
+      const missedTemplateIds: string[] = [];
+      
+      for (const id of templateIds as string[]) {
+        const cached = CourtService.templateCache.get(id);
+        if (cached && cached.expiry > now) {
+          cachedTemplates.push(cached.data);
+        } else {
+          missedTemplateIds.push(id);
+        }
+      }
+
+      const [allOverrides, dbTemplates] = await Promise.all([
+        courtIds.length > 0 
+          ? this.availabilityRepo.find({ where: { courtId: In(courtIds), date: targetDate } })
+          : [],
+        missedTemplateIds.length > 0
+          ? this.scheduleTemplateRepo.find({ where: { id: In(missedTemplateIds) } })
+          : []
+      ]);
+
+      if (dbTemplates.length > 0) {
+        const expiry = Date.now() + 300 * 1000; // 5 minutos
+        for (const t of dbTemplates) {
+          CourtService.templateCache.set(t.id, { data: t, expiry });
+          cachedTemplates.push(t);
+        }
+      }
+      
+      const allTemplates = cachedTemplates;
+
+      const overridesByCourt: Record<string, any[]> = {};
+      for (const curr of allOverrides) {
+        if (!overridesByCourt[curr.courtId]) overridesByCourt[curr.courtId] = [];
+        overridesByCourt[curr.courtId].push(curr);
+      }
+
+      const templatesById: Record<string, any> = {};
+      for (const curr of allTemplates) {
+        templatesById[curr.id] = curr;
+      }
+
+      const daysMap: Record<string, number> = {
+        sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+      };
+      const dateObj = new Date(targetDate + 'T00:00:00');
+      const dayOfWeek = dateObj.getDay();
+
+      const courtsWithVirtual = courtsWithFallback.map((court) => {
+        const overrides = overridesByCourt[court.id] || [];
+        let virtualSlots: any[] = overrides;
+        
+        const templateId = (court as any).schedule_template_id;
+        const template = templateId ? templatesById[templateId] : null;
+
+        if (template) {
+          const enabledDays = (template.days || []).map((d: string) => daysMap[d.toLowerCase()]);
+          if (enabledDays.includes(dayOfWeek)) {
+             const slots = [];
+             for (const slot of (template.slots || [])) {
+               const override = overrides.find((o) => o.time === slot.time);
+               if (override) {
+                 slots.push(override);
+               } else {
+                 slots.push({
+                   courtId: court.id,
+                   date: targetDate,
+                   time: slot.time,
+                   status: slot.status,
+                 });
+               }
+             }
+             virtualSlots = slots;
+          }
+        }
+
+        (court as any).availabilities = virtualSlots;
+        return court;
+      });
+
+      // Expandir eventos para cada cancha y fusionar
+      await Promise.all(courtsWithVirtual.map(async (court) => {
+        try {
+          const expandedEvents = await this.courtScheduleEventService.expandForCourt(court.id, targetDate, targetDate);
+          if (expandedEvents && expandedEvents.length > 0) {
+            for (const ev of expandedEvents) {
+              const targetSlot = (court as any).availabilities.find((s: any) => s.date === ev.date && s.time === ev.time);
+              if (targetSlot) {
+                targetSlot.status = 'event';
+              } else {
+                (court as any).availabilities.push({
+                  courtId: court.id,
+                  date: ev.date,
+                  time: ev.time,
+                  status: 'event'
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`Error fetching events for court ${court.id} in getAllCourtsByQuery`, e);
+        }
+      }));
   
       let transformed = this.transformCourts(courtsWithVirtual);
 
@@ -414,19 +518,23 @@ export class CourtService {
       }
     }
     
-    await this.courtRepo.update(id, {...data,  promoDay:
-      data.hasOwnProperty('promoDay') && data.promoDay?.trim() !== ''
-        ? data.promoDay
-        : null,
-    promoNight:
-      data.hasOwnProperty('promoNight') && data.promoNight?.trim() !== ''
-        ? data.promoNight
-        : null,});
+    const updateData: any = { ...data };
+    if (updateData.hasOwnProperty('priceDay')) updateData.priceDay = Number(updateData.priceDay);
+    if (updateData.hasOwnProperty('priceNight')) updateData.priceNight = Number(updateData.priceNight);
+    if (updateData.hasOwnProperty('minimumBookingTime')) updateData.minimumBookingTime = Number(updateData.minimumBookingTime);
+    updateData.promoDay = data.hasOwnProperty('promoDay') && String(data.promoDay).trim() !== '' ? Number(data.promoDay) : null;
+    updateData.promoNight = data.hasOwnProperty('promoNight') && String(data.promoNight).trim() !== '' ? Number(data.promoNight) : null;
+    
+    await this.courtRepo.update(id, updateData);
     return this.findOne(id);
   }
 
   remove(id: string) {
     return this.courtRepo.update(id, { isActive: false });
+  }
+
+  public invalidateTemplateCache(templateId: string) {
+    CourtService.templateCache.delete(templateId);
   }
 
 }

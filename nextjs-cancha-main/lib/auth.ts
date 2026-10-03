@@ -74,64 +74,7 @@ const club2 = {
 
 // Exportar la lista de usuarios para que sea accesible desde otros componentes
 // Agregar al principio del archivo, después de la importación
-export const users = [
-  {
-    id: "1",
-    name: "Usuario Demo",
-    email: "user1@demo.com",
-    password: "abcdef",
-    role: "USER",
-    verified: true,
-    createdAt: new Date(2025, 5, 1),
-  },
-  {
-    id: "2",
-    name: "Club Aprobado",
-    email: "club1@demo.com",
-    password: "qwerty",
-    role: "CLUB",
-    club: club1,
-    verified: true,
-    approved: true,
-    "createdAt": "2025-06-24T05:48:37.391Z",
-    "updatedAt": "2025-06-24T05:48:37.391Z",
-    phone: "123-456-7893",
-    // address: "Av. Ejemplo 123, Zona Norte",
-    // city: "Ciudad Ejemplo",
-    state: "Estado Ejemplo",
-    description: "Club deportivo con 4 canchas de fútbol y 2 de tenis.",
-    // coordinates: { lat: -12.0464, lng: -77.0428 },
-  },
-  {
-    id: "3",
-    name: "Club Pendiente",
-    email: "club2@demo.com",
-    password: "123456",
-    role: "CLUB",
-    verified: true,
-    approved: false,
-    // createdAt: new Date(2025, 5, 12),
-    "createdAt": "2025-07-03T10:52:50.630Z",
-    "updatedAt": "2025-07-03T10:52:50.630Z",
-    phone: "123-456-7890",
-    // address: "Av. Del Este 789, Zona Este",
-    // city: "Ciudad Ejemplo",
-    // state: "Estado Ejemplo",
-    description: "Club deportivo con 5 canchas de tenis y 3 de pádel.",
-    // coordinates: { lat: -12.1196, lng: -77.0365 },
-    club: club2,
-
-  },
-  {
-    id: "4",
-    name: "Administrador",
-    email: "admin@demo.com",
-    password: "admin123",
-    role: "ADMIN",
-    verified: true,
-    createdAt: new Date(2025, 5, 1),
-  },
-]
+// Array de prueba eliminado por seguridad (Fase 11)
 
 // Simular inicio de sesión
 export async function loginUser(email: string, password: string): Promise<User> {

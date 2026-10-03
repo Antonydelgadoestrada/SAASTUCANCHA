@@ -33,6 +33,7 @@ export function ScheduleManagement() {
   const [scheduleChanges, setScheduleChanges] = useState<{[key: string]: any}>({})
   const [selectedCourt, setSelectedCourt] = useState<string>("all")
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
+  const [showAllDaysMobile, setShowAllDaysMobile] = useState(false)
   
   const queryClient = useQueryClient()
   // setting data
@@ -255,10 +256,9 @@ export function ScheduleManagement() {
               {filteredCourts.slice(0, 2).map((court:any) => (
                 <div key={court.id} className="space-y-2">
                   <h3 className="text-lg font-medium">{court.name}</h3>
-                  {/* <p className="text-sm text-muted-foreground">{court.venue}</p> */}
 
                   <div className="space-y-4">
-                    {weekDays.slice(0, 3).map((day, dayIndex) => (
+                    {(showAllDaysMobile ? weekDays : weekDays.slice(0, 3)).map((day, dayIndex) => (
                       <div key={dayIndex} className="space-y-2">
                         <div className="flex items-center gap-2">
                           <CalendarIcon className="h-4 w-4 text-muted-foreground" />
@@ -290,9 +290,15 @@ export function ScheduleManagement() {
                       </div>
                     ))}
 
-                    <Button variant="outline" className="w-full">
-                      Ver todos los horarios
-                    </Button>
+                    {!showAllDaysMobile ? (
+                      <Button variant="outline" className="w-full" onClick={() => setShowAllDaysMobile(true)}>
+                        Ver todos los días
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="w-full" onClick={() => setShowAllDaysMobile(false)}>
+                        Ocultar días adicionales
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

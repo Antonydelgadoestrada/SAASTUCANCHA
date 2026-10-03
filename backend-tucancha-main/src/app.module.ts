@@ -16,6 +16,7 @@ import { ScheduleCalendarModule } from './schedule/schedule.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { QrModule } from './qr/qr.module';
 import { MembershipModule } from './membership/membership.module';
+import { TransactionsModule } from './transactions/transactions.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -39,19 +40,24 @@ import { MembershipModule } from './membership/membership.module';
             : false,
         retryAttempts: 20,
         retryDelay: 3000,
+        poolSize: Number(config.get<string>('DATABASE_POOL_SIZE')) || 15,
+        extra: {
+          max: Number(config.get<string>('DATABASE_POOL_SIZE')) || 15,
+        },
         // Carga entidades desde TypeOrmModule.forFeature() de cada módulo (evita fallos de glob / metadata).
         autoLoadEntities: true,
         synchronize:
-          config.get<string>('DATABASE_SYNCHRONIZE') === 'true' ||
-          (config.get<string>('NODE_ENV') !== 'production' &&
-            config.get<string>('DATABASE_SYNCHRONIZE') !== 'false'),
+          config.get<string>('NODE_ENV') === 'production'
+            ? false
+            : config.get<string>('DATABASE_SYNCHRONIZE') !== 'false',
       }),
     }),
     ScheduleModule.forRoot(),
     UserModule, BookingModule, ClubModule, CourtModule, 
     PaymentModule, ReviewModule, PromotionModule, AuthModule, 
     MailerModule, ScheduleCalendarModule, QrModule,
-    MembershipModule
+    MembershipModule,
+    TransactionsModule
   ],
   controllers: [AppController],
   providers: [AppService],

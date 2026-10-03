@@ -13,6 +13,45 @@ import { Promotion } from '../promotion/promotion.entity';
 import { Review } from '../review/review.entity';
 import { Court } from '../court/court.entity';
 import { ScheduleTemplate } from '../schedule/schedule_template.entity';
+import * as crypto from 'crypto';
+
+export class EncryptionTransformer {
+  private readonly algorithm = 'aes-256-cbc';
+  private readonly key: Buffer;
+
+  constructor() {
+    const secret = process.env.ENCRYPTION_SECRET || 'tucancha-secure-secret-key-32-chr';
+    this.key = crypto.scryptSync(secret, 'salt', 32);
+  }
+
+  to(data: string | null): string | null {
+    if (!data) return data;
+    try {
+      const iv = crypto.randomBytes(16);
+      const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
+      let encrypted = cipher.update(data, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      return `${iv.toString('hex')}:${encrypted}`;
+    } catch (e) {
+      return data; // Fallback
+    }
+  }
+
+  from(data: string | null): string | null {
+    if (!data) return data;
+    if (!data.includes(':')) return data; // Retrocompatibilidad para tokens viejos no encriptados
+    try {
+      const [ivHex, encrypted] = data.split(':');
+      const iv = Buffer.from(ivHex, 'hex');
+      const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (error) {
+      return data; // Si falla la desencriptación retorna raw
+    }
+  }
+}
   
   @Entity()
   export class Club {
@@ -80,10 +119,10 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
     @Column({ nullable: true })
     mpUserId: string;
 
-    @Column({ nullable: true })
+    @Column({ nullable: true, transformer: new EncryptionTransformer() })
     mpAccessToken: string;
 
-    @Column({ nullable: true })
+    @Column({ nullable: true, transformer: new EncryptionTransformer() })
     mpRefreshToken: string;
 
     @Column({ nullable: true })
