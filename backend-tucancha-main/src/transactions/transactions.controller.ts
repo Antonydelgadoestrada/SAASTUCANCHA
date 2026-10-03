@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, UseGuards, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Query, Req, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
 import { AuthGuard } from '@nestjs/passport';
 

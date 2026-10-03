@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ClubTransaction, TransactionDirection, TransactionCategory, TransactionOrigin, TransactionStatus } from './club-transaction.entity';
 import { Payment } from '../payment/payment.entity';
+import { PaymentStatus } from '../payment/payment-status.enum';
+import { PaymentMethod } from '../payment/payment-method.enum';
 
 @Injectable()
 export class TransactionsService implements OnModuleInit {
@@ -22,7 +24,7 @@ export class TransactionsService implements OnModuleInit {
 
   async backfillOldPayments() {
     const payments = await this.paymentRepo.find({
-      where: { status: 'PAID' },
+      where: { status: PaymentStatus.PAID },
       relations: ['bookings', 'bookings.club', 'bookings.user'],
     });
 
@@ -32,10 +34,8 @@ export class TransactionsService implements OnModuleInit {
       if (!booking) continue;
       
       try {
-        if (payment.method === 'MERCADOPAGO') {
+        if (payment.method === PaymentMethod.MERCADOPAGO) {
           await this.recordFromMercadoPago(payment, booking);
-        } else if (payment.method === 'VOUCHER') {
-          await this.recordVoucherReviewed(payment, booking, true, booking?.user?.id);
         } else {
           await this.recordFromManualReservationPayment(payment, booking, booking?.user?.id);
         }
