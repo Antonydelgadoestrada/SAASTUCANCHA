@@ -17,16 +17,21 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export function TransactionsContent() {
   const [page, setPage] = useState(1)
+  const [dateStr, setDateStr] = useState<string>("")
   const limit = 10
 
+  // Si hay fecha seleccionada, filtramos desde las 00:00 hasta las 23:59 de ese día local (convertimos a ISO)
+  const startDate = dateStr ? new Date(`${dateStr}T00:00:00`).toISOString() : undefined
+  const endDate = dateStr ? new Date(`${dateStr}T23:59:59`).toISOString() : undefined
+
   const { data: metricsData, isLoading: isLoadingMetrics } = useQuery({
-    queryKey: ['transaction-metrics'],
-    queryFn: () => getTransactionMetrics(),
+    queryKey: ['transaction-metrics', startDate, endDate],
+    queryFn: () => getTransactionMetrics(startDate, endDate),
   })
 
   const { data: txData, isLoading } = useQuery({
-    queryKey: ['transactions', page, limit],
-    queryFn: () => getTransactions(page, limit),
+    queryKey: ['transactions', page, limit, startDate, endDate],
+    queryFn: () => getTransactions(page, limit, startDate, endDate),
   })
 
   const getStatusBadge = (status: string) => {
@@ -101,9 +106,28 @@ export function TransactionsContent() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Historial de Movimientos</CardTitle>
-          <CardDescription>Visualiza y filtra todas las transacciones generadas en tu club.</CardDescription>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <CardTitle>Historial de Movimientos</CardTitle>
+            <CardDescription>Visualiza y filtra todas las transacciones generadas en tu club.</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Filtrar por fecha:</span>
+            <Input 
+              type="date" 
+              value={dateStr}
+              onChange={(e) => {
+                setDateStr(e.target.value)
+                setPage(1) // reset page when filter changes
+              }}
+              className="w-[160px]"
+            />
+            {dateStr && (
+              <Button variant="ghost" size="sm" onClick={() => setDateStr("")} className="text-xs">
+                Limpiar
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
