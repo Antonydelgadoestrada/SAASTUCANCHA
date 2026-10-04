@@ -313,7 +313,7 @@ export function MembershipContent() {
           <XCircleIcon className="h-5 w-5" />
           <AlertTitle className="font-semibold">No se pudo procesar el pago online</AlertTitle>
           <AlertDescription>
-            Hubo un problema con Mercado Pago. Puedes intentar nuevamente o realizar el pago manual por Yape, Plin o Transferencia.
+            Hubo un problema con Mercado Pago. Puedes intentar nuevamente.
           </AlertDescription>
         </Alert>
       )}
@@ -448,7 +448,7 @@ export function MembershipContent() {
         <div className="flex flex-col gap-1">
           <h2 className="text-2xl font-bold tracking-tight">Planes de Membresía Disponibles</h2>
           <p className="text-muted-foreground">
-            Puedes pagar en línea con Mercado Pago o mediante pago manual (Yape, Plin o Transferencia bancaria).
+            Puedes pagar en línea de forma segura con Mercado Pago.
           </p>
         </div>
 
@@ -523,7 +523,7 @@ export function MembershipContent() {
                     </ul>
                   </CardContent>
                 </div>
-                <CardFooter className="pt-4 border-t flex flex-col gap-2.5">
+                <CardFooter className="pt-4 border-t">
                   <Button
                     className="w-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
                     disabled={checkoutMutation.isPending}
@@ -540,15 +540,6 @@ export function MembershipContent() {
                         Pagar con Mercado Pago
                       </>
                     )}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    className="w-full font-medium text-xs border-purple-300 text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30 gap-1.5"
-                    onClick={() => handleOpenManualPayment(plan)}
-                  >
-                    <SmartphoneIcon className="h-3.5 w-3.5" />
-                    Pagar con Yape / Plin / Transferencia
                   </Button>
                 </CardFooter>
               </Card>
