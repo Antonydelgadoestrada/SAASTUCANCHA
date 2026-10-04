@@ -30,31 +30,42 @@ import { APP_GUARD } from '@nestjs/core';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        url: config.get<string>('DATABASE_URL'),
-        host: config.get<string>('DATABASE_HOST'),
-        port: Number(config.get<string>('DATABASE_PORT')) || 5432,
-        username: config.get<string>('DATABASE_USERNAME'),
-        password: config.get<string>('DATABASE_PASSWORD'),
-        database: config.get<string>('DATABASE_DATABASE'),
-        ssl:
-          config.get<string>('DATABASE_SSL') === 'true'
-            ? { rejectUnauthorized: false }
-            : false,
-        retryAttempts: 20,
-        retryDelay: 3000,
-        poolSize: Number(config.get<string>('DATABASE_POOL_SIZE')) || 15,
-        extra: {
-          max: Number(config.get<string>('DATABASE_POOL_SIZE')) || 15,
-        },
-        // Carga entidades desde TypeOrmModule.forFeature() de cada módulo (evita fallos de glob / metadata).
-        autoLoadEntities: true,
-        synchronize:
-          config.get<string>('NODE_ENV') === 'production'
-            ? false
-            : config.get<string>('DATABASE_SYNCHRONIZE') !== 'false',
-      }),
+      useFactory: (config: ConfigService) => {
+        const dbUrl = config.get<string>('DATABASE_URL');
+        const sslConfig = config.get<string>('DATABASE_SSL') === 'true' ? { rejectUnauthorized: false } : false;
+        const poolSize = Number(config.get<string>('DATABASE_POOL_SIZE')) || 15;
+        const synchronize = config.get<string>('NODE_ENV') !== 'production' && config.get<string>('DATABASE_SYNCHRONIZE') !== 'false';
+        
+        if (dbUrl) {
+          return {
+            type: 'postgres',
+            url: dbUrl,
+            ssl: sslConfig,
+            retryAttempts: 20,
+            retryDelay: 3000,
+            poolSize,
+            extra: { max: poolSize },
+            autoLoadEntities: true,
+            synchronize,
+          };
+        }
+
+        return {
+          type: 'postgres',
+          host: config.get<string>('DATABASE_HOST'),
+          port: Number(config.get<string>('DATABASE_PORT')) || 5432,
+          username: config.get<string>('DATABASE_USERNAME'),
+          password: config.get<string>('DATABASE_PASSWORD'),
+          database: config.get<string>('DATABASE_DATABASE'),
+          ssl: sslConfig,
+          retryAttempts: 20,
+          retryDelay: 3000,
+          poolSize,
+          extra: { max: poolSize },
+          autoLoadEntities: true,
+          synchronize,
+        };
+      },
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000,
