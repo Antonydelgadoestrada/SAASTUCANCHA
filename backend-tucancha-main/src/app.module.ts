@@ -32,6 +32,7 @@ import { APP_GUARD } from '@nestjs/core';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
+        url: config.get<string>('DATABASE_URL'),
         host: config.get<string>('DATABASE_HOST'),
         port: Number(config.get<string>('DATABASE_PORT')) || 5432,
         username: config.get<string>('DATABASE_USERNAME'),
