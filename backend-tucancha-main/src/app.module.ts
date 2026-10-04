@@ -38,7 +38,8 @@ import { APP_GUARD } from '@nestjs/core';
           ? { rejectUnauthorized: false } 
           : false;
         const poolSize = Number(config.get<string>('DATABASE_POOL_SIZE')) || 15;
-        const synchronize = config.get<string>('NODE_ENV') !== 'production' && config.get<string>('DATABASE_SYNCHRONIZE') !== 'false';
+        // Permitimos sincronizar en produccion SOLO si ponen DATABASE_SYNCHRONIZE=true explicitamente
+        const synchronize = config.get<string>('DATABASE_SYNCHRONIZE') === 'true';
         
         console.log('--- DEBUG DO APP PLATFORM ---');
         console.log('DATABASE_URL recibido:', dbUrl ? 'Empieza con ' + dbUrl.substring(0, 15) + '...' : 'INDEFINIDO');

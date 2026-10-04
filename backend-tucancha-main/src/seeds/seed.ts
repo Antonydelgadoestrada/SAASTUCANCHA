@@ -26,14 +26,19 @@ import { ScheduleTemplate } from '../schedule/schedule_template.entity';
 import { CourtScheduleAvailability } from '../schedule/court_schedule_availability.entity';
 import { CourtScheduleEvent } from '../schedule/court_schedule_event.entity';
 
+const dbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.split('?')[0] : undefined;
+
 const AppDataSource = new DataSource({
   type: 'postgres',
-  host: process.env.DATABASE_HOST || 'aws-0-us-east-1.pooler.supabase.com',
-  port: Number(process.env.DATABASE_PORT) || 5432,
-  username: process.env.DATABASE_USERNAME || 'postgres.fartlyhtwqgklcvweetb',
-  password: process.env.DATABASE_PASSWORD || 'Tucancha20206',
-  database: process.env.DATABASE_DATABASE || 'postgres',
-  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  ...(dbUrl ? { url: dbUrl } : {
+    host: process.env.DATABASE_HOST || 'aws-0-us-east-1.pooler.supabase.com',
+    port: Number(process.env.DATABASE_PORT) || 5432,
+    username: process.env.DATABASE_USERNAME || 'postgres.fartlyhtwqgklcvweetb',
+    password: process.env.DATABASE_PASSWORD || 'Tucancha20206',
+    database: process.env.DATABASE_DATABASE || 'postgres',
+  }),
+  ssl: { rejectUnauthorized: false }, // DO requiere ssl
+  extra: { ssl: { rejectUnauthorized: false } },
   entities: [
     User,
     Club,
@@ -79,39 +84,20 @@ await AppDataSource.query(`
 `);
 
 
-  // Crear usuarios según users.md
+  // Crear usuario administrador
   const adminUser = userRepo.create({
-    name: 'Administrador General',
-    email: 'brussitocomunica2017@gmail.com',
+    name: 'Administrador TuCancha',
+    email: 'Tucancha100@gmail.com',
     password: await bcrypt.hash('admin123', 10),
     role: UserRole.ADMIN,
     isVerified: true,
     isActive: true,
   });
 
-  const clubUser = userRepo.create({
-    name: 'Propietario Club Elite',
-    email: 'club@example.com',
-    password: await bcrypt.hash('password123', 10),
-    role: UserRole.CLUB,
-    isVerified: true,
-    isActive: true,
-  });
-  
-  const normalUser = userRepo.create({
-    name: 'Antony Demo',
-    email: 'antonydgyt@gmail.com',
-    password: await bcrypt.hash('Utepino=13', 10),
-    role: UserRole.USER,
-    isVerified: true,
-    isActive: true,
-  });
+  await userRepo.save([adminUser]);
 
-  await userRepo.save([adminUser, clubUser, normalUser]);
-
-  // Crear planes de membresía por defecto
+  // Crear planes de membresía por defecto (necesario para que los nuevos dueños puedan suscribirse)
   const planRepo = AppDataSource.getRepository(MembershipPlan);
-  const membershipRepo = AppDataSource.getRepository(ClubMembership);
 
   const planPro = planRepo.create({
     name: 'Plan Pro Mensual',
@@ -126,85 +112,7 @@ await AppDataSource.query(`
   });
   await planRepo.save(planPro);
 
-  // Crear club
-  const club = clubRepo.create({
-    owner: clubUser,
-    name: 'Club Deportivo Elite',
-    email: 'contacto@clubelite.com',
-    phone: '987654321',
-    address: 'Av. Principal 456',
-    district: 'Lima',
-    description: 'Club completo con canchas de fútbol, vóley y piscina.',
-    logo: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018',
-    images: ['https://images.unsplash.com/photo-1574629810360-7efbbe195018'],
-    socialMedia: {
-      facebook: 'https://facebook.com/clubelite',
-      instagram: 'https://instagram.com/clubelite',
-    },
-    coordinates: {
-      lat: -12.0464,
-      lng: -77.0428,
-    },
-    services: ['cochera', 'wifi', 'piscina'],
-    status: 'APPROVED',
-    approvedAt: new Date(),
-  });
-  await clubRepo.save(club);
-
-  // Asignar membresía activa al club
-  const clubMembership = membershipRepo.create({
-    club: club,
-    plan: planPro,
-    status: 'ACTIVE' as any,
-    startDate: new Date(),
-    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    graceEndDate: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000),
-    autoRenew: true,
-  });
-  await membershipRepo.save(clubMembership);
-
-
-  // Crear canchas
-  const court1 = courtRepo.create({
-    name: 'Cancha de Fútbol 7',
-    type: 'futbol_7',
-    surface: 'sintético',
-    description: 'Cancha sintética con iluminación y césped artificial.',
-    priceDay: 35,
-    priceNight: 45,
-    promoDay: 30,
-    promoNight: 40,
-    images: ['https://images.unsplash.com/photo-1529900241943-41cbe7868ff1'],
-    dimensions: {
-      length: 40,
-      width: 20,
-      unit: 'meters',
-    },
-    isActive: true,
-    club: club,
-  });
-
-  const court2 = courtRepo.create({
-    name: 'Cancha de Vóley',
-    type: 'vóley',
-    surface: 'cemento',
-    description: 'Piso antideslizante ideal para vóley recreativo.',
-    images: ['https://images.unsplash.com/photo-1612872087720-bb876e2e67d1'],
-    priceDay: 35,
-    priceNight: 45,
-    promoDay: 30,
-    promoNight: 40,
-    dimensions: {
-      length: 18,
-      width: 9,
-      unit: 'meters',
-    },
-    isActive: true,
-    club: club,
-  });
-
-  await courtRepo.save([court1, court2]);
-  console.log('✅ Seed completado exitosamente en Supabase!');
+  console.log('✅ Seed completado: Tablas creadas, Administrador (Tucancha100@gmail.com) y Plan Pro generados.');
   await AppDataSource.destroy();
 }
 
