@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Param, Body, NotFoundException, Query, UseGuards, Put } from '@nestjs/common'
+import { Controller, Get, Post, Param, Body, NotFoundException, Query, UseGuards, Put, ForbiddenException } from '@nestjs/common'
 import { ScheduleTemplateService } from './schedule-template.service'
 import { CreateScheduleTemplateDto } from './dto/create-schedule-template.dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { GetUser } from '../auth/get-user.decorator'
 import { User } from '../user/user.entity'
+import { UserRole } from '../user/user-role.enum'
 import { ScheduleTemplate } from './schedule_template.entity'
 import { Cron, CronExpression } from '@nestjs/schedule';
 @Controller('schedule-templates')
@@ -89,9 +90,16 @@ export class ScheduleTemplateController {
   @UseGuards(JwtAuthGuard)
   @Post('/applyTemplateToCourtSafe')
   async applyTemplateToCourtSafe(
-    @Body() data: any
+    @Body() data: any,
+    @GetUser() user: User,
   ){
-   return await this.templateService.applyTemplateToCourtSafe(data.template, data.court)
+    if (user.role !== UserRole.ADMIN) {
+      const courtClubId = data.court?.club?.id || data.court?.club;
+      if (!user.club || (courtClubId && user.club.id !== courtClubId)) {
+        throw new ForbiddenException('No tienes permisos para aplicar plantillas a esta cancha');
+      }
+    }
+    return await this.templateService.applyTemplateToCourtSafe(data.template, data.court)
   }
 
 

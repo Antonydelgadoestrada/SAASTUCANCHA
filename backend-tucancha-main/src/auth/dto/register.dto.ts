@@ -1,5 +1,5 @@
 // src/auth/dto/register.dto.ts
-import { IsEmail, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, ValidateNested, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { UserRole } from '../../user/user-role.enum';
 import { CreateClubDto } from '../../club/dto/create-club.dto';
@@ -63,6 +63,7 @@ export class RegisterDto {
   name: string;
 
   @IsNotEmpty()
+  @IsIn([UserRole.USER, UserRole.CLUB], { message: 'El rol permitido para registro es USER o CLUB' })
   role: UserRole;
 
   @IsOptional()

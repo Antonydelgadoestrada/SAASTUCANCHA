@@ -7,6 +7,7 @@ import {
     Param,
     Body,
     NotFoundException,
+    ForbiddenException,
     Patch,
     UseGuards,
     UseInterceptors,
@@ -139,43 +140,69 @@ import { UpdateClubPaymentConfigDto } from './dto/update-club-payment-config.dto
       return plainToInstance(ClubPublicDto, created, { excludeExtraneousValues: true });
     }
   
+    @UseGuards(JwtAuthGuard)
     @Put(':id')
     @UseInterceptors(
       FilesInterceptor('images', 10, {
         storage: memoryStorage(), // muy importante: subir desde buffer
       })
     )
-    async update(@Param('id') id: string, 
-          @Body() data: Partial<Club>,
-          @UploadedFiles() images: MulterFile[]
+    async update(
+      @Param('id') id: string, 
+      @Body() data: Partial<Club>,
+      @UploadedFiles() images: MulterFile[],
+      @GetUser() user: User,
     ){
+      if (user.role !== 'ADMIN' && (!user.club || user.club.id !== id)) {
+        throw new ForbiddenException('No tienes permisos para modificar este club');
+      }
       const urls = await this.service.uploadFiles(images)
       if(urls.length>0) data = Object.assign(data,{images:urls})
       return this.service.update(id, data);
     }
   
+    @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    remove(@Param('id') id: string) {
+    remove(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') {
+        throw new ForbiddenException('Solo administradores pueden eliminar clubes');
+      }
       return this.service.remove(id);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Patch('approve/:id')
-    async approveClub(@Param('id') id: string) {
+    async approveClub(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') {
+        throw new ForbiddenException('Solo administradores pueden aprobar clubes');
+      }
       return this.service.approveClub(id);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Patch('reject/:id')
-    async rejectClub(@Param('id') id: string) {
+    async rejectClub(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') {
+        throw new ForbiddenException('Solo administradores pueden rechazar clubes');
+      }
       return this.service.rejectClub(id);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Patch('suspend/:id')
-    async suspendClub(@Param('id') id: string) {
+    async suspendClub(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') {
+        throw new ForbiddenException('Solo administradores pueden suspender clubes');
+      }
       return this.service.suspendClub(id);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Patch('reactivate/:id')
-    async reactivateClub(@Param('id') id: string) {
+    async reactivateClub(@Param('id') id: string, @GetUser() user: User) {
+      if (user.role !== 'ADMIN') {
+        throw new ForbiddenException('Solo administradores pueden reactivar clubes');
+      }
       return this.service.reactivateClub(id);
     }
 

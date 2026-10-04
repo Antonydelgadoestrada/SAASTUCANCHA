@@ -1,5 +1,5 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common';
 import { AppModule } from './app.module';
 import * as Sentry from '@sentry/node';
 import { AllExceptionsFilter } from './common/interceptors/sentry.interceptor';
@@ -35,6 +35,7 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
     }));
+    app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
     const port = Number(process.env.PORT) || 3001;
     await app.listen(port);

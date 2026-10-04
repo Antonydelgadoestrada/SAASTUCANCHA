@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Booking } from './booking.entity';
 import { Repository } from 'typeorm';
@@ -9,6 +9,7 @@ import { PaymentStatus } from '../payment/payment-status.enum';
 import { CourtService } from '../court/court.service';
 import { MercadoPagoService } from '../mecado-pago/mercado-pago.service';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { UserService } from '../user/user.service';
 import { In } from 'typeorm';
 import { addMinutes, format, startOfMonth, endOfMonth, subDays } from 'date-fns';
@@ -187,13 +188,23 @@ export class BookingService implements OnModuleInit {
     };
   }
 
-  async cancelBooking(dto:any){
-   const booking = await this.findOneComplete(dto.id)
-   if (!booking) throw new NotFoundException('Reserva no encontrada')
-   booking.status = BookingStatus.CANCELLED;
-   booking.paymentStatus = PaymentStatus.REJECTED;
-   const data = await this.bookingRepo.create(booking);
-   const result =  await this.bookingRepo.save(data)
+  async cancelBooking(dto: any, user?: User){
+    const booking = await this.findOneComplete(dto.id);
+    if (!booking) throw new NotFoundException('Reserva no encontrada');
+
+    if (user) {
+      const isOwner = booking.user?.id === user.id;
+      const isClubOwner = user.club && (booking.club?.id === user.club.id || booking.court?.club?.id === user.club.id);
+      const isAdmin = user.role === UserRole.ADMIN;
+      if (!isOwner && !isClubOwner && !isAdmin) {
+        throw new ForbiddenException('No tienes permisos para cancelar esta reserva');
+      }
+    }
+
+    booking.status = BookingStatus.CANCELLED;
+    booking.paymentStatus = PaymentStatus.REJECTED;
+    const data = await this.bookingRepo.create(booking);
+    const result =  await this.bookingRepo.save(data)
 
    // Construir slots a liberar directamente para evitar bugs de zona horaria
    const dateStr = typeof dto.date === 'string' ? dto.date.substring(0, 10) : new Date(dto.date).toISOString().substring(0, 10);
@@ -327,6 +338,12 @@ export class BookingService implements OnModuleInit {
 
     const court: any = await this.courtService.findOne(dto.courtId, ['club', 'club.owner']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
+
+    if (user.role !== UserRole.ADMIN) {
+      if (!user.club || user.club.id !== court.club?.id) {
+        throw new ForbiddenException('No tienes permisos para registrar reservas manuales en esta cancha');
+      }
+    }
 
     const createdBookings = [];
     const finalPricing = pricing

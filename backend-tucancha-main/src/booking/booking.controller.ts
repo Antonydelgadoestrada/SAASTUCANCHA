@@ -12,12 +12,14 @@
     UploadedFiles,
     InternalServerErrorException,
     UnauthorizedException,
+    ForbiddenException,
   } from '@nestjs/common';
   import { BookingService } from './booking.service';
   import { Booking } from './booking.entity';
 import { CreateBookingDto } from './create-booking.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { GetUser } from '../auth/get-user.decorator';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage,  File as MulterFile } from 'multer';
@@ -60,7 +62,7 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     cancelOnlineBooking(
       @Body() dto: any, @GetUser() user: User,
     ){
-      return this.bookingService.cancelBooking(dto);
+      return this.bookingService.cancelBooking(dto, user);
     }
 
     @UseGuards(JwtAuthGuard)
@@ -83,6 +85,9 @@ import { memoryStorage,  File as MulterFile } from 'multer';
       @Body() dto: any, @GetUser() user: User,
        @UploadedFiles() image: File[]
     ) {
+      if (user.role !== UserRole.ADMIN && user.role !== UserRole.CLUB) {
+        throw new ForbiddenException('Solo los clubes y administradores pueden registrar reservas manuales');
+      }
       const proofOfPaymentUrl = image?.length ? await this.bookingService.uploadFile(image[0]):''
       return this.bookingService.createManualBooking(Object.assign(dto, {proofOfPaymentUrl}), user);
     }

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  UnauthorizedException,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -23,6 +24,7 @@ import { UpdateMembershipPlanDto } from './dto/update-membership-plan.dto';
 import { SubmitManualMembershipPaymentDto } from './dto/submit-manual-membership-payment.dto';
 import { SavePlatformCredentialsDto } from './dto/save-platform-credentials.dto';
 import { S3Service } from '../aws/s3.service';
+import { User } from '../user/user.entity';
 import { Club } from '../club/club.entity';
 import { TransactionsService } from '../transactions/transactions.service';
 
@@ -380,7 +382,7 @@ export class MembershipService implements OnModuleInit {
     clubId: string,
     dto: SubmitManualMembershipPaymentDto,
     file?: any,
-  ): Promise<{ payment: MembershipPayment; membership: ClubMembership }> {
+  ): Promise<{ payment: MembershipPayment; membership: ClubMembership | null; message?: string }> {
     const club = await this.clubRepo.findOne({ where: { id: clubId } });
     if (!club) {
       throw new NotFoundException(`Club con ID ${clubId} no encontrado`);
@@ -403,19 +405,15 @@ export class MembershipService implements OnModuleInit {
       );
     }
 
-    // 1. Activar / renovar membresía inmediatamente (reactivación automática al enviar pago)
-    const activatedMembership = await this.activateOrRenewMembership(
-      clubId,
-      plan.id,
-      true,
-    );
+    // 1. Obtener la membresía actual (si existe) sin activarla aún
+    const currentMembership = await this.getClubActiveMembership(clubId);
 
-    // 2. Registrar el pago de membresía
+    // 2. Registrar el pago de membresía en estado PENDING para que el ADMIN lo audite
     const payment = this.paymentRepo.create({
       clubId,
       club,
-      membershipId: activatedMembership.id,
-      membership: activatedMembership,
+      membershipId: currentMembership?.id || undefined,
+      membership: currentMembership || undefined,
       planId: plan.id,
       plan,
       amount: Number(plan.price),
@@ -425,15 +423,66 @@ export class MembershipService implements OnModuleInit {
       comprobanteUrl,
       referenceNumber: dto.referenceNumber,
       notes: dto.notes,
-      status: MembershipPaymentStatus.PAID,
-      paidAt: new Date(),
+      status: MembershipPaymentStatus.PENDING,
     });
 
     const savedPayment = await this.paymentRepo.save(payment);
 
     return {
       payment: savedPayment,
+      membership: currentMembership,
+      message: 'Comprobante registrado exitosamente. Tu membresía se activará una vez validada por un administrador.',
+    };
+  }
+
+  /**
+   * ADMIN: Aprobar comprobante manual de membresía y activar / renovar la membresía.
+   */
+  async approveManualPayment(paymentId: string, auditor: User) {
+    const payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['club', 'plan'],
+    });
+    if (!payment) throw new NotFoundException('Pago de membresía no encontrado');
+    if (payment.status === MembershipPaymentStatus.PAID) {
+      throw new BadRequestException('El pago ya fue aprobado previamente');
+    }
+
+    // Activar o renovar membresía
+    const activatedMembership = await this.activateOrRenewMembership(
+      payment.clubId,
+      payment.planId,
+      true,
+    );
+
+    payment.status = MembershipPaymentStatus.PAID;
+    payment.paidAt = new Date();
+    payment.membershipId = activatedMembership.id;
+    payment.membership = activatedMembership;
+    const saved = await this.paymentRepo.save(payment);
+
+    return {
+      message: 'Pago de membresía aprobado y membresía activada exitosamente',
+      payment: saved,
       membership: activatedMembership,
+    };
+  }
+
+  /**
+   * ADMIN: Rechazar comprobante manual de membresía.
+   */
+  async rejectManualPayment(paymentId: string, auditor: User, motivo?: string) {
+    const payment = await this.paymentRepo.findOne({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Pago de membresía no encontrado');
+
+    payment.status = MembershipPaymentStatus.REJECTED;
+    if (motivo) {
+      payment.notes = payment.notes ? `${payment.notes} | Motivo rechazo: ${motivo}` : `Motivo rechazo: ${motivo}`;
+    }
+    const saved = await this.paymentRepo.save(payment);
+    return {
+      message: 'Pago de membresía rechazado',
+      payment: saved,
     };
   }
 
@@ -614,14 +663,128 @@ export class MembershipService implements OnModuleInit {
   }
 
   /**
+   * Valida la firma criptográfica HMAC-SHA256 enviada por Mercado Pago en el webhook (SEC-012).
+   * Documentación oficial Mercado Pago:
+   * Header x-signature: ts=...,v1=...
+   * Header x-request-id: uuid
+   * Manifest canónico: id:[data.id];request-id:[x-request-id];ts:[ts];
+   * Manifest alternativo: id:[data.id];ts:[ts];
+   */
+  public verifyWebhookSignature(
+    dataId: string,
+    headers: Record<string, string> = {},
+    secretKey?: string,
+  ): { valid: boolean; reason?: string } {
+    const rawSecret = secretKey || process.env.MP_WEBHOOK_SECRET;
+
+    if (!rawSecret || !rawSecret.trim()) {
+      return {
+        valid: true,
+        reason: 'MP_WEBHOOK_SECRET no configurado - omitiendo validación HMAC (Modo Contingencia / Fallback a API)',
+      };
+    }
+
+    const secrets = rawSecret.split(',').map((s) => s.trim()).filter(Boolean);
+
+    const xSignature =
+      headers['x-signature'] ||
+      headers['X-Signature'] ||
+      headers['x_signature'];
+    const xRequestId =
+      headers['x-request-id'] ||
+      headers['X-Request-Id'] ||
+      headers['x_request_id'];
+
+    if (!xSignature) {
+      return {
+        valid: false,
+        reason: 'Falta cabecera x-signature',
+      };
+    }
+
+    try {
+      // 1. Extraer ts y v1 de la cabecera x-signature (ej: "ts=1704067200,v1=hash...")
+      const parts: Record<string, string> = {};
+      xSignature.split(',').forEach((part) => {
+        const [k, v] = part.trim().split('=');
+        if (k && v) parts[k.trim()] = v.trim();
+      });
+
+      const ts = parts['ts'];
+      const v1 = parts['v1'];
+
+      if (!ts || !v1) {
+        return {
+          valid: false,
+          reason: 'Cabecera x-signature con formato inválido (falta ts o v1)',
+        };
+      }
+
+      // 2. Construir los templates según especificación oficial de Mercado Pago
+      const manifestsToTest: string[] = [];
+      if (xRequestId) {
+        manifestsToTest.push(`id:${dataId};request-id:${xRequestId};ts:${ts};`);
+      }
+      manifestsToTest.push(`id:${dataId};ts:${ts};`);
+
+      const v1Buffer = Buffer.from(v1.toLowerCase());
+
+      for (const secret of secrets) {
+        for (const manifest of manifestsToTest) {
+          const computedHash = crypto
+            .createHmac('sha256', secret)
+            .update(manifest)
+            .digest('hex');
+          const computedBuffer = Buffer.from(computedHash.toLowerCase());
+
+          if (
+            computedBuffer.length === v1Buffer.length &&
+            crypto.timingSafeEqual(computedBuffer, v1Buffer)
+          ) {
+            return { valid: true };
+          }
+        }
+      }
+
+      return {
+        valid: false,
+        reason: 'Firma HMAC SHA256 no coincide con el secreto configurado',
+      };
+    } catch (err: any) {
+      return {
+        valid: false,
+        reason: `Error al procesar la firma criptográfica: ${err.message}`,
+      };
+    }
+  }
+
+  /**
    * Webhook exclusivo e independiente para notificaciones de pago de membresías
    */
-  async handleMembershipWebhook(query: any, body?: any): Promise<void> {
+  async handleMembershipWebhook(query: any, body?: any, headers: Record<string, string> = {}): Promise<void> {
     const paymentId = query?.['data.id'] || query?.id || body?.data?.id || body?.id;
     const type = query?.type || body?.type || query?.topic;
 
     if ((type && type !== 'payment') || !paymentId) {
       return;
+    }
+
+    // 0. Validación de Firma Criptográfica HMAC-SHA256 (SEC-012)
+    const verification = this.verifyWebhookSignature(String(paymentId), headers);
+    if (!verification.valid) {
+      if (verification.reason === 'Falta cabecera x-signature') {
+        // Modo Contingencia: Notificación legacy / IPN o ping de prueba sin cabecera
+        console.warn(`⚠️ [Webhook Membresía] Notificación recibida sin cabecera x-signature para pago ${paymentId}. Continuando con verificación de servidor a servidor (Tier 2 API)...`);
+      } else {
+        // Intento de spoofing, firma adulterada o secreto incorrecto
+        console.error(`🚨 [Webhook Membresía] Intento de firma inválida o adulterada para pago ${paymentId}: ${verification.reason}`);
+        throw new UnauthorizedException(`Firma HMAC de webhook inválida: ${verification.reason}`);
+      }
+    } else if (verification.reason) {
+      // Modo Contingencia: MP_WEBHOOK_SECRET no configurado
+      console.warn(`⚠️ [Webhook Membresía] ${verification.reason}`);
+    } else {
+      console.log(`✅ [Webhook Membresía] Firma HMAC-SHA256 validada con éxito para pago ${paymentId}`);
     }
 
     try {

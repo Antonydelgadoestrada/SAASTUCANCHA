@@ -214,7 +214,11 @@ export class AuthService {
   
   async register(registerDto: RegisterDto) {
     const { email, password, name, role, club } = registerDto;
-  
+
+    if (role === UserRole.ADMIN || (role as string) === 'ADMIN') {
+      throw new BadRequestException('El rol ADMIN no puede ser registrado públicamente');
+    }
+
     const existing = await this.userService.findByEmail(email);
     if (existing) throw new ConflictException('El correo ya está registrado');
   

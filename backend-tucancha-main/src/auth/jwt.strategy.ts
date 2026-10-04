@@ -7,16 +7,18 @@ import { Club } from '../club/club.entity';
 import { ClubMembership } from '../membership/entities/club_membership.entity';
 import { MembershipStatus } from '../membership/enums/membership-status.enum';
 import { DataSource } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly userService: UserService,
     private readonly dataSource: DataSource,
+    private readonly configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: 'JWT_SECRET_KEY', // ideal: usar process.env.JWT_SECRET
+      secretOrKey: configService.get<string>('JWT_SECRET') || process.env.JWT_SECRET || 'JWT_SECRET_KEY',
     });
   }
   

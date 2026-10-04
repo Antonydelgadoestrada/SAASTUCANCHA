@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository } from 'typeorm';
 import { Payment, PaymentType } from './payment.entity';
@@ -163,8 +164,37 @@ export class PaymentService {
   
   async confirmPayment(dto: any){
     const booking = await this.bookingService.findOneComplete(dto.id);
-    const amount = dto.amount ? Number(dto.amount) : undefined;
-    return await this.confirmPreference(booking, amount)
+    if (!booking) throw new NotFoundException('Reserva no encontrada');
+
+    const totalPrice = Number((booking.pricing as any)?.totalPrice || 0);
+    let amount: number | undefined = undefined;
+
+    if (dto.amount !== undefined && dto.amount !== null) {
+      const requestedAmount = Number(dto.amount);
+      if (isNaN(requestedAmount) || requestedAmount <= 0) {
+        throw new BadRequestException('Monto de pago inválido');
+      }
+      if (totalPrice > 0 && requestedAmount > totalPrice) {
+        throw new BadRequestException('El monto solicitado supera el costo total de la reserva');
+      }
+
+      // Validar monto mínimo si se envía un pago parcial
+      if (totalPrice > 0 && requestedAmount < totalPrice) {
+        const clubConfig = booking.club?.id ? await this.clubsService.getPaymentConfig(booking.club.id) : null;
+        if (clubConfig) {
+          const minAdelanto = clubConfig.adelantoMinimo || 
+            (clubConfig.porcentajeAdelantoDefault ? (totalPrice * clubConfig.porcentajeAdelantoDefault / 100) : 0);
+          if (minAdelanto > 0 && requestedAmount < minAdelanto) {
+            throw new BadRequestException(`El adelanto mínimo permitido es S/ ${minAdelanto.toFixed(2)}`);
+          }
+        }
+      }
+      amount = requestedAmount;
+    } else {
+      amount = totalPrice > 0 ? totalPrice : undefined;
+    }
+
+    return await this.confirmPreference(booking, amount);
   }
 
   async confirmPreference(booking: Booking, customAmount?: number){
@@ -300,12 +330,126 @@ export class PaymentService {
     const finalInitPoint = (isSandbox && response.sandbox_init_point) ? response.sandbox_init_point : (response.init_point || response.sandbox_init_point);
     return { init_point: finalInitPoint };
   }
-  async handleMercadoPagoWebhook(query: any, body?: any) {
+
+  /**
+   * Valida la firma criptográfica HMAC-SHA256 enviada por Mercado Pago en el webhook (SEC-012).
+   * Documentación oficial Mercado Pago:
+   * Header x-signature: ts=...,v1=...
+   * Header x-request-id: uuid
+   * Manifest canónico: id:[data.id];request-id:[x-request-id];ts:[ts];
+   * Manifest alternativo: id:[data.id];ts:[ts];
+   */
+  public verifyWebhookSignature(
+    dataId: string,
+    headers: Record<string, string> = {},
+    secretKey?: string,
+  ): { valid: boolean; reason?: string } {
+    const rawSecret = secretKey || process.env.MP_WEBHOOK_SECRET;
+
+    if (!rawSecret || !rawSecret.trim()) {
+      return {
+        valid: true,
+        reason: 'MP_WEBHOOK_SECRET no configurado - omitiendo validación HMAC (Modo Contingencia / Fallback a API)',
+      };
+    }
+
+    const secrets = rawSecret.split(',').map((s) => s.trim()).filter(Boolean);
+
+    const xSignature =
+      headers['x-signature'] ||
+      headers['X-Signature'] ||
+      headers['x_signature'];
+    const xRequestId =
+      headers['x-request-id'] ||
+      headers['X-Request-Id'] ||
+      headers['x_request_id'];
+
+    if (!xSignature) {
+      return {
+        valid: false,
+        reason: 'Falta cabecera x-signature',
+      };
+    }
+
+    try {
+      // 1. Extraer ts y v1 de la cabecera x-signature (ej: "ts=1704067200,v1=hash...")
+      const parts: Record<string, string> = {};
+      xSignature.split(',').forEach((part) => {
+        const [k, v] = part.trim().split('=');
+        if (k && v) parts[k.trim()] = v.trim();
+      });
+
+      const ts = parts['ts'];
+      const v1 = parts['v1'];
+
+      if (!ts || !v1) {
+        return {
+          valid: false,
+          reason: 'Cabecera x-signature con formato inválido (falta ts o v1)',
+        };
+      }
+
+      // 2. Construir los templates según especificación oficial de Mercado Pago
+      const manifestsToTest: string[] = [];
+      if (xRequestId) {
+        manifestsToTest.push(`id:${dataId};request-id:${xRequestId};ts:${ts};`);
+      }
+      manifestsToTest.push(`id:${dataId};ts:${ts};`);
+
+      const v1Buffer = Buffer.from(v1.toLowerCase());
+
+      for (const secret of secrets) {
+        for (const manifest of manifestsToTest) {
+          const computedHash = crypto
+            .createHmac('sha256', secret)
+            .update(manifest)
+            .digest('hex');
+          const computedBuffer = Buffer.from(computedHash.toLowerCase());
+
+          if (
+            computedBuffer.length === v1Buffer.length &&
+            crypto.timingSafeEqual(computedBuffer, v1Buffer)
+          ) {
+            return { valid: true };
+          }
+        }
+      }
+
+      return {
+        valid: false,
+        reason: 'Firma HMAC SHA256 no coincide con el secreto configurado',
+      };
+    } catch (err: any) {
+      return {
+        valid: false,
+        reason: `Error al procesar la firma criptográfica: ${err.message}`,
+      };
+    }
+  }
+  async handleMercadoPagoWebhook(query: any, body?: any, headers: Record<string, string> = {}) {
     const { type, 'data.id': paymentIdQuery, clubId } = query;
     const paymentId = paymentIdQuery || query?.id || body?.data?.id || body?.id;
   
     if (type !== 'payment' || !paymentId) {
       return;
+    }
+
+    // 0. Validación de Firma Criptográfica HMAC-SHA256 (SEC-012)
+    const verification = this.verifyWebhookSignature(String(paymentId), headers);
+    if (!verification.valid) {
+      if (verification.reason === 'Falta cabecera x-signature') {
+        // Modo Contingencia: Notificación legacy / IPN o ping de prueba sin cabecera
+        console.warn(`⚠️ [Webhook MP] Alerta de seguridad: Notificación recibida sin cabecera x-signature para pago ${paymentId}. Continuando con verificación de servidor a servidor (Tier 2 API)...`);
+      } else {
+        // Intento de spoofing, firma adulterada o secreto incorrecto
+        console.error(`🚨 [Webhook MP] Intento de firma inválida o adulterada para pago ${paymentId}: ${verification.reason}`);
+        throw new UnauthorizedException(`Firma HMAC de webhook inválida: ${verification.reason}`);
+      }
+    } else if (verification.reason) {
+      // Modo Contingencia: MP_WEBHOOK_SECRET no configurado
+      console.warn(`⚠️ [Webhook MP] ${verification.reason}`);
+    } else {
+      console.log(`✅ [Webhook MP] Firma HMAC-SHA256 validada con éxito para pago ${paymentId}`);
     }
 
     try {
@@ -451,6 +595,12 @@ export class PaymentService {
           where: { transactionId: String(mpPayment.id) },
         });
 
+        const expectedTotal = bookings.length === 1 ? Number((bookings[0].pricing as any)?.totalPrice || 0) : 0;
+        const isPartial = expectedTotal > 0 && totalPagado < (expectedTotal - 0.05);
+        const resolvedType = isPartial ? PaymentType.ADELANTO : PaymentType.PAGO_COMPLETO;
+        const resolvedSaldoStatus = isPartial ? 'PENDIENTE' : 'NO_APLICA';
+        const resolvedSaldoAmount = isPartial ? Number((expectedTotal - totalPagado).toFixed(2)) : 0;
+
         if (paymentRecord) {
           paymentRecord.status = targetPaymentStatus;
           paymentRecord.amount = totalPagado;
@@ -458,9 +608,9 @@ export class PaymentService {
           paymentRecord.feeAmount = comisionMp + comisionApp;
           paymentRecord.paymentType = paymentType;
           paymentRecord.paymentMethod = paymentMethod;
-          paymentRecord.type = PaymentType.PAGO_COMPLETO;
-          paymentRecord.saldoStatus = 'NO_APLICA';
-          paymentRecord.saldoAmount = 0;
+          paymentRecord.type = resolvedType;
+          paymentRecord.saldoStatus = resolvedSaldoStatus;
+          paymentRecord.saldoAmount = resolvedSaldoAmount;
           paymentRecord.gatewayResponse = mpPayment;
           await trxManager.save(Payment, paymentRecord);
         } else {
@@ -475,9 +625,9 @@ export class PaymentService {
             feeAmount: comisionMp + comisionApp,
             paymentType,
             paymentMethod,
-            type: PaymentType.PAGO_COMPLETO,
-            saldoStatus: 'NO_APLICA',
-            saldoAmount: 0,
+            type: resolvedType,
+            saldoStatus: resolvedSaldoStatus,
+            saldoAmount: resolvedSaldoAmount,
             gatewayResponse: mpPayment,
           });
           await trxManager.save(Payment, paymentRecord);
@@ -1428,6 +1578,17 @@ export class PaymentService {
     const payment = await this.findOrCreatePaymentForAudit(paymentId);
     if (!payment) throw new BadRequestException('Pago o reserva no encontrada');
 
+    if (auditor.role !== UserRole.ADMIN) {
+      const auditorClub = await this.clubsService.findClubByUser(auditor).catch(() => null);
+      if (!auditorClub) {
+        throw new ForbiddenException('No tienes permisos para auditar pagos (no perteneces a ningún club)');
+      }
+      const paymentClubId = payment.bookings?.[0]?.club?.id || payment.bookings?.[0]?.court?.club?.id;
+      if (!paymentClubId || paymentClubId !== auditorClub.id) {
+        throw new ForbiddenException('No tienes permisos para auditar pagos de otro club');
+      }
+    }
+
     if (action === 'CONFIRMAR') {
       payment.status = PaymentStatus.PAID;
       payment.pendingAudit = false;
@@ -1566,6 +1727,17 @@ export class PaymentService {
     const payment = await this.findOrCreatePaymentForAudit(paymentId);
     if (!payment) throw new BadRequestException('Pago o reserva no encontrada');
 
+    if (auditor.role !== UserRole.ADMIN) {
+      const auditorClub = await this.clubsService.findClubByUser(auditor).catch(() => null);
+      if (!auditorClub) {
+        throw new ForbiddenException('No tienes permisos para auditar saldos (no perteneces a ningún club)');
+      }
+      const paymentClubId = payment.bookings?.[0]?.club?.id || payment.bookings?.[0]?.court?.club?.id;
+      if (!paymentClubId || paymentClubId !== auditorClub.id) {
+        throw new ForbiddenException('No tienes permisos para auditar saldos de otro club');
+      }
+    }
+
     if (action === 'CONFIRMAR') {
       payment.saldoStatus = 'PAGADO';
       payment.saldoConfirmadoPor = auditor;
@@ -1628,6 +1800,17 @@ export class PaymentService {
   ) {
     const payment = await this.findOrCreatePaymentForAudit(paymentId);
     if (!payment) throw new BadRequestException('Pago o reserva no encontrada');
+
+    if (auditor.role !== UserRole.ADMIN) {
+      const auditorClub = await this.clubsService.findClubByUser(auditor).catch(() => null);
+      if (!auditorClub) {
+        throw new ForbiddenException('No tienes permisos para liquidar saldos (no perteneces a ningún club)');
+      }
+      const paymentClubId = payment.bookings?.[0]?.club?.id || payment.bookings?.[0]?.court?.club?.id;
+      if (!paymentClubId || paymentClubId !== auditorClub.id) {
+        throw new ForbiddenException('No tienes permisos para liquidar saldos de otro club');
+      }
+    }
 
     const firstBooking = payment.bookings?.[0];
 

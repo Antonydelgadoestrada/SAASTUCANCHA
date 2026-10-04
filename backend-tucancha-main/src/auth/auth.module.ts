@@ -9,6 +9,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { User } from '../user/user.entity';
 import { UserModule } from '../user/user.module';
 import { Club } from '../club/club.entity';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MailerModule } from '../mailer/mailer.module';
 import { GoogleAuthService } from './google-auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -17,9 +18,13 @@ import { JwtAuthGuard } from './jwt-auth.guard';
   imports: [
     TypeOrmModule.forFeature([User, Club]),
     PassportModule,
-    JwtModule.register({
-      secret: 'JWT_SECRET_KEY', // ideal: usar process.env.JWT_SECRET
-      signOptions: { expiresIn: '1d' },
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET') || process.env.JWT_SECRET || 'JWT_SECRET_KEY',
+        signOptions: { expiresIn: '1d' },
+      }),
     }),
     UserModule,
     MailerModule

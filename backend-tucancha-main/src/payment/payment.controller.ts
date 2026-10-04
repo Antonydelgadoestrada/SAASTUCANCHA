@@ -15,6 +15,7 @@ import {
     UseInterceptors,
     UploadedFile,
     UnauthorizedException,
+    Headers,
   } from '@nestjs/common';
   import { PaymentService } from './payment.service';
   import { Payment } from './payment.entity';
@@ -84,8 +85,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
     }
     
     @Post('webhook')
-    async webhook(@Query() query: any, @Body() body: any) {
-      await this.service.handleMercadoPagoWebhook(query, body);
+    async webhook(
+      @Query() query: any,
+      @Body() body: any,
+      @Headers() headers: Record<string, string>,
+    ) {
+      await this.service.handleMercadoPagoWebhook(query, body, headers);
       return { received: true };
     }
     @UseGuards(JwtAuthGuard)

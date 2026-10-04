@@ -50,9 +50,11 @@ import { Exclude } from 'class-transformer';
     refreshToken?: string;
     
     @Column({ nullable: true })
+    @Exclude()
     emailConfirmationToken?: string;
     
     @Column({ nullable: true })
+    @Exclude()
     emailConfirmationExpires?: Date; // Para que expire en 10 min
     
     @Column({ nullable: true })

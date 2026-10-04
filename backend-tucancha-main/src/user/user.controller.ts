@@ -28,27 +28,39 @@ export class UserController {
     return this.userService.getAdminDashboardStats();
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<User> {
+  findOne(@Param('id') id: string, @GetUser() user: User): Promise<User> {
+    if (user.role !== 'ADMIN' && user.id !== id) {
+      throw new ForbiddenException('No tienes permisos para consultar este usuario');
+    }
     return this.userService.findOneById(id);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post()
-  create(@Body() userData: Partial<User>): Promise<User> {
+  create(@Body() userData: Partial<User>, @GetUser() user: User): Promise<User> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Solo administradores pueden crear usuarios directamente');
+    }
     return this.userService.create(userData);
   }
 
   @Put(':id')
   @UseGuards(JwtAuthGuard)
   update(@Param('id') id: string, @Body() userData: Partial<User>, @GetUser() user: User): Promise<User> {
-    if (user.role !== 'ADMIN') {
-      throw new ForbiddenException('No tienes permisos para listar sedes');
+    if (user.role !== 'ADMIN' && user.id !== id) {
+      throw new ForbiddenException('No tienes permisos para modificar este usuario');
     }
     return this.userService.update(id, userData);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string): Promise<void> {
+  @UseGuards(JwtAuthGuard)
+  remove(@Param('id') id: string, @GetUser() user: User): Promise<void> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Solo administradores pueden eliminar usuarios');
+    }
     return this.userService.remove(id);
   }
 }

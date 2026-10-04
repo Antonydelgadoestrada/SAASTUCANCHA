@@ -20,6 +20,7 @@ import {
   import { memoryStorage,  File as MulterFile } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { GetUser } from '../auth/get-user.decorator';
 
 import { InjectRepository } from '@nestjs/typeorm';
@@ -87,7 +88,14 @@ import { MembershipService } from '../membership/membership.service';
       @UploadedFiles() images: MulterFile[],
       @GetUser() user: User
     ) {
-      if (user?.role === 'CLUB' && user?.club?.id) {
+      if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.CLUB) {
+        throw new ForbiddenException('Solo los clubes y administradores pueden crear canchas');
+      }
+
+      if (user?.role === UserRole.CLUB) {
+        if (!user.club?.id) {
+          throw new ForbiddenException('El usuario no tiene un club asignado');
+        }
         // Validar si el club ya configuró sus métodos de cobro
         const club = await this.clubRepo.findOne({ where: { id: user.club.id } });
         const hasYape = Boolean(club?.aceptaYape && club?.yapeNumero?.trim());
@@ -150,8 +158,15 @@ import { MembershipService } from '../membership/membership.service';
     )
     async update(@Param('id') id: string,
       @Body() data: any,
-      @UploadedFiles() images: MulterFile[]
+      @UploadedFiles() images: MulterFile[],
+      @GetUser() user: User,
     ) {
+      const court = await this.service.findOne(id, ['club']);
+      if (!court) throw new NotFoundException('Cancha no encontrada');
+      if (user.role !== UserRole.ADMIN && (!user.club || user.club.id !== court.club?.id)) {
+        throw new ForbiddenException('No tienes permisos para modificar esta cancha');
+      }
+
       let existingUrls: string[] = []
 
       try {
@@ -169,7 +184,12 @@ import { MembershipService } from '../membership/membership.service';
     
     @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    remove(@Param('id') id: string) {
+    async remove(@Param('id') id: string, @GetUser() user: User) {
+      const court = await this.service.findOne(id, ['club']);
+      if (!court) throw new NotFoundException('Cancha no encontrada');
+      if (user.role !== UserRole.ADMIN && (!user.club || user.club.id !== court.club?.id)) {
+        throw new ForbiddenException('No tienes permisos para eliminar esta cancha');
+      }
       return this.service.remove(id);
     }
   }
