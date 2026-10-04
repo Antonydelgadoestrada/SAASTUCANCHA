@@ -32,10 +32,20 @@ import { APP_GUARD } from '@nestjs/core';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const dbUrl = config.get<string>('DATABASE_URL');
+        const dbHost = config.get<string>('DATABASE_HOST');
         const sslConfig = config.get<string>('DATABASE_SSL') === 'true' ? { rejectUnauthorized: false } : false;
         const poolSize = Number(config.get<string>('DATABASE_POOL_SIZE')) || 15;
         const synchronize = config.get<string>('NODE_ENV') !== 'production' && config.get<string>('DATABASE_SYNCHRONIZE') !== 'false';
         
+        console.log('--- DEBUG DO APP PLATFORM ---');
+        console.log('DATABASE_URL recibido:', dbUrl ? 'Empieza con ' + dbUrl.substring(0, 15) + '...' : 'INDEFINIDO');
+        console.log('DATABASE_HOST recibido:', dbHost || 'INDEFINIDO');
+        console.log('-----------------------------');
+
+        if (!dbUrl && !dbHost) {
+           throw new Error('CRITICAL ERROR: No existe DATABASE_URL ni DATABASE_HOST en las variables de entorno de DigitalOcean.');
+        }
+
         if (dbUrl) {
           return {
             type: 'postgres',
