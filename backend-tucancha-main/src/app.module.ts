@@ -33,7 +33,10 @@ import { APP_GUARD } from '@nestjs/core';
       useFactory: (config: ConfigService) => {
         const dbUrl = config.get<string>('DATABASE_URL');
         const dbHost = config.get<string>('DATABASE_HOST');
-        const sslConfig = config.get<string>('DATABASE_SSL') === 'true' ? { rejectUnauthorized: false } : false;
+        const isProd = config.get<string>('NODE_ENV') === 'production';
+        const sslConfig = (config.get<string>('DATABASE_SSL') === 'true' || isProd) 
+          ? { rejectUnauthorized: false } 
+          : false;
         const poolSize = Number(config.get<string>('DATABASE_POOL_SIZE')) || 15;
         const synchronize = config.get<string>('NODE_ENV') !== 'production' && config.get<string>('DATABASE_SYNCHRONIZE') !== 'false';
         
