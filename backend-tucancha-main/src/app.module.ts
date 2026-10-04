@@ -34,7 +34,7 @@ import { APP_GUARD } from '@nestjs/core';
         const dbUrl = config.get<string>('DATABASE_URL');
         const dbHost = config.get<string>('DATABASE_HOST');
         const isProd = config.get<string>('NODE_ENV') === 'production';
-        const sslConfig = (config.get<string>('DATABASE_SSL') === 'true' || isProd) 
+        const sslConfig = (config.get<string>('DATABASE_SSL') === 'true' || isProd || !!dbUrl) 
           ? { rejectUnauthorized: false } 
           : false;
         const poolSize = Number(config.get<string>('DATABASE_POOL_SIZE')) || 15;
@@ -57,7 +57,10 @@ import { APP_GUARD } from '@nestjs/core';
             retryAttempts: 20,
             retryDelay: 3000,
             poolSize,
-            extra: { max: poolSize },
+            extra: { 
+              max: poolSize,
+              ssl: sslConfig
+            },
             autoLoadEntities: true,
             synchronize,
           };
@@ -74,7 +77,10 @@ import { APP_GUARD } from '@nestjs/core';
           retryAttempts: 20,
           retryDelay: 3000,
           poolSize,
-          extra: { max: poolSize },
+          extra: { 
+            max: poolSize,
+            ssl: sslConfig
+          },
           autoLoadEntities: true,
           synchronize,
         };
