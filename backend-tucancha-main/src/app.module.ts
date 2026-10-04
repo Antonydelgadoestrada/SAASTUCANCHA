@@ -17,6 +17,9 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { QrModule } from './qr/qr.module';
 import { MembershipModule } from './membership/membership.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -52,6 +55,10 @@ import { TransactionsModule } from './transactions/transactions.module';
             : config.get<string>('DATABASE_SYNCHRONIZE') !== 'false',
       }),
     }),
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 100,
+    }]),
     ScheduleModule.forRoot(),
     UserModule, BookingModule, ClubModule, CourtModule, 
     PaymentModule, ReviewModule, PromotionModule, AuthModule, 
@@ -60,6 +67,12 @@ import { TransactionsModule } from './transactions/transactions.module';
     TransactionsModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

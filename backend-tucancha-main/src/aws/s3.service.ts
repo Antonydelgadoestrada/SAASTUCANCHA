@@ -1,24 +1,36 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
-import axios from 'axios';
 import { Readable } from 'stream';
 
 @Injectable()
 export class S3Service {
-  private get supabaseUrl(): string {
-    return (process.env.SUPABASE_URL || 'https://fartlyhtwqgklcvweetb.supabase.co').replace(/\/$/, '');
-  }
-
-  private get supabaseKey(): string {
-    return process.env.SUPABASE_KEY || '';
-  }
-
-  private get supabaseBucket(): string {
-    return process.env.SUPABASE_BUCKET || 'tucancha';
-  }
+  private s3Client: S3Client;
+  private bucket: string;
+  private endpoint: string;
+  private readonly logger = new Logger(S3Service.name);
 
   constructor() {
-    console.log(`⚡ Supabase Storage initialized for project URL: ${this.supabaseUrl}, bucket: ${this.supabaseBucket}`);
+    this.bucket = process.env.DO_SPACES_BUCKET || 'tucancha';
+    this.endpoint = process.env.DO_SPACES_ENDPOINT || 'https://sfo3.digitaloceanspaces.com';
+    
+    this.s3Client = new S3Client({
+      endpoint: this.endpoint,
+      region: process.env.DO_SPACES_REGION || 'sfo3', // Region is required for SDK v3
+      credentials: {
+        accessKeyId: process.env.DO_SPACES_KEY || '',
+        secretAccessKey: process.env.DO_SPACES_SECRET || '',
+      },
+      // DO Spaces requires pathStyle to be false or true depending on setup, usually false for virtual hosted style
+      forcePathStyle: false, 
+    });
+    this.logger.log(`⚡ S3Service initialized for DO Spaces endpoint: ${this.endpoint}, bucket: ${this.bucket}`);
   }
 
   async uploadFile(
@@ -32,23 +44,24 @@ export class S3Service {
     const fileName = `${uuidv4()}-${safeName}`;
     const key = cleanFolderPath ? `${cleanFolderPath}/${fileName}`.replace(/\/+/g, '/') : fileName;
 
-    const uploadUrl = `${this.supabaseUrl}/storage/v1/object/${this.supabaseBucket}/${key}`;
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: mimetype,
+        ACL: 'public-read', // Hacerlo público
+      })
+    );
 
-    await axios.post(uploadUrl, buffer, {
-      headers: {
-        Authorization: `Bearer ${this.supabaseKey}`,
-        'Content-Type': mimetype,
-        'x-upsert': 'true',
-      },
-    });
-
-    // Public URL format: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
-    return `${this.supabaseUrl}/storage/v1/object/public/${this.supabaseBucket}/${key}`;
+    // Formato de URL pública de DO Spaces: https://<bucket>.<region>.digitaloceanspaces.com/<key>
+    const endpointHost = this.endpoint.replace('https://', '');
+    return `https://${this.bucket}.${endpointHost}/${key}`;
   }
 
   extractKeyFromUrl(url: string): string {
-    // Expected format: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
-    const prefix = `${this.supabaseUrl}/storage/v1/object/public/${this.supabaseBucket}/`;
+    const endpointHost = this.endpoint.replace('https://', '');
+    const prefix = `https://${this.bucket}.${endpointHost}/`;
     if (url.startsWith(prefix)) {
       return url.replace(prefix, '');
     }
@@ -58,21 +71,17 @@ export class S3Service {
   async deleteFile(key: string): Promise<void> {
     if (!key) return;
     const cleanKey = key.replace(/^\//, '').replace(/\/+/g, '/');
-    const deleteUrl = `${this.supabaseUrl}/storage/v1/object/${this.supabaseBucket}`;
 
     try {
-      await axios.delete(deleteUrl, {
-        headers: {
-          Authorization: `Bearer ${this.supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
-        data: {
-          prefixes: [cleanKey],
-        },
-      });
-      console.log(`🗑️ Deleted Supabase file: ${cleanKey}`);
-    } catch (err) {
-      console.warn(`⚠️ No se pudo borrar el archivo de Supabase ${cleanKey}:`, err.response?.data || err.message);
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: cleanKey,
+        })
+      );
+      this.logger.log(`🗑️ Deleted file from DO Spaces: ${cleanKey}`);
+    } catch (err: any) {
+      this.logger.warn(`⚠️ Error deleting file from DO Spaces ${cleanKey}: ${err.message}`);
     }
   }
 
@@ -97,31 +106,27 @@ export class S3Service {
 
   async getSignedUrl(key: string): Promise<string> {
     const cleanKey = key.replace(/^\//, '').replace(/\/+/g, '/');
-    const signUrl = `${this.supabaseUrl}/storage/v1/object/sign/${this.supabaseBucket}/${cleanKey}`;
     try {
-      const res = await axios.post(signUrl, { expiresIn: 3600 }, {
-        headers: {
-          Authorization: `Bearer ${this.supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: cleanKey,
       });
-      return `${this.supabaseUrl}${res.data.signedURL}`;
-    } catch (err) {
-      console.warn(`⚠️ Error al firmar URL en Supabase para ${cleanKey}:`, err.message);
-      return `${this.supabaseUrl}/storage/v1/object/public/${this.supabaseBucket}/${cleanKey}`;
+      return await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+    } catch (err: any) {
+      this.logger.warn(`⚠️ Error signing URL for DO Spaces for ${cleanKey}: ${err.message}`);
+      const endpointHost = this.endpoint.replace('https://', '');
+      return `https://${this.bucket}.${endpointHost}/${cleanKey}`;
     }
   }
 
   async getFileStream(key: string): Promise<Readable> {
     const cleanKey = key.replace(/^\//, '').replace(/\/+/g, '/');
-    const downloadUrl = `${this.supabaseUrl}/storage/v1/object/${this.supabaseBucket}/${cleanKey}`;
-    const res = await axios.get(downloadUrl, {
-      headers: {
-        Authorization: `Bearer ${this.supabaseKey}`,
-      },
-      responseType: 'stream',
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: cleanKey,
     });
-    return res.data as Readable;
+    const response = await this.s3Client.send(command);
+    return response.Body as Readable;
   }
 
   async uploadFiles(images: any[], folderPath: string, prefix = 'public') {

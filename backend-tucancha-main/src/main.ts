@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import * as Sentry from '@sentry/node';
 import { AllExceptionsFilter } from './common/interceptors/sentry.interceptor';
 import * as bodyParser from 'body-parser';
+import helmet from 'helmet';
 
 async function bootstrap() {
   try {
@@ -14,6 +15,8 @@ async function bootstrap() {
     });
 
     const app = await NestFactory.create(AppModule);
+
+    app.use(helmet());
 
     const corsOrigins = process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
