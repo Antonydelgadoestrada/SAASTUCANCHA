@@ -50,9 +50,13 @@ import { APP_GUARD } from '@nestjs/core';
         }
 
         if (dbUrl) {
+          // DigitalOcean incluye ?sslmode=require en la URL. 
+          // Esto causa que el driver "pg" sobreescriba nuestra configuración y obligue a validar el certificado.
+          // Lo removemos para que TypeORM use nuestro objeto sslConfig ({ rejectUnauthorized: false }).
+          const cleanUrl = dbUrl.split('?')[0]; 
           return {
             type: 'postgres',
-            url: dbUrl,
+            url: cleanUrl,
             ssl: sslConfig,
             retryAttempts: 20,
             retryDelay: 3000,
