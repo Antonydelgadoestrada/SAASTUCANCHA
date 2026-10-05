@@ -82,7 +82,33 @@ export class MembershipController {
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible para este usuario');
     }
-    const membership = await this.membershipService.getClubActiveMembership(user.club.id);
+    let membership = await this.membershipService.getClubActiveMembership(user.club.id);
+    
+    // Si no tiene membresía pero tiene trial activo, creamos una membresía virtual "Prueba Gratuita"
+    // Buscamos el club real en la BD para asegurarnos de tener sus fechas y status actualizados
+    const dbClub = await this.membershipService['clubRepo'].findOne({ where: { id: user.club.id } });
+    if (!membership && dbClub && dbClub.status === 'APPROVED' && dbClub.trialEndDate) {
+      const now = new Date();
+      const trialEnd = new Date(dbClub.trialEndDate);
+      if (trialEnd > now) {
+        membership = {
+          id: 'virtual-trial-membership',
+          clubId: dbClub.id,
+          status: 'ACTIVE', // Para que el frontend no bloquee
+          startDate: dbClub.createdAt || now,
+          endDate: trialEnd,
+          autoRenew: false,
+          cancelAtPeriodEnd: true,
+          plan: {
+            id: 'virtual-trial-plan',
+            name: 'Prueba Gratuita TuCancha',
+            price: 0,
+            interval: 'MONTHLY'
+          }
+        } as any;
+      }
+    }
+
     return { membership, serverTime: new Date() };
   }
 
