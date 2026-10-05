@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   S3Client,
   PutObjectCommand,
@@ -9,8 +9,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import { Readable } from 'stream';
 
+import { PutBucketPolicyCommand } from '@aws-sdk/client-s3';
+
 @Injectable()
-export class S3Service {
+export class S3Service implements OnModuleInit {
   private s3Client: S3Client;
   private bucket: string;
   private endpoint: string;
@@ -22,15 +24,44 @@ export class S3Service {
     
     this.s3Client = new S3Client({
       endpoint: this.endpoint,
-      region: process.env.DO_SPACES_REGION || 'sfo3', // Region is required for SDK v3
+      region: process.env.DO_SPACES_REGION || 'sfo3',
       credentials: {
         accessKeyId: process.env.DO_SPACES_KEY || '',
         secretAccessKey: process.env.DO_SPACES_SECRET || '',
       },
-      // DO Spaces requires pathStyle to be false or true depending on setup, usually false for virtual hosted style
       forcePathStyle: false, 
     });
     this.logger.log(`⚡ S3Service initialized for DO Spaces endpoint: ${this.endpoint}, bucket: ${this.bucket}`);
+  }
+
+  async onModuleInit() {
+    // Configurar automáticamente la política del Bucket para que todas las imágenes sean públicas
+    // Esto resuelve el error de "Access Denied" o "Unsupported ACL" sin intervención manual
+    if (process.env.DO_SPACES_KEY) {
+      try {
+        const policy = {
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Sid: "PublicReadGetObject",
+              Effect: "Allow",
+              Principal: "*",
+              Action: ["s3:GetObject"],
+              Resource: [`arn:aws:s3:::${this.bucket}/*`],
+            },
+          ],
+        };
+        await this.s3Client.send(
+          new PutBucketPolicyCommand({
+            Bucket: this.bucket,
+            Policy: JSON.stringify(policy),
+          })
+        );
+        this.logger.log(`✅ DO Spaces Bucket Policy set to PUBLIC for bucket: ${this.bucket}`);
+      } catch (err: any) {
+        this.logger.warn(`⚠️ Could not auto-set bucket policy (might already be set or missing permissions): ${err.message}`);
+      }
+    }
   }
 
   async uploadFile(
