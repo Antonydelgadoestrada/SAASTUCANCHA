@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { Calendar, Shield, Search, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react"
+import { Calendar, Shield, Search, CheckCircle, ChevronLeft, ChevronRight, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const featuresData = [
@@ -33,17 +33,17 @@ const featuresData = [
     alt: "Checkout de Pago Seguro"
   },
   {
-    tag: "Visibilidad y Crecimiento",
-    tagIcon: <Search className="h-4.5 w-4.5" />,
-    title: "Buscador para Deportistas y Analíticas de Negocio",
-    desc: "Permite que miles de jugadores te encuentren fácilmente gracias a nuestro mapa interactivo y geolocalizado. Al mismo tiempo, obtén reportes detallados del rendimiento mensual de tus canchas, tasas de ocupación e ingresos generados.",
+    tag: "Flexibilidad Total",
+    tagIcon: <Wallet className="h-4.5 w-4.5" />,
+    title: "Flexibilidad Total en Cobros: Mercado Pago o Negociación Directa",
+    desc: "Tú decides cómo cobrar. tucancha.com.pe se adapta al modelo de negocio de tu complejo: integra la pasarela de Mercado Pago para recibir tarjetas y pagos automáticos, o permite que tus clientes coordinen la seña y el saldo directamente contigo mediante Yape, Plin o pago presencial.",
     bullets: [
-      "Búsqueda avanzada por deporte, ubicación y hora exacta.",
-      "Panel de administración con gráficos interactivos de crecimiento.",
-      "Control detallado de reservas aceptadas y canceladas."
+      "Cobro Automático con Mercado Pago: Recibe pagos digitales directamente desde la plataforma sin fricción.",
+      "Negociación Directa y Personalizada: Configura reservas para adjuntar comprobantes de Yape/Plin.",
+      "Control Claro de Señas y Saldos: Visualiza al instante en tu panel qué monto fue abonado y cuánto resta."
     ],
-    image: "/search_stats_mockup.jpg",
-    alt: "Buscador y Estadísticas Detalladas"
+    image: "/payment_flexibility_mockup.png",
+    alt: "Flexibilidad de Pagos y Cobros"
   }
 ]
 
