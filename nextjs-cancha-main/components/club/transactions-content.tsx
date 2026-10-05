@@ -76,7 +76,7 @@ export function TransactionsContent() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Ingresos Brutos</CardTitle>
@@ -119,6 +119,28 @@ export function TransactionsContent() {
               <div className="text-2xl font-bold text-green-600">{formatCurrency(metricsData?.totalIngresosNetos || 0)}</div>
             )}
             <p className="text-xs text-muted-foreground mt-1">Dinero real percibido</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-sm font-medium text-blue-600">Ingresos Eventos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoadingMetrics ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-blue-600">{formatCurrency(metricsData?.totalIngresosEventos || 0)}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">Total recaudado por eventos</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-sm font-medium text-purple-600">Pago Membresía</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoadingMetrics ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-purple-600">-{formatCurrency(metricsData?.pagoMembresias || 0)}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">Suscripción a la plataforma</p>
           </CardContent>
         </Card>
       </div>

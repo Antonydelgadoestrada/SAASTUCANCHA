@@ -25,7 +25,7 @@ export class TransactionsService implements OnModuleInit {
   async backfillOldPayments() {
     const payments = await this.paymentRepo.find({
       where: { status: PaymentStatus.PAID },
-      relations: ['bookings', 'bookings.club', 'bookings.user'],
+      relations: ['bookings', 'bookings.club', 'bookings.user', 'bookings.court', 'bookings.court.club'],
     });
 
     let count = 0;
@@ -85,9 +85,9 @@ export class TransactionsService implements OnModuleInit {
         feePercent: 0,
         netAmount: payment.netAmount || payment.amount,
         currency: payment.currency || 'PEN',
-        reservationTotal: booking.totalPrice,
+        reservationTotal: Number((booking.pricing as any)?.totalPrice || (booking.pricing as any)?.basePrice || 0),
         paidAccumulated: payment.amount,
-        pendingAfter: isAdvance ? Math.max(0, booking.totalPrice - payment.amount) : 0,
+        pendingAfter: isAdvance ? Math.max(0, Number((booking.pricing as any)?.totalPrice || 0) - payment.amount) : 0,
         status: TransactionStatus.APPROVED,
         description: `${isAdvance ? 'Adelanto' : 'Pago Total'} Reserva Online - ${booking.id.slice(-5)}`,
         externalId: payment.transactionId,
@@ -122,7 +122,7 @@ export class TransactionsService implements OnModuleInit {
         feePercent: 0,
         netAmount: grossAmount,
         currency: payment.currency || 'PEN',
-        reservationTotal: booking.totalPrice,
+        reservationTotal: Number((booking.pricing as any)?.totalPrice || (booking.pricing as any)?.basePrice || 0),
         status: TransactionStatus.PENDING,
         description: `Comprobante subido - ${isSaldo ? 'Saldo' : 'Reserva'} - ${booking.id.slice(-5)}`,
         voucherRef: isSaldo ? payment.saldoComprobanteUrl : payment.comprobanteUrl,
@@ -135,11 +135,38 @@ export class TransactionsService implements OnModuleInit {
   async recordVoucherReviewed(payment: any, action: 'CONFIRMAR' | 'RECHAZAR', reviewerId: string, booking: any, isSaldo = false) {
     try {
       const sourceId = isSaldo ? `${booking.id}:SALDO_VOUCHER` : `${booking.id}:VOUCHER`;
-      const tx = await this.transactionRepo.findOne({ where: { sourceType: 'RESERVATION', sourceId } });
+      let tx = await this.transactionRepo.findOne({ where: { sourceType: 'RESERVATION', sourceId } });
       
       if (!tx) {
-        this.logger.warn(`Voucher transaction not found for ${sourceId}`);
-        return;
+        this.logger.warn(`Voucher transaction not found for ${sourceId}, creating it now...`);
+        // Fallback: Si no existe, creamos la transacción en este momento (retroactividad para vouchers antiguos)
+        const isAdvance = payment.type === 'ADELANTO';
+        const category = isSaldo 
+          ? TransactionCategory.RESERVATION_BALANCE 
+          : (isAdvance ? TransactionCategory.RESERVATION_ADVANCE : TransactionCategory.RESERVATION_FULL);
+        const grossAmount = isSaldo ? (payment.saldoAmount || 0) : (payment.amount || 0);
+
+        tx = this.transactionRepo.create({
+          sourceType: 'RESERVATION',
+          sourceId,
+          clubId: booking?.club?.id || booking?.club,
+          reservationId: booking.id,
+          submittedAt: payment.createdAt || new Date(),
+          direction: TransactionDirection.IN,
+          category,
+          origin: TransactionOrigin.VOUCHER,
+          paymentMethod: isSaldo ? (payment.saldoMethod || 'TRANSFERENCIA') : (payment.paymentMethod || payment.method),
+          channel: 'VOUCHER',
+          grossAmount,
+          feeAmount: 0,
+          feePercent: 0,
+          netAmount: grossAmount,
+          currency: payment.currency || 'PEN',
+          reservationTotal: Number((booking.pricing as any)?.totalPrice || (booking.pricing as any)?.basePrice || 0),
+          status: TransactionStatus.PENDING,
+          description: `Comprobante auditado - ${isSaldo ? 'Saldo' : 'Reserva'} - ${booking.id.slice(-5)}`,
+          voucherRef: isSaldo ? payment.saldoComprobanteUrl : payment.comprobanteUrl,
+        });
       }
 
       if (tx.status !== TransactionStatus.PENDING) {
@@ -193,9 +220,9 @@ export class TransactionsService implements OnModuleInit {
         feePercent: payment.method === 'CARD' && payment.feeAmount > 0 ? Number(((payment.feeAmount / payment.amount) * 100).toFixed(2)) : 0,
         netAmount: payment.netAmount || payment.amount,
         currency: payment.currency || 'PEN',
-        reservationTotal: booking.totalPrice,
+        reservationTotal: Number((booking.pricing as any)?.totalPrice || (booking.pricing as any)?.basePrice || 0),
         paidAccumulated: payment.amount,
-        pendingAfter: isAdvance ? Math.max(0, booking.totalPrice - payment.amount) : 0,
+        pendingAfter: isAdvance ? Math.max(0, Number((booking.pricing as any)?.totalPrice || 0) - payment.amount) : 0,
         status: TransactionStatus.APPROVED,
         description: `Pago Manual ${isAdvance ? 'Adelanto' : 'Total'} - ${booking.id.slice(-5)}`,
       });
@@ -225,9 +252,9 @@ export class TransactionsService implements OnModuleInit {
         feePercent: payment.saldoMethod === 'CARD' && payment.saldoFeeAmount > 0 ? Number(((payment.saldoFeeAmount / payment.saldoAmount) * 100).toFixed(2)) : 0,
         netAmount: payment.saldoNetAmount || payment.saldoAmount,
         currency: payment.currency || 'PEN',
-        reservationTotal: booking.totalPrice,
+        reservationTotal: Number((booking.pricing as any)?.totalPrice || (booking.pricing as any)?.basePrice || 0),
         paidAccumulated,
-        pendingAfter: Math.max(0, booking.totalPrice - paidAccumulated),
+        pendingAfter: Math.max(0, Number((booking.pricing as any)?.totalPrice || 0) - paidAccumulated),
         status: TransactionStatus.APPROVED,
         description: `Cobro Saldo Restante - ${booking.id.slice(-5)}`,
         metadata: { notes: payment.saldoNotas },
@@ -266,6 +293,31 @@ export class TransactionsService implements OnModuleInit {
 
   async recordRefund(payment: any, booking: any, amount: number) {
      // Optional refund implementation
+  }
+
+  async recordEventCreation(event: any, clubId: string) {
+    try {
+      if (!event.price || event.price <= 0) return;
+
+      await this.upsertTransaction('EVENT', `${event.id}`, {
+        clubId,
+        occurredAt: event.createdAt || new Date(),
+        direction: TransactionDirection.IN,
+        category: TransactionCategory.OTHER,
+        origin: TransactionOrigin.MANUAL,
+        paymentMethod: 'CASH',
+        channel: 'EVENT',
+        grossAmount: event.price,
+        feeAmount: 0,
+        feePercent: 0,
+        netAmount: event.price,
+        currency: 'PEN',
+        status: TransactionStatus.APPROVED,
+        description: `Cobro de Evento - ${event.name}`,
+      });
+    } catch (e) {
+      this.logger.error(`Error recording event creation`, e);
+    }
   }
 
   async findAllByClub(clubId: string, page: number = 1, limit: number = 10, startDate?: string, endDate?: string, status?: string, paymentMethod?: string, category?: string) {
@@ -311,6 +363,7 @@ export class TransactionsService implements OnModuleInit {
       .addSelect('SUM(tx.feeAmount)', 'totalComisiones')
       .addSelect(`SUM(CASE WHEN tx.origin = 'MERCADOPAGO' THEN tx.feeAmount ELSE 0 END)`, 'comisionesMP')
       .addSelect(`SUM(CASE WHEN tx.paymentMethod = 'CARD' AND tx.origin = 'MANUAL' THEN tx.feeAmount ELSE 0 END)`, 'comisionesPOS')
+      .addSelect(`SUM(CASE WHEN tx.channel = 'EVENT' THEN tx.netAmount ELSE 0 END)`, 'totalIngresosEventos')
       .where('tx.clubId = :clubId', { clubId })
       .andWhere('tx.status = :status', { status: TransactionStatus.APPROVED })
       .andWhere('tx.direction = :direction', { direction: TransactionDirection.IN });
@@ -330,12 +383,31 @@ export class TransactionsService implements OnModuleInit {
 
     const res = await query.getRawOne();
     
+    const queryOut = this.transactionRepo.createQueryBuilder('tx')
+      .select('SUM(tx.netAmount)', 'totalEgresos')
+      .addSelect(`SUM(CASE WHEN tx.category = 'MEMBERSHIP_PAYMENT' THEN tx.netAmount ELSE 0 END)`, 'pagoMembresias')
+      .where('tx.clubId = :clubId', { clubId })
+      .andWhere('tx.status = :status', { status: TransactionStatus.APPROVED })
+      .andWhere('tx.direction = :direction', { direction: TransactionDirection.OUT });
+      
+    if (startDate) {
+      queryOut.andWhere('tx.occurredAt >= :startDate', { startDate });
+    }
+    if (endDate) {
+      queryOut.andWhere('tx.occurredAt <= :endDate', { endDate });
+    }
+    
+    const resOut = await queryOut.getRawOne();
+    
     return {
       totalIngresosBrutos: Number(res?.totalIngresosBrutos || 0),
       totalIngresosNetos: Number(res?.totalIngresosNetos || 0),
       totalComisiones: Number(res?.totalComisiones || 0),
       comisionesMP: Number(res?.comisionesMP || 0),
-      comisionesPOS: Number(res?.comisionesPOS || 0)
+      comisionesPOS: Number(res?.comisionesPOS || 0),
+      totalIngresosEventos: Number(res?.totalIngresosEventos || 0),
+      totalEgresos: Number(resOut?.totalEgresos || 0),
+      pagoMembresias: Number(resOut?.pagoMembresias || 0)
     };
   }
 }

@@ -43,6 +43,9 @@ export interface MetricsResponse {
   totalComisiones: number;
   comisionesMP?: number;
   comisionesPOS?: number;
+  totalIngresosEventos?: number;
+  totalEgresos?: number;
+  pagoMembresias?: number;
 }
 
 export async function getTransactions(page = 1, limit = 10, startDate?: string, endDate?: string, status?: string, paymentMethod?: string, category?: string): Promise<TransactionsResponse> {

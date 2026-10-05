@@ -8,7 +8,7 @@ import { ScheduleTemplateController } from './schedule-template.controller';
 import { CourtScheduleEventService } from './court-schedule-event.service';
 import { CourtScheduleEventController } from './court-schedule-event.controller';
 import { CourtModule } from '../court/court.module';
-
+import { TransactionsModule } from '../transactions/transactions.module';
 
 @Module({
   imports: [
@@ -18,6 +18,7 @@ import { CourtModule } from '../court/court.module';
       CourtScheduleEvent,
     ]),
     forwardRef(() => CourtModule),
+    forwardRef(() => TransactionsModule),
   ],
   providers: [ScheduleTemplateService, CourtScheduleEventService],
   controllers: [ScheduleTemplateController, CourtScheduleEventController],

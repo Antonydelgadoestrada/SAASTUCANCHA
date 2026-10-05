@@ -13,6 +13,7 @@ import { CourtScheduleEvent } from './court_schedule_event.entity';
 import { CourtService } from '../court/court.service';
 import { CreateCourtScheduleEventDto } from './dto/create-court-schedule-event.dto';
 import { UpdateCourtScheduleEventDto } from './dto/update-court-schedule-event.dto';
+import { TransactionsService } from '../transactions/transactions.service';
 
 export type ExpandedEventSlot = {
   date: string;
@@ -46,6 +47,8 @@ export class CourtScheduleEventService {
     private readonly eventRepo: Repository<CourtScheduleEvent>,
     @Inject(forwardRef(() => CourtService))
     private readonly courtService: CourtService,
+    @Inject(forwardRef(() => TransactionsService))
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   private timeToMinutes(t: string): number {
@@ -479,7 +482,14 @@ export class CourtScheduleEventService {
       price: dto.price ?? 0,
       isActive: dto.isActive !== false,
     });
-    return this.eventRepo.save(row);
+    const saved = await this.eventRepo.save(row);
+    
+    // Si el evento tiene precio, registrar el ingreso automáticamente
+    if (saved.price > 0) {
+      this.transactionsService.recordEventCreation(saved, clubId).catch(() => {});
+    }
+
+    return saved;
   }
 
   async update(id: string, dto: UpdateCourtScheduleEventDto, clubId: string): Promise<CourtScheduleEvent> {
