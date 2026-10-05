@@ -79,7 +79,8 @@ await AppDataSource.query(`
     "booking",
     "court",
     "club",
-    "user"
+    "user",
+    "membership_plan"
   CASCADE
 `);
 
