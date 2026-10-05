@@ -13,7 +13,7 @@ import {Payment as PaymentMp} from "mercadopago";
 import { User } from '../user/user.entity';
 import { UserRole } from '../user/user-role.enum';
 import { CreateManualBookingDto } from '../booking/create-booking.dto';
-import { addMinutes, addSeconds, isBefore, format} from 'date-fns'
+import { addMinutes, addSeconds, addDays, isBefore, format} from 'date-fns'
 import { PaymentMethod } from './payment-method.enum';
 import { ScheduleTemplateService } from '../schedule/schedule-template.service';
 import { MailerService } from '../mailer/mailer.service';
@@ -42,7 +42,8 @@ export class PaymentService {
     @Inject(forwardRef(() => MembershipService))
     private readonly membershipService: MembershipService,
   ) {
-    this.mercadopago = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN})
+    const platformToken = process.env.ADMIN_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || process.env.MERCADO_PAGO_ACCESS_TOKEN || '';
+    this.mercadopago = new MercadoPagoConfig({ accessToken: platformToken });
   }
 
   findAll() {
@@ -69,6 +70,11 @@ export class PaymentService {
  
   async handleOauthCallback(code: string, clubId: string) {
     try {
+      // 1. Delegar al módulo de membresía si el state proviene del administrador de la plataforma
+      if (clubId && (clubId.startsWith('admin_platform:') || clubId.startsWith('admin:'))) {
+        return await this.membershipService.handlePlatformOauthCallback(code, clubId);
+      }
+
       if (!process.env.MP_CLIENT_ID || !process.env.MP_CLIENT_SECRET || !code || !process.env.SERVICES_URL) {
         console.error('⚠️ Faltan valores requeridos para OAuth de Mercado Pago:', {
           clientId: Boolean(process.env.MP_CLIENT_ID),
@@ -99,16 +105,16 @@ export class PaymentService {
 
   async updateToken() {
     const clubs = await this.clubsService.findAllWithToken();
-    const threshold = addMinutes(new Date(), 30); // renovar si expira en menos de 30 mins
+    const threshold = addDays(new Date(), 15); // Renovar si expira en los próximos 15 días
     const oauth = new OAuth(this.mercadopago);
 
     for (const club of clubs) {
-      if(!(club.mpTokenExpiresAt && isBefore(club.mpTokenExpiresAt, threshold))) continue
+      if (!(club.mpTokenExpiresAt && isBefore(new Date(club.mpTokenExpiresAt), threshold))) continue;
       try {
         const credentials = await oauth.refresh({
           body: {
-            client_id: process.env.MP_CLIENT_ID,
-            client_secret: process.env.MP_CLIENT_SECRET,
+            client_id: process.env.MP_CLIENT_ID || '',
+            client_secret: process.env.MP_CLIENT_SECRET || '',
             refresh_token: club.mpRefreshToken,
           },
         });
@@ -116,13 +122,43 @@ export class PaymentService {
         await this.clubsService.update(club.id, {
           mpAccessToken: credentials.access_token,
           mpRefreshToken: credentials.refresh_token,
-          mpTokenExpiresAt: addSeconds(new Date(), credentials.expires_in),
+          mpTokenExpiresAt: addSeconds(new Date(), credentials.expires_in || 15552000),
         });
-
-      } catch (error) {
-        throw new Error(`Error al renovar token de ${club.name}, ${error.message}`);
+        console.log(`🔄 [MercadoPago Cron] Token renovado exitosamente para club: ${club.name} (${club.id})`);
+      } catch (error: any) {
+        // En producción nunca abortamos el bucle completo por un club individual
+        console.error(`⚠️ [MercadoPago Cron] Error al renovar token de ${club.name} (${club.id}):`, error?.message || error);
       }
     }
+  }
+
+  /**
+   * Garantiza que el token del club esté vigente antes de iniciar una transacción.
+   * Si está por expirar en las próximas 48 horas o ya expiró, lo renueva en caliente.
+   */
+  async ensureValidClubToken(club: Club): Promise<Club> {
+    if (!club?.mpRefreshToken || !club?.mpTokenExpiresAt) return club;
+    const threshold = addDays(new Date(), 2);
+    if (isBefore(new Date(club.mpTokenExpiresAt), threshold)) {
+      try {
+        const oauth = new OAuth(this.mercadopago);
+        const credentials = await oauth.refresh({
+          body: {
+            client_id: process.env.MP_CLIENT_ID || '',
+            client_secret: process.env.MP_CLIENT_SECRET || '',
+            refresh_token: club.mpRefreshToken,
+          },
+        });
+        club.mpAccessToken = credentials.access_token;
+        if (credentials.refresh_token) club.mpRefreshToken = credentials.refresh_token;
+        club.mpTokenExpiresAt = addSeconds(new Date(), credentials.expires_in || 15552000);
+        await this.clubRepo.save(club);
+        console.log(`🔄 [MercadoPago OAuth] Token del club ${club.name} autorenovado proactivamente antes del checkout`);
+      } catch (err: any) {
+        console.warn(`⚠️ [MercadoPago OAuth] Fallo en autorenovación proactiva para club ${club.name}:`, err?.message || err);
+      }
+    }
+    return club;
   }
 
   async authorize(clubId:string){
@@ -198,7 +234,16 @@ export class PaymentService {
   }
 
   async confirmPreference(booking: Booking, customAmount?: number){
-    const mpAccessToken = booking.club?.mpAccessToken || process.env.MP_ACCESS_TOKEN;
+    let club = booking.club || booking.court?.club;
+    if (club?.id && !club.mpAccessToken) {
+      const dbClub = await this.clubRepo.findOne({ where: { id: club.id } });
+      if (dbClub) club = dbClub;
+    }
+    if (club) {
+      club = await this.ensureValidClubToken(club);
+    }
+
+    const mpAccessToken = club?.mpAccessToken || process.env.ADMIN_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || process.env.MERCADO_PAGO_ACCESS_TOKEN;
     if (!mpAccessToken) {
       throw new BadRequestException('El club no tiene Mercado Pago conectado y no se encontró token por defecto');
     }
@@ -230,13 +275,21 @@ export class PaymentService {
   
     // 3. Crear la preferencia de pago
     const preferenceClient = new Preference(client);
+
+    // Marketplace fee (Regla de oro de MP Marketplace):
+    // Solo se cobra si el dinero viaja a la billetera del club (OAuth vinculado)
+    // y si el monto final cubre holgadamente la comisión configurada
+    const hasClubConnectedToken = Boolean(club?.mpAccessToken);
+    const configuredFee = Number(process.env.MP_MARKETPLACE_FEE || 0);
+    const feeAmount = (hasClubConnectedToken && configuredFee > 0 && finalAmount > configuredFee) ? configuredFee : undefined;
+
     const response = await preferenceClient.create({
       body: {
         items: [
           {
             id: String(booking.court?.id || "court"),
             title: title,
-            description: `Club: ${booking.club?.name || ""} | fecha: ${booking.date} | Superficie: ${booking.court?.surface || ""} | Duracion: ${booking.startTime}-${booking.endTime}`,
+            description: `Club: ${club?.name || booking.club?.name || ""} | fecha: ${booking.date} | Superficie: ${booking.court?.surface || ""} | Duracion: ${booking.startTime}-${booking.endTime}`,
             quantity: 1,
             category_id: 'services',
             currency_id: 'PEN',
@@ -254,10 +307,10 @@ export class PaymentService {
           failure: `${webUrl}/user/payments/failure`,
           pending: `${webUrl}/user/payments/pending`,
         },
-        notification_url: `${servicesUrl}/payments/webhook?clubId=${booking.club?.id}`,
+        notification_url: `${servicesUrl}/payments/webhook?clubId=${club?.id || booking.club?.id}`,
         auto_return: 'approved',
         external_reference: `${bookingId}`,
-        marketplace_fee: 5, // 💰 comisión
+        ...(feeAmount ? { marketplace_fee: feeAmount } : {}),
       },
     });
   
@@ -269,7 +322,16 @@ export class PaymentService {
   async confirmPreferenceMulti(bookings: Booking[]) {
     if (!bookings.length) throw new BadRequestException('No hay reservas creadas');
     const firstBooking = bookings[0];
-    const mpAccessToken = firstBooking.club?.mpAccessToken || process.env.MP_ACCESS_TOKEN;
+    let club = firstBooking.club || firstBooking.court?.club;
+    if (club?.id && !club.mpAccessToken) {
+      const dbClub = await this.clubRepo.findOne({ where: { id: club.id } });
+      if (dbClub) club = dbClub;
+    }
+    if (club) {
+      club = await this.ensureValidClubToken(club);
+    }
+
+    const mpAccessToken = club?.mpAccessToken || process.env.ADMIN_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || process.env.MERCADO_PAGO_ACCESS_TOKEN;
     if (!mpAccessToken) {
       throw new BadRequestException('El club no tiene Mercado Pago conectado y no se encontró token por defecto');
     }
@@ -299,12 +361,17 @@ export class PaymentService {
     const items = bookings.map(b => ({
       id: String(b.court?.id || "court"),
       title: `Reserva en ${b.court?.name || "Cancha"}`,
-      description: `Club: ${b.club?.name || ""} | fecha: ${b.date} | Superficie: ${b.court?.surface || ""} | Duracion: ${b.startTime}-${b.endTime}`,
+      description: `Club: ${club?.name || b.club?.name || ""} | fecha: ${b.date} | Superficie: ${b.court?.surface || ""} | Duracion: ${b.startTime}-${b.endTime}`,
       quantity: 1,
       category_id: 'services',
       currency_id: 'PEN',
       unit_price: Number(Number(b.pricing?.totalPrice || 0).toFixed(2)),
     }));
+
+    const hasClubConnectedToken = Boolean(club?.mpAccessToken);
+    const configuredFee = Number(process.env.MP_MARKETPLACE_FEE || 0);
+    const totalAmount = bookings.reduce((sum, b) => sum + Number(b.pricing?.totalPrice || 0), 0);
+    const feeAmount = (hasClubConnectedToken && configuredFee > 0 && totalAmount > configuredFee) ? configuredFee : undefined;
     
     const response = await preferenceClient.create({
       body: {
@@ -320,10 +387,10 @@ export class PaymentService {
           failure: `${webUrl}/user/payments/failure`,
           pending: `${webUrl}/user/payments/pending`,
         },
-        notification_url: `${servicesUrl}/payments/webhook?clubId=${firstBooking.club?.id}`,
+        notification_url: `${servicesUrl}/payments/webhook?clubId=${club?.id || firstBooking.club?.id}`,
         auto_return: 'approved',
         external_reference: bookingIds, // Pasamos la lista de IDs separados por coma
-        marketplace_fee: 5,
+        ...(feeAmount ? { marketplace_fee: feeAmount } : {}),
       },
     });
   

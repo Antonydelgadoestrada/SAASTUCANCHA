@@ -113,7 +113,7 @@ export class MembershipService implements OnModuleInit {
   ) {
     // REGLA DE ORO: Las membresías utilizan las credenciales de la plataforma (Dueño)
     this.mercadopago = new MercadoPagoConfig({
-      accessToken: process.env.MP_ACCESS_TOKEN || '',
+      accessToken: process.env.ADMIN_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || process.env.MERCADO_PAGO_ACCESS_TOKEN || '',
     });
   }
 
@@ -562,15 +562,17 @@ export class MembershipService implements OnModuleInit {
     });
     const savedPayment = await this.paymentRepo.save(payment);
 
-    // 4. Inicializar SDK leyendo Access Token desde variables de entorno
+    // 4. Inicializar SDK leyendo Access Token desde variables de entorno o BD
     const accessToken =
+      process.env.ADMIN_ACCESS_TOKEN ||
       process.env.MP_ACCESS_TOKEN ||
+      process.env.MERCADO_PAGO_ACCESS_TOKEN ||
       (await this.getActivePlatformMercadoPagoConfig()).accessToken ||
       '';
 
     if (!accessToken) {
       throw new BadRequestException(
-        'Falta configurar MP_ACCESS_TOKEN en las variables de entorno del servidor',
+        'Falta configurar ADMIN_ACCESS_TOKEN o MP_ACCESS_TOKEN en las variables de entorno del servidor',
       );
     }
 
@@ -1334,7 +1336,7 @@ export class MembershipService implements OnModuleInit {
       };
     }
 
-    const envToken = process.env.MP_ACCESS_TOKEN || '';
+    const envToken = process.env.ADMIN_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || process.env.MERCADO_PAGO_ACCESS_TOKEN || '';
     return {
       accessToken: envToken,
       client: this.mercadopago,
