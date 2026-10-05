@@ -81,16 +81,21 @@ export class S3Service implements OnModuleInit {
         Key: key,
         Body: buffer,
         ContentType: mimetype,
-        ACL: 'public-read', // Restaurado, ya que la llave Full Access permite esto
       })
     );
 
-    // Formato de URL pública de DO Spaces: https://<bucket>.<region>.digitaloceanspaces.com/<key>
-    const endpointHost = this.endpoint.replace('https://', '');
-    return `https://${this.bucket}.${endpointHost}/${key}`;
+    // Retornamos la URL usando nuestro propio backend como proxy para evitar problemas de privacidad de DO
+    const servicesUrl = (process.env.SERVICES_URL || 'http://localhost:3001').replace(/\/+$/, '');
+    return `${servicesUrl}/media/${key}`;
   }
 
   extractKeyFromUrl(url: string): string {
+    // Si la URL es de nuestro proxy interno
+    if (url.includes('/media/')) {
+      return url.substring(url.indexOf('/media/') + 7);
+    }
+    
+    // Fallback para URLs antiguas directamente a DigitalOcean
     const endpointHost = this.endpoint.replace('https://', '');
     const prefix = `https://${this.bucket}.${endpointHost}/`;
     if (url.startsWith(prefix)) {
