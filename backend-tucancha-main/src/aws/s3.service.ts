@@ -50,7 +50,7 @@ export class S3Service {
         Key: key,
         Body: buffer,
         ContentType: mimetype,
-        ACL: 'public-read', // Hacerlo público
+        // ACL: 'public-read', // Eliminado para evitar error "The ACL configuration specified in the request is unsupported"
       })
     );
 
