@@ -45,6 +45,21 @@ export class TransactionsService implements OnModuleInit {
       }
     }
 
+    try {
+      const events = await this.transactionRepo.query(`
+        SELECT e.*, c."clubId"
+        FROM court_schedule_event e
+        JOIN court c ON c.id = e."courtId"
+        WHERE e.price > 0
+      `);
+      for (const ev of events) {
+        await this.recordEventCreation(ev, ev.clubId);
+        count++;
+      }
+    } catch (e) {
+      this.logger.error(`Failed to backfill events`, e);
+    }
+
     return { success: true, count };
   }
 
