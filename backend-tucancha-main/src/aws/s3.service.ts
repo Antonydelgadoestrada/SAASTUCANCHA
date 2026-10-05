@@ -81,7 +81,7 @@ export class S3Service implements OnModuleInit {
         Key: key,
         Body: buffer,
         ContentType: mimetype,
-        // ACL: 'public-read', // Eliminado para evitar error "The ACL configuration specified in the request is unsupported"
+        ACL: 'public-read', // Restaurado, ya que la llave Full Access permite esto
       })
     );
 
