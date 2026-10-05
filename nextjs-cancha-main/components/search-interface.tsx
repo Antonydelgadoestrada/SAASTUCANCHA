@@ -134,6 +134,7 @@ export function SearchInterface({ initialClubs = [] }: { initialClubs?: Club[] }
             variant: "destructive",
           })
         },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       )
     } else {
       setIsLoadingLocation(false)

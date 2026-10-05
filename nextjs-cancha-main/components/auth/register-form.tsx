@@ -194,21 +194,41 @@ export function RegisterForm() {
         clubForm.setValue("coordinates", coords)
 
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}&addressdetails=1`,
-            { headers: { 'Accept-Language': 'es-PE,es;q=0.9' } }
-          )
-          if (res.ok) {
-            const data = await res.json()
-            if (data?.display_name) {
-              const road = data.address?.road || data.address?.pedestrian || data.address?.neighbourhood || ''
-              const houseNumber = data.address?.house_number || ''
-              const district = data.address?.suburb || data.address?.city_district || data.address?.city || data.address?.town || ''
-              const addr = road ? `${road} ${houseNumber}`.trim() : data.display_name.split(',')[0]
+          const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+          if (googleKey) {
+            const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.lat},${coords.lng}&key=${googleKey}&language=es-PE`)
+            if (res.ok) {
+              const data = await res.json()
+              if (data.results && data.results.length > 0) {
+                const addr = data.results[0].formatted_address.split(', Peru')[0].split(', Perú')[0].trim()
+                clubForm.setValue("address", addr, { shouldValidate: true })
+                
+                // Intentar sacar distrito (locality/sublocality)
+                const components = data.results[0].address_components
+                const districtComponent = components.find((c: any) => c.types.includes("locality") || c.types.includes("sublocality"))
+                if (districtComponent) {
+                  clubForm.setValue("district", districtComponent.long_name, { shouldValidate: true })
+                }
+              }
+            }
+          } else {
+            // Fallback a Nominatim si no hay key de Google
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}&addressdetails=1`,
+              { headers: { 'Accept-Language': 'es-PE,es;q=0.9' } }
+            )
+            if (res.ok) {
+              const data = await res.json()
+              if (data?.display_name) {
+                const road = data.address?.road || data.address?.pedestrian || data.address?.neighbourhood || ''
+                const houseNumber = data.address?.house_number || ''
+                const district = data.address?.suburb || data.address?.city_district || data.address?.city || data.address?.town || ''
+                const addr = road ? `${road} ${houseNumber}`.trim() : data.display_name.split(',')[0]
 
-              clubForm.setValue("address", addr, { shouldValidate: true })
-              if (district) {
-                clubForm.setValue("district", district, { shouldValidate: true })
+                clubForm.setValue("address", addr, { shouldValidate: true })
+                if (district) {
+                  clubForm.setValue("district", district, { shouldValidate: true })
+                }
               }
             }
           }
