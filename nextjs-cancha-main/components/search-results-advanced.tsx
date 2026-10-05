@@ -990,11 +990,9 @@ export function SearchResults({
       <Card key={court.id} className="overflow-hidden">
         {/* Imagen + cintillos */}
         <div className="relative aspect-video w-full overflow-hidden">
-          <Image
+          <img
             src={court.images?.[0] || "/placeholder.svg"}
             alt={court.name}
-            width={400}
-            height={225}
             className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
           />
 
@@ -1288,7 +1286,7 @@ export function SearchResults({
             <div className="space-y-6">
               {/* Carrusel de imágenes */}
               <div className="relative aspect-video w-full overflow-hidden rounded-lg">
-                <Image
+                <img
                   src={
                     selectedCourt.images[currentImageIndex] ||
                     "/placeholder.svg"
@@ -1296,8 +1294,6 @@ export function SearchResults({
                   alt={`${selectedCourt.name} - Imagen ${
                     currentImageIndex + 1
                   }`}
-                  width={800}
-                  height={400}
                   className="h-full w-full object-cover"
                 />
 
