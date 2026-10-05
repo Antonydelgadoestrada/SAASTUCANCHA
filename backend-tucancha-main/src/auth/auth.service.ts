@@ -226,12 +226,15 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(password, 10);
     const emailToken = this.jwtService.sign({ email }, { expiresIn: '10m' });
   
+    // Si el rol es CLUB, no requiere verificación de correo (el admin lo aprueba manualmente)
+    const isVerifiedInit = role === UserRole.CLUB ? true : isDev;
+
     const newUser = this.userRepository.create({
       email,
       password: hashedPassword,
       name,
       role,
-      isVerified: isDev,
+      isVerified: isVerifiedInit,
       emailConfirmationToken: emailToken,
     });
   
