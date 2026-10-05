@@ -80,7 +80,7 @@ await AppDataSource.query(`
     "court",
     "club",
     "user",
-    "membership_plan"
+    "membership_plans"
   CASCADE
 `);
 
