@@ -34,12 +34,12 @@ function PaymentFailureContent() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[85vh] px-4 py-8 bg-muted/20">
-      <Card className="w-full max-w-lg shadow-lg border-red-500/20">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] w-full px-4 py-8 bg-transparent">
+      <Card className="w-full max-w-md shadow-2xl border-red-500/30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <CardHeader className="text-center pb-2">
-          <div className="flex justify-center mb-3">
-            <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center">
-              <XCircle className="w-10 h-10 text-red-600" />
+          <div className="flex justify-center mb-4">
+            <div className="w-20 h-20 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center shadow-inner">
+              <XCircle className="w-12 h-12 text-red-600" />
             </div>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight text-red-600 dark:text-red-400">

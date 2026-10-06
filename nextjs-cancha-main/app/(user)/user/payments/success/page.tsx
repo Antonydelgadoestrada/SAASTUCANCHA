@@ -61,21 +61,21 @@ function PaymentSuccessContent() {
   const isApproved = status === "approved" || verificationResult?.status === "paid" || verificationResult?.success
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[85vh] px-4 py-8 bg-muted/20">
-      <Card className="w-full max-w-lg shadow-lg border-emerald-500/20">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] w-full px-4 py-8 bg-transparent">
+      <Card className="w-full max-w-md shadow-2xl border-emerald-500/30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <CardHeader className="text-center pb-2">
-          <div className="flex justify-center mb-3">
+          <div className="flex justify-center mb-4">
             {loading ? (
-              <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center animate-pulse">
-                <Clock className="w-8 h-8 text-emerald-600 animate-spin" />
+              <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center animate-pulse shadow-inner">
+                <Clock className="w-12 h-12 text-emerald-600 animate-spin" />
               </div>
             ) : isApproved ? (
-              <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/50 flex items-center justify-center">
-                <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+              <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-950/50 flex items-center justify-center shadow-inner">
+                <CheckCircle2 className="w-12 h-12 text-emerald-600" />
               </div>
             ) : (
-              <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center">
-                <AlertTriangle className="w-10 h-10 text-amber-600" />
+              <div className="w-20 h-20 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center shadow-inner">
+                <AlertTriangle className="w-12 h-12 text-amber-600" />
               </div>
             )}
           </div>

@@ -65,6 +65,13 @@ import { memoryStorage, File as MulterFile } from 'multer';
       return this.service.confirmPayment(dto)
     }
 
+    @Post('verify')
+    async verifyPayment(
+      @Body() dto: { paymentId: string; externalReference?: string; status?: string }
+    ) {
+      return this.service.verifyPayment(dto);
+    }
+
     @Cron('0 0 2 * * *') // A las 2:00 AM todos los días
     async updateTokens() {
       return this.service.updateToken()
