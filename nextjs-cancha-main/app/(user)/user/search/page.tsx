@@ -26,9 +26,10 @@ export default async function UserSearchPage() {
 
   return (
     <AppLayout title="Buscar Canchas">
-      <Suspense fallback={<div>Cargando buscador...</div>}>
-        <SearchInterface />
-        {/* <SearchInterface searchParams={searchParams} isUserLoggedIn={true}/> */}
+      <Suspense fallback={<div className="p-4">Cargando buscador...</div>}>
+        <div className="flex-1 w-full p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
+          <SearchInterface />
+        </div>
       </Suspense>
     </AppLayout>
   )
