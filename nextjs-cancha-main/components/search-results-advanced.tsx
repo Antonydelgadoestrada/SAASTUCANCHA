@@ -1128,8 +1128,8 @@ export function SearchResults({
             </div>
 
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
-              {court.availability
-                .filter((time: string) => {
+              {(() => {
+                const availableTimes = court.availability.filter((time: string) => {
                   if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
                   
                   const now = new Date();
@@ -1147,59 +1147,37 @@ export function SearchResults({
                   }
                   
                   return true;
-                })
-                .slice(0, 8)
-                .map((time: string) => (
-                  <Badge
-                    key={time}
-                    variant="outline"
-                    className="text-xs justify-center py-1"
-                  >
-                    {time}
-                  </Badge>
-                ))}
+                });
 
-              {court.availability.filter((time: string) => {
-                  if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
-                  
-                  const now = new Date();
-                  const isToday = selectedDate && 
-                    selectedDate.getDate() === now.getDate() && 
-                    selectedDate.getMonth() === now.getMonth() && 
-                    selectedDate.getFullYear() === now.getFullYear();
-                    
-                  if (isToday) {
-                    const [h, m] = time.split(":").map(Number);
-                    if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
-                      return false;
-                    }
-                  }
-                  
-                  return true;
-                }).length > 8 && (
-                <Badge variant="outline" className="text-xs justify-center py-1">
-                  +
-                  {court.availability.filter((time: string) => {
-                    if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
-                    
-                    const now = new Date();
-                    const isToday = !selectedDate || (
-                      selectedDate.getDate() === now.getDate() && 
-                      selectedDate.getMonth() === now.getMonth() && 
-                      selectedDate.getFullYear() === now.getFullYear()
-                    );
-                      
-                    if (isToday) {
-                      const [h, m] = time.split(":").map(Number);
-                      if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) {
-                        return false;
-                      }
-                    }
-                    
-                    return true;
-                  }).length - 8}
-                </Badge>
-              )}
+                if (availableTimes.length === 0) {
+                  return (
+                    <span className="text-sm text-red-500 font-medium italic col-span-3 sm:col-span-4 mt-2">
+                      No hay atención este día.
+                    </span>
+                  );
+                }
+
+                return (
+                  <>
+                    {availableTimes.slice(0, 8).map((time: string) => (
+                      <Badge
+                        key={time}
+                        variant="outline"
+                        className="text-xs justify-center py-1"
+                      >
+                        {time}
+                      </Badge>
+                    ))}
+                    {availableTimes.length > 8 && (
+                      <Badge variant="outline" className="text-xs justify-center py-1">
+                        +{availableTimes.length - 8}
+                      </Badge>
+                    )}
+                  </>
+                );
+              })()}
+
+
             </div>
           </div>
         </CardContent>
@@ -1212,7 +1190,26 @@ export function SearchResults({
           >
             Ver detalles
           </Button>
-          <Button className="w-full sm:flex-1" onClick={() => handleBookNow(court)}>
+          <Button 
+            className="w-full sm:flex-1" 
+            onClick={() => handleBookNow(court)}
+            disabled={
+              court.availability.filter((time: string) => {
+                if (court.sport?.toLowerCase().startsWith("futb") && !time.endsWith(":00")) return false;
+                const now = new Date();
+                const isToday = !selectedDate || (
+                  selectedDate.getDate() === now.getDate() && 
+                  selectedDate.getMonth() === now.getMonth() && 
+                  selectedDate.getFullYear() === now.getFullYear()
+                );
+                if (isToday) {
+                  const [h, m] = time.split(":").map(Number);
+                  if (h < now.getHours() || (h === now.getHours() && m <= now.getMinutes())) return false;
+                }
+                return true;
+              }).length === 0
+            }
+          >
             Reservar ahora
           </Button>
         </CardFooter>

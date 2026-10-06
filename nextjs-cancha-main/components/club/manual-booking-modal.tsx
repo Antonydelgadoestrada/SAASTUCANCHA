@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { createReservationManual } from "@/lib/reservation"
+import { getAllCourtsByQuery } from "@/lib/courts"
 
 interface ManualBookingModalProps {
   open: boolean
@@ -70,11 +71,45 @@ export function ManualBookingModal({
   const [notes, setNotes] = useState<string>("")
   const [isSaving, setIsSaving] = useState<boolean>(false)
   const [isManualPriceEdited, setIsManualPriceEdited] = useState<boolean>(false)
+  const [remoteAvailabilities, setRemoteAvailabilities] = useState<string[] | null>(null)
+
+  useEffect(() => {
+    if (!open || !selectedCourtId || !dateStr) {
+      setRemoteAvailabilities(null)
+      return
+    }
+    
+    let isMounted = true
+    const fetchAvailability = async () => {
+      try {
+        const courtsData = await getAllCourtsByQuery(`date=${dateStr}`)
+        if (!isMounted) return
+        const targetCourt = courtsData.find((c: any) => String(c.id) === String(selectedCourtId))
+        if (targetCourt && targetCourt.availability) {
+          setRemoteAvailabilities(targetCourt.availability)
+        } else {
+          setRemoteAvailabilities([])
+        }
+      } catch (err) {
+        console.error("Error fetching availability", err)
+        if (isMounted) setRemoteAvailabilities(null)
+      }
+    }
+    
+    fetchAvailability()
+    return () => { isMounted = false }
+  }, [open, selectedCourtId, dateStr])
 
   // Filtrar slots para no permitir horas pasadas si la fecha es hoy
   const availableTimeSlots = useMemo(() => {
+    let baseSlots = ALL_TIME_SLOTS
+    
+    if (remoteAvailabilities !== null) {
+      baseSlots = baseSlots.filter((t) => remoteAvailabilities.includes(t))
+    }
+
     if (!dateStr || dateStr > todayStr) {
-      return ALL_TIME_SLOTS
+      return baseSlots
     }
 
     if (dateStr === todayStr) {
@@ -82,15 +117,15 @@ export function ManualBookingModal({
       const currentH = now.getHours()
       const currentM = now.getMinutes()
 
-      return ALL_TIME_SLOTS.filter((t) => {
+      return baseSlots.filter((t) => {
         const [h, m] = t.split(":").map(Number)
         return h > currentH || (h === currentH && m > currentM)
       })
     }
 
-    // Fecha en el pasado: ningún slot disponible
+    // Fecha en el pasado: ningun slot disponible
     return []
-  }, [dateStr, todayStr])
+  }, [dateStr, todayStr, remoteAvailabilities])
 
   // Inicializar estado al abrir el modal
   useEffect(() => {
