@@ -119,7 +119,7 @@ export function ScheduleTemplateForm({ onSubmit, template }: ScheduleTemplateFor
 
     const newSlots = [];
 
-    while ((currentH * 60 + currentM) < endMinutes) {
+    while ((currentH * 60 + currentM) <= endMinutes) {
       const h = currentH.toString().padStart(2, "0");
       const m = currentM.toString().padStart(2, "0");
       newSlots.push({ time: `${h}:${m}`, status: "available" as const });
