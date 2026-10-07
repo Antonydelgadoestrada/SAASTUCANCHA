@@ -103,7 +103,41 @@ export function ScheduleTemplateForm({ onSubmit, template }: ScheduleTemplateFor
     name: "slots",
   })
 
+  // Generador rápido
+  const [quickStart, setQuickStart] = useState("06:00")
+  const [quickEnd, setQuickEnd] = useState("23:00")
 
+  const generateSlots = () => {
+    if (!quickStart || !quickEnd) return;
+    const [startH, startM] = quickStart.split(":").map(Number);
+    const [endH, endM] = quickEnd.split(":").map(Number);
+    
+    let currentH = startH;
+    let currentM = startM;
+    const endMinutes = endH * 60 + endM;
+    const interval = 30; // Obligatorio de 30 en 30 para no romper lógica de negocio
+
+    const newSlots = [];
+
+    while ((currentH * 60 + currentM) < endMinutes) {
+      const h = currentH.toString().padStart(2, "0");
+      const m = currentM.toString().padStart(2, "0");
+      newSlots.push({ time: `${h}:${m}`, status: "available" as const });
+
+      currentM += interval;
+      if (currentM >= 60) {
+        currentH += Math.floor(currentM / 60);
+        currentM = currentM % 60;
+      }
+    }
+    
+    // Al menos un slot si fallan los cálculos
+    if (newSlots.length === 0) {
+      newSlots.push({ time: quickStart, status: "available" as const });
+    }
+
+    form.setValue("slots", newSlots, { shouldDirty: true });
+  }
   async function handleSubmit(values: z.infer<typeof formSchema>) {
       setIsLoading(true)
       // Simular retraso de red
@@ -206,11 +240,30 @@ export function ScheduleTemplateForm({ onSubmit, template }: ScheduleTemplateFor
         />
 
         <div>
+          {/* Generador rápido */}
+          <div className="rounded-md border p-4 bg-muted/20 mb-6">
+            <FormLabel className="text-base font-semibold mb-3 block">Generador Rápido de Horarios</FormLabel>
+            <FormDescription className="mb-4 text-xs">Ahorra tiempo generando todos los horarios de forma automática según la apertura y cierre de tu club.</FormDescription>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs font-medium mb-1 block">Apertura</label>
+                <Input type="time" value={quickStart} onChange={e => setQuickStart(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block">Cierre</label>
+                <Input type="time" value={quickEnd} onChange={e => setQuickEnd(e.target.value)} />
+              </div>
+            </div>
+            <Button type="button" variant="secondary" className="w-full text-sm font-semibold" onClick={generateSlots}>
+              Autocompletar Lista Abajo
+            </Button>
+          </div>
+
           <div className="mb-4 flex items-center justify-between">
-            <FormLabel>Horarios</FormLabel>
+            <FormLabel>Horarios Manuales</FormLabel>
             <Button type="button" variant="outline" size="sm" onClick={() => append({ time: "", status: "available" })}>
               <PlusIcon className="mr-2 h-4 w-4" />
-              Agregar Horario
+              Agregar Fila
             </Button>
           </div>
           <div className="space-y-2">

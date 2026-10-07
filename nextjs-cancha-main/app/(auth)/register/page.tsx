@@ -26,7 +26,7 @@ export default async function RegisterPage({
         <div className="absolute inset-0 bg-zinc-900">
           <Image
             // src="/placeholder.svg?height=1080&width=1920"
-            src="/login.jpeg?height=1080&width=1920"
+            src="/login.jpeg"
             width={1920}
             height={1080}
             alt="Canchas deportivas"
