@@ -562,21 +562,15 @@ export class MembershipService implements OnModuleInit {
     });
     const savedPayment = await this.paymentRepo.save(payment);
 
-    // 4. Inicializar SDK leyendo Access Token desde variables de entorno o BD
-    const accessToken =
-      process.env.ADMIN_ACCESS_TOKEN ||
-      process.env.MP_ACCESS_TOKEN ||
-      process.env.MERCADO_PAGO_ACCESS_TOKEN ||
-      (await this.getActivePlatformMercadoPagoConfig()).accessToken ||
-      '';
+    // 4. Inicializar SDK leyendo Access Token desde BD o fallback (usar misma config que webhook)
+    const { accessToken, client: mpConfigClient } = await this.getActivePlatformMercadoPagoConfig();
 
     if (!accessToken) {
       throw new BadRequestException(
-        'Falta configurar ADMIN_ACCESS_TOKEN o MP_ACCESS_TOKEN en las variables de entorno del servidor',
+        'Falta configurar ADMIN_ACCESS_TOKEN o conectar la cuenta Admin vía OAuth en el Dashboard.',
       );
     }
 
-    const mpConfigClient = new MercadoPagoConfig({ accessToken });
     const preferenceClient = new Preference(mpConfigClient);
 
     const isSandbox =
