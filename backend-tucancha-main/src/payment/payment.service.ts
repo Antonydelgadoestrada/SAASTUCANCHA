@@ -260,8 +260,8 @@ export class PaymentService {
       process.env.MP_SANDBOX === 'true' ||
       process.env.NODE_ENV !== 'production';
 
-    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000')).replace(/\/+$/, '');
-    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.onrender.com' : 'http://localhost:3001')).replace(/\/+$/, '');
+    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000')).replace(/\/+$/, '');
+    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001')).replace(/\/+$/, '');
 
     const testPayerEmail =
       process.env.MP_TEST_PAYER_EMAIL ||
@@ -344,8 +344,8 @@ export class PaymentService {
       process.env.MP_SANDBOX === 'true' ||
       process.env.NODE_ENV !== 'production';
 
-    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000')).replace(/\/+$/, '');
-    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.onrender.com' : 'http://localhost:3001')).replace(/\/+$/, '');
+    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000')).replace(/\/+$/, '');
+    const servicesUrl = (process.env.SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001')).replace(/\/+$/, '');
 
     const testPayerEmail =
       process.env.MP_TEST_PAYER_EMAIL ||

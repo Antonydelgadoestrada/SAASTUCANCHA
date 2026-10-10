@@ -120,7 +120,7 @@ export class MembershipService implements OnModuleInit {
   private getWebUrl(): string {
     let raw = (process.env.WEB_SERVICES_URL || '').trim();
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-      raw = process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000';
+      raw = process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000';
     }
     return raw.replace(/\/+$/, '');
   }
@@ -131,7 +131,7 @@ export class MembershipService implements OnModuleInit {
     if (domainFlagMatch) {
       raw = `https://${domainFlagMatch[1]}`;
     } else if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-      raw = process.env.NODE_ENV === 'production' ? 'https://saastucancha.onrender.com' : 'http://localhost:3001';
+      raw = process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001';
     }
     return raw.replace(/\/+$/, '');
   }

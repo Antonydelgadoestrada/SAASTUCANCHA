@@ -23,8 +23,8 @@ export class MercadoPagoService {
     unit_price: number;
     payerEmail?: string;
   }) {
-    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.vercel.app' : 'http://localhost:3000')).replace(/\/+$/, '');
-    const servicesUrl = (process.env.SERVICES_URL || process.env.RENDER_EXTERNAL_URL || (process.env.NODE_ENV === 'production' ? 'https://saastucancha.onrender.com' : 'http://localhost:3001')).replace(/\/+$/, '');
+    const webUrl = (process.env.WEB_SERVICES_URL || (process.env.NODE_ENV === 'production' ? 'https://tucancha.com.pe' : 'http://localhost:3000')).replace(/\/+$/, '');
+    const servicesUrl = (process.env.SERVICES_URL || process.env.RENDER_EXTERNAL_URL || (process.env.NODE_ENV === 'production' ? 'https://api.tucancha.com.pe' : 'http://localhost:3001')).replace(/\/+$/, '');
 
     const isSandbox = (process.env.MP_ACCESS_TOKEN || '').startsWith('TEST-') || process.env.MP_SANDBOX === 'true';
     const testPayerEmail = process.env.MP_TEST_PAYER_EMAIL || (booking.payerEmail && booking.payerEmail.includes('testuser.com') ? booking.payerEmail : 'test_user_123@testuser.com');
