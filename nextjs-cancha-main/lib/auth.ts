@@ -118,8 +118,22 @@ export async function registerUser(userData: {
   role: string
   club?: any
 }): Promise<any> {
-  const result = await api.post("/auth/register", userData)
-  return result.data
+  // En lugar de enviar la petición directamente al backend (lo que causa CORS o bloqueos),
+  // la enviamos a nuestro propio servidor Next.js, y él se encarga de enviarla al backend.
+  const response = await fetch("/api/auth/register-proxy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(userData),
+  })
+  
+  const data = await response.json()
+  
+  if (!response.ok) {
+    // Simulamos la estructura de error de Axios para no romper el código del frontend
+    throw { response: { data } }
+  }
+  
+  return data
 }
 
 // Simular cierre de sesión
