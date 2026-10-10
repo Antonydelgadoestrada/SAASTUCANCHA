@@ -262,12 +262,20 @@ export class AuthService {
         try {
           const adminEmail = process.env.ADMIN_EMAIL || 'tucancha100@gmail.com';
           const clubEmails = Array.from(new Set([savedUser.email, createdClub.email].filter(Boolean)));
-          for (const targetEmail of clubEmails) {
-            await this.mailerService.sendClubRegisteredPendingApprovalEmail(targetEmail, createdClub, savedUser.name);
-          }
-          await this.mailerService.sendNewClubAdminNotificationEmail(adminEmail, createdClub, savedUser);
+          
+          // Ejecutamos el envío de correos en segundo plano (sin await) 
+          // para evitar que el Load Balancer de Digital Ocean (App Platform)
+          // cierre la conexión por timeout (504 Gateway Timeout).
+          Promise.all([
+            ...clubEmails.map(targetEmail =>
+              this.mailerService.sendClubRegisteredPendingApprovalEmail(targetEmail, createdClub, savedUser.name)
+            ),
+            this.mailerService.sendNewClubAdminNotificationEmail(adminEmail, createdClub, savedUser)
+          ]).catch(mailErr => {
+            console.warn('⚠️ No se pudieron enviar correos de notificación de club:', mailErr?.message);
+          });
         } catch (mailErr) {
-          console.warn('⚠️ No se pudieron enviar correos de notificación de club:', mailErr?.message);
+          console.warn('⚠️ Error al iniciar envío de correos:', mailErr?.message);
         }
       }
 
