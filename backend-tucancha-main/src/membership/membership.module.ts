@@ -10,6 +10,7 @@ import { MembershipController } from './membership.controller';
 import { MembershipCronService } from './membership-cron.service';
 import { MailerModule } from '../mailer/mailer.module';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { AwsModule } from '../aws/aws.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { TransactionsModule } from '../transactions/transactions.module';
     ]),
     MailerModule,
     TransactionsModule,
+    AwsModule,
   ],
   controllers: [MembershipController],
   providers: [MembershipService, MembershipCronService],
