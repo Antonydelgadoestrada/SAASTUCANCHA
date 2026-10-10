@@ -299,8 +299,11 @@ export function RegisterForm() {
       setShowClubWelcomeDialog(true)
     } catch (error: any) {
       console.error("Error en registro de club:", error)
-      const msg = error?.response?.data?.message || "Error al registrar el club. Por favor verifica tus datos e intenta nuevamente."
-      toast.error(typeof msg === "object" ? (Array.isArray(msg) ? msg.join(", ") : JSON.stringify(msg)) : msg)
+      let msg = error?.response?.data?.message
+      if (!msg) {
+        msg = `Error interno: ${error?.message || 'Desconocido'}. Verifica la red o contacta a soporte.`
+      }
+      toast.error(typeof msg === "object" ? (Array.isArray(msg) ? msg.join(", ") : JSON.stringify(msg)) : String(msg))
     } finally {
       setIsLoading(false)
     }

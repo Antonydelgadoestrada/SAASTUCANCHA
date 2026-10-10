@@ -65,6 +65,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         rawException: exception, // incluir también el objeto original
       },
     });
+
+    // 🚨 LOG DE EMERGENCIA EN CONSOLA PARA DEBUG 🚨
+    console.error(`[GlobalExceptionFilter] Error capturado en ${request.method} ${request.url}:`, exception);
+
     const timestamp = formatInTimeZone(new Date(), 'America/Lima', 'yyyy-MM-dd HH:mm:ssXXX')
     // Responder al cliente
     response.status(status).json({
