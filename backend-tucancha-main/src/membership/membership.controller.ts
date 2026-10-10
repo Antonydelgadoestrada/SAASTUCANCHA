@@ -109,7 +109,7 @@ export class MembershipController {
       }
     }
 
-    return { membership, serverTime: new Date() };
+    return { membership, serverTime: new Date(), clubStatus: dbClub?.status };
   }
 
   // Historial de membresías del club
