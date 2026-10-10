@@ -87,6 +87,7 @@ export class MembershipController {
     // Si no tiene membresía pero el club está aprobado, creamos una membresía virtual "Prueba Gratuita"
     // Buscamos el club real en la BD para asegurarnos de tener sus fechas y status actualizados
     const dbClub = await this.membershipService['clubRepo'].findOne({ where: { id: user.club.id } });
+    console.log('[DEBUG-MEMBERSHIP] dbClub status:', dbClub?.status, 'trialEndDate:', dbClub?.trialEndDate);
     if (!membership && dbClub && dbClub.status === 'APPROVED') {
       const now = new Date();
       // Si no tiene trialEndDate definido, asumimos 30 días desde la creación o aprobación
@@ -96,6 +97,7 @@ export class MembershipController {
         trialEnd.setDate(trialEnd.getDate() + 30);
       }
       
+      console.log('[DEBUG-MEMBERSHIP] calculated trialEnd:', trialEnd, 'now:', now, 'isGreater:', trialEnd > now);
       if (trialEnd > now) {
         membership = {
           id: 'virtual-trial-membership',
@@ -112,9 +114,15 @@ export class MembershipController {
             interval: 'MONTHLY'
           }
         } as any;
+        console.log('[DEBUG-MEMBERSHIP] Virtual membership created!');
+      } else {
+        console.log('[DEBUG-MEMBERSHIP] Virtual membership NOT created because trialEnd <= now');
       }
+    } else {
+      console.log('[DEBUG-MEMBERSHIP] Skipped virtual membership block. hasMembership:', !!membership, 'dbClub status:', dbClub?.status);
     }
 
+    console.log('[DEBUG-MEMBERSHIP] Returning membership:', membership ? 'YES' : 'NULL');
     return { membership, serverTime: new Date(), clubStatus: dbClub?.status };
   }
 
