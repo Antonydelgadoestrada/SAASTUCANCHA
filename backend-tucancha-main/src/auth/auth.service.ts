@@ -88,7 +88,7 @@ export class AuthService {
         }
       }
 
-      const trialExpired = user.club.trialEndDate ? new Date(user.club.trialEndDate) < now : true;
+      const trialExpired = user.club.trialEndDate ? new Date(user.club.trialEndDate) < now : false;
 
       if (hasActiveMembership) {
         if (user.club.status === 'SUSPENDED') {

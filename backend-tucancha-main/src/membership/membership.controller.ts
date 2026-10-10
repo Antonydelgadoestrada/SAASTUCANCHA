@@ -84,18 +84,24 @@ export class MembershipController {
     }
     let membership = await this.membershipService.getClubActiveMembership(user.club.id);
     
-    // Si no tiene membresía pero tiene trial activo, creamos una membresía virtual "Prueba Gratuita"
+    // Si no tiene membresía pero el club está aprobado, creamos una membresía virtual "Prueba Gratuita"
     // Buscamos el club real en la BD para asegurarnos de tener sus fechas y status actualizados
     const dbClub = await this.membershipService['clubRepo'].findOne({ where: { id: user.club.id } });
-    if (!membership && dbClub && dbClub.status === 'APPROVED' && dbClub.trialEndDate) {
+    if (!membership && dbClub && dbClub.status === 'APPROVED') {
       const now = new Date();
-      const trialEnd = new Date(dbClub.trialEndDate);
+      // Si no tiene trialEndDate definido, asumimos 30 días desde la creación o aprobación
+      let trialEnd = dbClub.trialEndDate ? new Date(dbClub.trialEndDate) : null;
+      if (!trialEnd) {
+        trialEnd = new Date(dbClub.approvedAt || dbClub.createdAt || now);
+        trialEnd.setDate(trialEnd.getDate() + 30);
+      }
+      
       if (trialEnd > now) {
         membership = {
           id: 'virtual-trial-membership',
           clubId: dbClub.id,
           status: 'ACTIVE', // Para que el frontend no bloquee
-          startDate: dbClub.createdAt || now,
+          startDate: dbClub.trialStartDate || dbClub.approvedAt || dbClub.createdAt || now,
           endDate: trialEnd,
           autoRenew: false,
           cancelAtPeriodEnd: true,
