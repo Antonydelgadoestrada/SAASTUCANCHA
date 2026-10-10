@@ -299,11 +299,24 @@ export function RegisterForm() {
       setShowClubWelcomeDialog(true)
     } catch (error: any) {
       console.error("Error en registro de club:", error)
-      let msg = error?.response?.data?.message
-      if (!msg) {
-        msg = `Error interno: ${error?.message || 'Desconocido'}. Verifica la red o contacta a soporte.`
-      }
-      toast.error(typeof msg === "object" ? (Array.isArray(msg) ? msg.join(", ") : JSON.stringify(msg)) : String(msg))
+      
+      // Enviar el error silenciosamente al servidor de Next.js para poder leerlo en Digital Ocean
+      try {
+        fetch('/api/log-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: error?.message,
+            name: error?.name,
+            code: error?.code,
+            status: error?.response?.status,
+            data: error?.response?.data,
+          })
+        }).catch(() => {})
+      } catch (e) {}
+
+      const msg = error?.response?.data?.message || "Error al registrar el club. Por favor verifica tus datos e intenta nuevamente."
+      toast.error(typeof msg === "object" ? (Array.isArray(msg) ? msg.join(", ") : JSON.stringify(msg)) : msg)
     } finally {
       setIsLoading(false)
     }
