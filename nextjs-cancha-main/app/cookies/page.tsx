@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button"
 import { CookieTriggerButton } from "@/components/cookies/cookie-trigger-button"
 
 export const metadata: Metadata = {
-  title: `Política de Cookies | ${process.env.NEXT_PUBLIC_APP_NAME || "TuCancha"}`,
-  description: "Información transparente y ética sobre el uso de cookies en TuCancha",
+  title: "Política de Cookies",
+  description: "Información sobre el uso y gestión de cookies en la plataforma Tu Cancha.",
+  alternates: {
+    canonical: "/cookies",
+  },
 }
 
 export default function CookiesPage() {

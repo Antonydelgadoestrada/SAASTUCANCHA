@@ -5,8 +5,11 @@ import { ArrowLeft, Shield, Lock, Eye, CheckCircle2, UserCheck } from "lucide-re
 import { Button } from "@/components/ui/button"
 
 export const metadata: Metadata = {
-  title: `Política de Privacidad | ${process.env.NEXT_PUBLIC_APP_NAME || "TuCancha"}`,
-  description: "Tratamiento ético y protección de datos personales en TuCancha",
+  title: "Política de Privacidad",
+  description: "Tratamiento ético y protección de datos personales en la plataforma Tu Cancha.",
+  alternates: {
+    canonical: "/privacidad",
+  },
 }
 
 export default function PrivacidadPage() {

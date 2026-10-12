@@ -8,8 +8,18 @@ import Image from "next/image"
 import { AuthHeaderButtons } from "@/components/AuthHeaderButtons"
 
 export const metadata: Metadata = {
-  title: `Buscar Canchas | ${process.env.NEXT_PUBLIC_APP_NAME}`,
-  description: "Encuentra y reserva canchas deportivas cerca de ti",
+  title: "Buscar Canchas Deportivas y Sintéticas en Perú",
+  description:
+    "Busca y reserva canchas sintéticas de fútbol, pistas de pádel, tenis y vóley en Lima y todo el Perú. Disponibilidad en tiempo real con Tu Cancha.",
+  alternates: {
+    canonical: "/search",
+  },
+  openGraph: {
+    title: "Buscar Canchas Deportivas en Perú | Tu Cancha",
+    description:
+      "Busca y reserva canchas sintéticas de fútbol, pistas de pádel, tenis y vóley en Lima y todo el Perú.",
+    url: "https://tucancha.com.pe/search",
+  },
 }
 
 interface SearchPageProps {

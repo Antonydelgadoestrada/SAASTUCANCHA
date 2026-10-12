@@ -5,8 +5,11 @@ import { ArrowLeft, ShieldCheck, DollarSign, Clock, FileText, CheckCircle2 } fro
 import { Button } from "@/components/ui/button"
 
 export const metadata: Metadata = {
-  title: `Términos y Condiciones | ${process.env.NEXT_PUBLIC_APP_NAME || "TuCancha"}`,
-  description: "Términos, condiciones de uso y políticas financieras de reservas en TuCancha",
+  title: "Términos y Condiciones",
+  description: "Términos, condiciones de uso y políticas de reserva de la plataforma Tu Cancha en Perú.",
+  alternates: {
+    canonical: "/terminos",
+  },
 }
 
 export default function TerminosPage() {

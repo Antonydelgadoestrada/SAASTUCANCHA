@@ -50,16 +50,16 @@ export default async function HomePage() {
             <div className="flex flex-col justify-center space-y-5 sm:space-y-6 lg:col-span-7">
               <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs sm:text-sm font-medium text-primary">
                 <Award className="h-4 w-4 shrink-0" />
-                <span>La plataforma #1 para reserva de canchas</span>
+                <span>Tu Cancha • Plataforma #1 en Perú para reserva de canchas</span>
               </div>
               <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl leading-tight">
-                Reserva canchas deportivas{" "}
+                Tu Cancha: Reserva canchas deportivas y sintéticas en Perú{" "}
                 <span className="bg-gradient-to-r from-primary via-emerald-500 to-teal-600 bg-clip-text text-transparent">
                   en segundos
                 </span>
               </h1>
               <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
-                Encuentra, compara y reserva las mejores canchas deportivas cerca de ti en tiempo real. Fútbol, tenis, pádel, voley y mucho más.
+                Encuentra, compara y reserva tu cancha deportiva favorita en tiempo real. Alquiler de canchas sintéticas de fútbol, pádel, tenis y vóley en Lima y todo el Perú.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row pt-2 w-full sm:w-auto">
                 <Link href="#search" className="w-full sm:w-auto">
@@ -104,7 +104,7 @@ export default async function HomePage() {
                 <div className="relative h-full w-full rounded-2xl overflow-hidden border border-border shadow-2xl bg-muted">
                   <Image
                     src="/general.jpeg"
-                    alt="Canchas Deportivas Premium"
+                    alt="Tu Cancha - Reserva de canchas sintéticas y deportivas en Perú"
                     fill
                     sizes="(max-width: 768px) 100vw, 450px"
                     className="object-cover transition-transform duration-700 hover:scale-105"
@@ -151,10 +151,10 @@ export default async function HomePage() {
           <div className="container">
             <div className="mx-auto mb-12 max-w-3xl text-center space-y-3">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Encuentra la cancha perfecta para tu deporte favorito
+                Encuentra y reserva tu cancha ideal en Perú
               </h2>
               <p className="text-lg text-muted-foreground">
-                Busca entre cientos de canchas disponibles en tu zona y reserva en segundos de forma segura.
+                Busca entre cientos de canchas sintéticas de fútbol, pádel y tenis disponibles en Lima y todo el país. Reserva en segundos en Tu Cancha.
               </p>
             </div>
 
@@ -204,6 +204,87 @@ export default async function HomePage() {
                     Crear Cuenta Personal
                   </Button>
                 </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SEO Information & Popular Searches Section */}
+        <section className="py-16 bg-muted/20 border-t border-border/40">
+          <div className="container space-y-10 px-4 sm:px-6">
+            <div className="max-w-3xl space-y-3">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                Tu Cancha: La plataforma para reservar canchas deportivas en Perú
+              </h2>
+              <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                En <strong>Tu Cancha</strong> conectamos a deportistas apasionados con los mejores complejos y clubes deportivos en Lima y todo el Perú. Olvídate de llamar por teléfono o esperar confirmaciones por mensajes: consulta la disponibilidad en tiempo real, compara tarifas y reserva tu cancha sintética al instante con Yape, Plin o tarjeta.
+              </p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-3">
+              <div className="p-5 rounded-2xl bg-background border border-border/60 shadow-sm space-y-2">
+                <h3 className="text-base font-semibold text-foreground">Canchas de Fútbol y Sintéticas</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Reserva canchas de fútbol 5, fútbol 7 y fútbol 11 con pasto sintético de alta calidad, iluminación LED nocturna y vestuarios completos en tu distrito.
+                </p>
+                <div className="pt-2">
+                  <Link href="/search?sport=futbol" className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1">
+                    Ver canchas de fútbol <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-background border border-border/60 shadow-sm space-y-2">
+                <h3 className="text-base font-semibold text-foreground">Canchas de Pádel y Tenis</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Encuentra pistas panorámicas de pádel y canchas de tenis con superficie de arcilla o pista rápida. Reserva horarios estelares con anticipación.
+                </p>
+                <div className="pt-2">
+                  <Link href="/search?sport=padel" className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1">
+                    Ver pistas de pádel <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-background border border-border/60 shadow-sm space-y-2">
+                <h3 className="text-base font-semibold text-foreground">Gestión Digital para Clubes</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Si administras un club o complejo deportivo, publica tus canchas en Tu Cancha. Gestiona reservas manuales, calendarios automáticos y cobra sin comisiones por Yape y Plin.
+                </p>
+                <div className="pt-2">
+                  <Link href="/register?type=club" className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1">
+                    Probar 30 días gratis <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Popular search tags for crawlers */}
+            <div className="pt-4 border-t border-border/40">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
+                Búsquedas populares en Perú
+              </h3>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {[
+                  { label: "Canchas de Fútbol en Lima", href: "/search?sport=futbol" },
+                  { label: "Pádel en Lima", href: "/search?sport=padel" },
+                  { label: "Canchas Sintéticas Fútbol 7", href: "/search?sport=futbol" },
+                  { label: "Canchas de Tenis Perú", href: "/search?sport=tenis" },
+                  { label: "Canchas de Vóley", href: "/search?sport=voley" },
+                  { label: "Alquiler de Canchas Surco", href: "/search" },
+                  { label: "Canchas San Borja", href: "/search" },
+                  { label: "Canchas Los Olivos", href: "/search" },
+                  { label: "Canchas Miraflores", href: "/search" },
+                  { label: "Tu Cancha Reservas", href: "/search" },
+                ].map((tag) => (
+                  <Link
+                    key={tag.label}
+                    href={tag.href}
+                    className="px-3 py-1.5 rounded-lg bg-background border border-border hover:border-primary/50 hover:text-primary transition-colors text-muted-foreground"
+                  >
+                    {tag.label}
+                  </Link>
+                ))}
               </div>
             </div>
           </div>
