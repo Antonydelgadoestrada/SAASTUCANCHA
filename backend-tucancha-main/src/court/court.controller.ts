@@ -45,10 +45,14 @@ import { MembershipService } from '../membership/membership.service';
     @UseGuards(JwtAuthGuard)
     @Get('/club')
     findAllByClub(@GetUser() user: User): Promise<Court[]> {
-      if (user.role !== 'CLUB') {
+      if (user.role !== UserRole.CLUB && user.role !== UserRole.RECEPCIONISTA && user.role !== UserRole.ADMIN) {
         throw new ForbiddenException('No tienes permisos para listar canchas');
       }
-      return this.service.findAllByClub(user.club.id);
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) {
+        throw new ForbiddenException('No tienes un club asociado');
+      }
+      return this.service.findAllByClub(clubId);
     }
     
     @Get('query')

@@ -202,8 +202,9 @@ export class ClubService {
   }
 
   async findClubByUser(user: User): Promise<Club> {
-    if (user.club?.id) {
-      const club = await this.repo.findOne({ where: { id: user.club.id }, relations: ['owner'] });
+    const clubId = user.club?.id || user.clubId;
+    if (clubId) {
+      const club = await this.repo.findOne({ where: { id: clubId }, relations: ['owner'] });
       if (club) return club;
     }
     const clubByOwner = await this.repo.findOne({ where: { owner: { id: user.id } }, relations: ['owner'] });

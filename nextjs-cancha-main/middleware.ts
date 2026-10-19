@@ -7,6 +7,7 @@ const PUBLIC_ROUTES = ['/login', '/register']
 const ROLE_ROUTES: Record<string, string> = {
   ADMIN: '/admin',
   CLUB: '/club',
+  RECEPCIONISTA: '/club',
   USER: '/user',
 }
 
@@ -34,7 +35,7 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith('/admin') && token.role !== 'ADMIN') {
     return NextResponse.redirect(new URL('/no-autorizado', req.url))
   }
-  if (pathname.startsWith('/club') && token.role !== 'CLUB') {
+  if (pathname.startsWith('/club') && token.role !== 'CLUB' && token.role !== 'RECEPCIONISTA') {
     return NextResponse.redirect(new URL('/no-autorizado', req.url))
   }
   if (pathname.startsWith('/user') && token.role !== 'USER') {

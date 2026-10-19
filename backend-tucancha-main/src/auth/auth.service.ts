@@ -41,6 +41,9 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
+    if (user.isActive === false) {
+      throw new UnauthorizedException('Tu cuenta ha sido desactivada. Comuníquese con el administrador del club.');
+    }
     if (!user.isVerified) {
       if (process.env.NODE_ENV !== 'production') {
         user.isVerified = true;
@@ -101,10 +104,21 @@ export class AuthService {
           await this.clubRepository.save(user.club);
         }
       }
+
+      // Si el club está suspendido y el usuario no es el dueño (es personal o recepcionista)
+      if (
+        (user.club.status === 'SUSPENDED' || (!hasActiveMembership && trialExpired)) &&
+        user.role !== UserRole.CLUB &&
+        user.role !== UserRole.ADMIN
+      ) {
+        throw new UnauthorizedException(`Comuníquese con el encargado del club ${user.club.name}`);
+      }
     }
 
-    if (user.role === 'CLUB') {
-      payload = Object.assign(payload, { clubId: user.club.id })
+    if (user.role === UserRole.CLUB || user.role === UserRole.RECEPCIONISTA) {
+      if (user.club?.id) {
+        payload = Object.assign(payload, { clubId: user.club.id });
+      }
     }
     
     const refresh_token = this.jwtService.sign({ sub: user.id }, {
@@ -131,7 +145,7 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role,
-      ...(user.role === 'CLUB' && { clubId: user.club.id }),
+      ...((user.role === UserRole.CLUB || user.role === UserRole.RECEPCIONISTA) && user.club && { clubId: user.club.id }),
     };
   
     const newAccessToken = this.jwtService.sign(payload, {

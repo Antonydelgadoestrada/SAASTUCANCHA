@@ -14,7 +14,9 @@ export class ScheduleTemplateController {
   @UseGuards(JwtAuthGuard)
   @Get()
   async getTemplates(@GetUser() user: Partial<User>) {
-    return this.templateService.findAllByClub(user.club.id)
+    const clubId = user?.club?.id || (user as any)?.clubId;
+    if (!clubId) throw new NotFoundException('Club no disponible');
+    return this.templateService.findAllByClub(clubId);
   }
 
   @Get('court-schedule')

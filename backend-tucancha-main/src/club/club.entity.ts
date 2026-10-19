@@ -186,5 +186,8 @@ export class EncryptionTransformer {
 
     @OneToMany('ClubMembership', (membership: any) => membership.club)
     memberships: any[];
+
+    @OneToMany(() => User, (user) => user.associatedClub)
+    staffUsers: User[];
   }
   

@@ -82,7 +82,7 @@ export function LoginForm() {
         const callbackUrl = searchParams.get("callbackUrl")
         if (session.user?.role === "ADMIN") {
           router.push("/admin/dashboard")
-        } else if (session.user?.role === "CLUB") {
+        } else if (session.user?.role === "CLUB" || session.user?.role === "RECEPCIONISTA") {
           router.push("/club/dashboard")
         } 
         else if (callbackUrl) {

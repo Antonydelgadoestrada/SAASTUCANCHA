@@ -39,8 +39,10 @@ import { memoryStorage,  File as MulterFile } from 'multer';
 
     @UseGuards(JwtAuthGuard)
     @Get('/club')
-    findAllByClub(@GetUser() user: Partial<User>): Promise<Booking[]> {
-      return this.bookingService.findAllByClub(user.club);
+    findAllByClub(@GetUser() user: User): Promise<Booking[]> {
+      const club = user.club || (user.clubId ? ({ id: user.clubId } as any) : null);
+      if (!club?.id) throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
+      return this.bookingService.findAllByClub(club);
     }
 
     @UseGuards(JwtAuthGuard)
@@ -70,7 +72,8 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     paymentManualBooking(
       @Body() dto: any, @GetUser() user: User,
     ){
-      if(!user.club) throw new UnauthorizedException('No tiene permisos')
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
       return this.bookingService.paymentManualBooking(dto);
     }
     
@@ -85,8 +88,8 @@ import { memoryStorage,  File as MulterFile } from 'multer';
       @Body() dto: any, @GetUser() user: User,
        @UploadedFiles() image: File[]
     ) {
-      if (user.role !== UserRole.ADMIN && user.role !== UserRole.CLUB) {
-        throw new ForbiddenException('Solo los clubes y administradores pueden registrar reservas manuales');
+      if (user.role !== UserRole.ADMIN && user.role !== UserRole.CLUB && user.role !== UserRole.RECEPCIONISTA) {
+        throw new ForbiddenException('Solo los clubes, recepcionistas y administradores pueden registrar reservas manuales');
       }
       const proofOfPaymentUrl = image?.length ? await this.bookingService.uploadFile(image[0]):''
       return this.bookingService.createManualBooking(Object.assign(dto, {proofOfPaymentUrl}), user);
@@ -95,25 +98,33 @@ import { memoryStorage,  File as MulterFile } from 'multer';
     @UseGuards(JwtAuthGuard)
     @Post('/getPopularCourtsByClub')
     getPopularCourtsByClub(@Body() data:{startDate:Date, endDate:Date}, @GetUser() user: User){
-      return this.bookingService.getPopularCourtsByClub(user.club.id, new Date(data.startDate),new Date(data.endDate))
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
+      return this.bookingService.getPopularCourtsByClub(clubId, new Date(data.startDate),new Date(data.endDate))
     } 
 
     @UseGuards(JwtAuthGuard)
     @Post('/getDailyStatsByClub')
     getDailyStatsByClub(@Body() data:{startDate:Date, endDate:Date}, @GetUser() user: User){
-      return this.bookingService.getDailyStatsByClub(user.club.id, new Date(data.startDate),new Date(data.endDate))
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
+      return this.bookingService.getDailyStatsByClub(clubId, new Date(data.startDate),new Date(data.endDate))
     }
 
     @UseGuards(JwtAuthGuard)
     @Post('/getDashboardSummary')
     getDashboardSummary(@Body() data:{startDate:Date, endDate:Date}, @GetUser() user: User){
-      return this.bookingService.getDashboardSummary(user.club.id, new Date(data.startDate),new Date(data.endDate))
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
+      return this.bookingService.getDashboardSummary(clubId, new Date(data.startDate),new Date(data.endDate))
     } 
 
     @UseGuards(JwtAuthGuard)
     @Post('/getBookingsReportByClub')
     getBookingsReportByClub(@Body() data:{startDate:Date, endDate:Date}, @GetUser() user: User){
-      return this.bookingService.getBookingsReportByClub(user.club.id, new Date(data.startDate),new Date(data.endDate))
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
+      return this.bookingService.getBookingsReportByClub(clubId, new Date(data.startDate),new Date(data.endDate))
     } 
 
     @UseGuards(JwtAuthGuard)
@@ -122,11 +133,12 @@ import { memoryStorage,  File as MulterFile } from 'multer';
       @Body() data: { startDate: Date; endDate: Date; sport?: string; courtId?: string },
       @GetUser() user: User
     ) {
-      if (!user?.club?.id) {
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) {
         throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
       }
       return this.bookingService.getHourlyOccupancyDemand(
-        user.club.id,
+        clubId,
         new Date(data.startDate),
         new Date(data.endDate),
         data.sport,
@@ -148,11 +160,12 @@ import { memoryStorage,  File as MulterFile } from 'multer';
       },
       @GetUser() user: User
     ) {
-      if (!user?.club?.id) {
+      const clubId = user.club?.id || user.clubId;
+      if (!clubId) {
         throw new UnauthorizedException('No tiene permisos o no tiene un club asociado');
       }
       return this.bookingService.getDemandTrendStats(
-        user.club.id,
+        clubId,
         data.timeframe,
         data.date,
         data.courtId,

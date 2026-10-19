@@ -166,12 +166,53 @@ export function AppSidebar({ user }: AppSidebarProps) {
       locked: isClubSuspended,
     },
     {
+      title: "Usuarios",
+      icon: UsersIcon,
+      href: "/club/users",
+      active: isActive("/club/users"),
+      locked: isClubSuspended,
+    },
+    {
       title: "Membresía",
       icon: CreditCardIcon,
       href: "/club/membership",
       active: isActive("/club/membership"),
       locked: false,
       highlight: isClubSuspended,
+    },
+  ]
+
+  // Menú para personal recepcionista
+  const recepcionistaMenu = [
+    {
+      title: "Dashboard",
+      icon: LayoutDashboardIcon,
+      href: "/club/dashboard",
+      active: isActive("/club/dashboard"),
+    },
+    {
+      title: "Reservas",
+      icon: ListIcon,
+      href: "/club/bookings",
+      active: isActive("/club/bookings"),
+    },
+    {
+      title: "Horarios",
+      icon: CalendarIcon,
+      href: "/club/schedules",
+      active: isActive("/club/schedules"),
+    },
+    {
+      title: "Canchas",
+      icon: HomeIcon,
+      href: "/club/courts",
+      active: isActive("/club/courts"),
+    },
+    {
+      title: "Pagos y Cobros",
+      icon: CreditCardIcon,
+      href: "/club/payments",
+      active: isActive("/club/payments"),
     },
   ]
 
@@ -210,7 +251,14 @@ export function AppSidebar({ user }: AppSidebarProps) {
   ]
 
   // Determinar qué menú mostrar según el rol del usuario
-  const menuItems = user.role === "ADMIN" ? adminMenu : user.role === "CLUB" ? clubMenu : userMenu
+  const menuItems =
+    user.role === "ADMIN"
+      ? adminMenu
+      : user.role === "CLUB"
+      ? clubMenu
+      : user.role === "RECEPCIONISTA"
+      ? recepcionistaMenu
+      : userMenu
 
   const handleLockedClick = (e: React.MouseEvent, title: string) => {
     e.preventDefault()

@@ -34,7 +34,19 @@ declare module "next-auth/jwt" {
   }
 }
 
-export type UserRole = "USER" | "CLUB" | "ADMIN"
+export type UserRole = "USER" | "CLUB" | "ADMIN" | "RECEPCIONISTA"
+
+export interface StaffUser {
+  id: string
+  name: string
+  email: string
+  role: string
+  isActive: boolean
+  isVerified: boolean
+  clubId?: string
+  createdAt: string
+  updatedAt?: string
+}
 
 export interface User {
   id?: string

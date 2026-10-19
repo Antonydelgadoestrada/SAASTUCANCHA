@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UserService } from '../user/user.service';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { Club } from '../club/club.entity';
 import { ClubMembership } from '../membership/entities/club_membership.entity';
 import { MembershipStatus } from '../membership/enums/membership-status.enum';
@@ -26,6 +27,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.userService.findOneById(payload.sub);
     if (!user) {
       throw new UnauthorizedException();
+    }
+
+    if (user.isActive === false) {
+      throw new UnauthorizedException('Tu cuenta ha sido desactivada. Comuníquese con el administrador del club.');
     }
 
     if (user.club) {
@@ -76,6 +81,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           user.club.status = 'SUSPENDED';
           await this.dataSource.getRepository(Club).save(user.club);
         }
+      }
+
+      // Si el club está suspendido y no es el dueño (es personal o recepcionista)
+      if (
+        (user.club.status === 'SUSPENDED' || (!hasActiveMembership && trialExpired)) &&
+        user.role !== UserRole.CLUB &&
+        user.role !== UserRole.ADMIN
+      ) {
+        throw new UnauthorizedException(`Comuníquese con el encargado del club ${user.club.name}`);
       }
     }
 

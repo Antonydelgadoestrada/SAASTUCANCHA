@@ -250,6 +250,61 @@ export class MailerService {
   }
 
   /**
+   * 1.1 Correo de bienvenida y confirmación de acceso para personal de Club (Recepcionistas / Administradores)
+   */
+  async sendClubStaffWelcomeEmail({
+    to,
+    staffName,
+    clubName,
+    role,
+    temporaryPassword,
+  }: {
+    to: string;
+    staffName: string;
+    clubName: string;
+    role: string;
+    temporaryPassword?: string;
+  }) {
+    const roleLabel = role === 'RECEPCIONISTA' ? 'Recepcionista' : role;
+    const loginUrl = `${this.webUrl}/login`;
+
+    const message = `
+      Has sido registrado exitosamente como <strong>${roleLabel}</strong> en el equipo de <strong>${clubName}</strong>.<br/><br/>
+      A partir de ahora podrás acceder a la plataforma TuCancha para gestionar reservas, verificar pagos y atender a los clientes del club.
+      <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+        <h4 style="margin: 0 0 10px 0; color: #166534; font-size: 14px;">🔑 Tus Credenciales de Acceso:</h4>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #15803d; line-height: 1.8;">
+          <li><strong>Correo / Gmail:</strong> ${to}</li>
+          ${temporaryPassword ? `<li><strong>Contraseña de acceso:</strong> <code style="background-color: #dcfce7; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #14532d;">${temporaryPassword}</code></li>` : ''}
+          <li><strong>Rol asignado:</strong> ${roleLabel}</li>
+          <li><strong>Club asignado:</strong> ${clubName}</li>
+        </ul>
+      </div>
+      <p style="font-size: 12px; color: #6b7280;">
+        Por seguridad, te sugerimos no compartir tus credenciales y cambiarlas periódicamente.
+      </p>
+    `;
+
+    const html = this.getEmailTemplate({
+      title: '¡Bienvenido al Equipo de TuCancha!',
+      greeting: `Hola ${staffName || 'Colaborador'},`,
+      message,
+      actionButton: {
+        text: 'Iniciar Sesión en TuCancha',
+        url: loginUrl,
+        color: '#16A34A',
+      },
+      footerNote: `Este acceso fue generado por el administrador del club ${clubName}.`,
+    });
+
+    return this.sendEmail({
+      to,
+      subject: `⚽ Bienvenido al equipo de ${clubName} - Acceso como ${roleLabel} | TuCancha`,
+      html,
+    });
+  }
+
+  /**
    * 2. Correo al registrarse un Club: Notifica al dueño que la cuenta está en espera de confirmación administrativa
    */
   async sendClubRegisteredPendingApprovalEmail(
@@ -797,7 +852,7 @@ export class MailerService {
   /**
    * Envía notificaciones de registro de reserva al Usuario y al Club
    */
-  async sendBookingReservationNotifications(booking: Booking) {
+  async sendBookingReservationNotifications(booking: Booking, extraRecipientEmails?: string[]) {
     const { date, startTime, endTime, court, club, bookingReference, customerInfo, user } = booking;
 
     const formattedDate = new Date(date).toLocaleDateString('es-PE', {
@@ -864,14 +919,18 @@ export class MailerService {
       });
     }
 
-    // 2. Enviar a Club
-    if (clubEmail) {
+    // 2. Enviar a Club y Recepcionistas del Club
+    const staffEmails = Array.from(
+      new Set([clubEmail, ...(extraRecipientEmails || [])].filter(Boolean) as string[])
+    );
+
+    for (const email of staffEmails) {
       await this.sendEmail({
-        to: clubEmail,
+        to: email,
         subject: `🏟️ Nueva reserva registrada: #${bookingReference} (${court?.name || 'Cancha'}) - TuCancha`,
         html: this.getEmailTemplate({
           title: 'Nueva Reserva en tu Club',
-          greeting: `Hola ${club?.name || 'Club'},`,
+          greeting: `Hola ${club?.name || 'Equipo del Club'},`,
           message: `Se ha registrado una nueva reserva para la cancha <strong>${court?.name || 'Cancha'}</strong>.`,
           bookingDetailsHtml: detailsClub,
           actionButton: {

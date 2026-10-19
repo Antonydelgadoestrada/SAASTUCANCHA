@@ -7,6 +7,8 @@ import {
     UpdateDateColumn,
     OneToMany,
     OneToOne,
+    ManyToOne,
+    JoinColumn,
   } from 'typeorm';
   import { Booking } from '../booking/booking.entity';
   import { Club } from '../club/club.entity';
@@ -73,6 +75,13 @@ import { Exclude } from 'class-transformer';
   
     @OneToOne(() => Club, club => club.owner)
     club?: Club;
+
+    @Column({ nullable: true })
+    clubId?: string;
+
+    @ManyToOne(() => Club, club => club.staffUsers, { nullable: true, onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'clubId' })
+    associatedClub?: Club;
   
     @OneToMany(() => Review, review => review.user)
     reviews: Review[];

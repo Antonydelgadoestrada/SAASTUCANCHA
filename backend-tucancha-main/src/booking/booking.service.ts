@@ -309,7 +309,10 @@ export class BookingService implements OnModuleInit {
     if (createdBookings.length > 0) {
       try {
         const fullBooking = await this.findOneComplete(createdBookings[0].id);
-        await this.mailerService.sendBookingReservationNotifications(fullBooking || createdBookings[0]);
+        const targetBooking = fullBooking || createdBookings[0];
+        const clubId = targetBooking?.club?.id || targetBooking?.court?.club?.id;
+        const receptionistEmails = clubId ? await this.userService.findActiveReceptionistEmails(clubId) : [];
+        await this.mailerService.sendBookingReservationNotifications(targetBooking, receptionistEmails);
       } catch (mailErr: any) {
         console.warn('⚠️ Error al enviar correo de notificación de reserva:', mailErr?.message);
       }
@@ -544,10 +547,12 @@ export class BookingService implements OnModuleInit {
       try {
         const fullBooking = await this.findOneComplete(b.id);
         const targetBooking = fullBooking || b;
+        const clubId = targetBooking?.club?.id || targetBooking?.court?.club?.id;
+        const receptionistEmails = clubId ? await this.userService.findActiveReceptionistEmails(clubId) : [];
         if (isFullPaid) {
           await this.mailerService.sendBookingPaidNotifications(targetBooking);
         } else {
-          await this.mailerService.sendBookingReservationNotifications(targetBooking);
+          await this.mailerService.sendBookingReservationNotifications(targetBooking, receptionistEmails);
         }
       } catch (e: any) {
         console.warn(`Error al enviar correo para reserva manual ${b.id}:`, e?.message);
