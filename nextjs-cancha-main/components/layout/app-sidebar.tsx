@@ -15,6 +15,7 @@ import {
   SparklesIcon,
   ShieldCheckIcon,
   BanknoteIcon,
+  AwardIcon,
 } from "lucide-react"
 
 import { UserNav } from "@/components/layout/user-nav"
@@ -172,6 +173,13 @@ export function AppSidebar({ user }: AppSidebarProps) {
       active: isActive("/club/membership"),
       locked: false,
       highlight: isClubSuspended,
+    },
+    {
+      title: "Puntos y Fidelidad",
+      icon: AwardIcon,
+      href: "/club/loyalty",
+      active: isActive("/club/loyalty"),
+      locked: isClubSuspended,
     },
   ]
 
