@@ -1,8 +1,12 @@
 import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
 
 export class RedeemRewardDto {
+  @IsUUID('4', { message: 'clubId debe ser un UUID válido' })
+  @IsNotEmpty({ message: 'clubId es requerido' })
+  clubId: string;
+
   @IsUUID('4', { message: 'rewardId debe ser un UUID válido' })
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'rewardId es requerido' })
   rewardId: string;
 }
 

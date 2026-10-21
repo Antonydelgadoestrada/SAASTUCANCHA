@@ -6,6 +6,8 @@ import { LoyaltyBalance } from './entities/loyalty_balance.entity';
 import { LoyaltyRedemption } from './entities/loyalty_redemption.entity';
 import { LoyaltyTransaction } from './entities/loyalty_transaction.entity';
 import { LoyaltyService } from './loyalty.service';
+import { LoyaltyClubController } from './loyalty-club.controller';
+import { LoyaltyUserController } from './loyalty-user.controller';
 
 @Global()
 @Module({
@@ -18,6 +20,7 @@ import { LoyaltyService } from './loyalty.service';
       LoyaltyTransaction,
     ]),
   ],
+  controllers: [LoyaltyClubController, LoyaltyUserController],
   providers: [LoyaltyService],
   exports: [LoyaltyService, TypeOrmModule],
 })
