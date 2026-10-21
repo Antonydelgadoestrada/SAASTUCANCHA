@@ -17,6 +17,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { QrModule } from './qr/qr.module';
 import { MembershipModule } from './membership/membership.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -100,7 +101,8 @@ import { APP_GUARD } from '@nestjs/core';
     PaymentModule, ReviewModule, PromotionModule, AuthModule, 
     MailerModule, ScheduleCalendarModule, QrModule,
     MembershipModule,
-    TransactionsModule
+    TransactionsModule,
+    LoyaltyModule,
   ],
   controllers: [AppController],
   providers: [

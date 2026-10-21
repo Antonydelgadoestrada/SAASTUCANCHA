@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef, ForbiddenException, UnauthorizedException, Optional } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository } from 'typeorm';
@@ -22,6 +22,7 @@ import { S3Service } from '../aws/s3.service';
 import { CourtService } from '../court/court.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { MembershipService } from '../membership/membership.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 @Injectable()
 export class PaymentService {
@@ -41,6 +42,8 @@ export class PaymentService {
     private readonly transactionsService: TransactionsService,
     @Inject(forwardRef(() => MembershipService))
     private readonly membershipService: MembershipService,
+    @Optional()
+    private readonly loyaltyService?: LoyaltyService,
   ) {
     const platformToken = process.env.ADMIN_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN || process.env.MERCADO_PAGO_ACCESS_TOKEN || '';
     this.mercadopago = new MercadoPagoConfig({ accessToken: platformToken });
@@ -752,6 +755,22 @@ export class PaymentService {
         for (const bk of updatedBookings) {
           if (bk.payment) {
             this.transactionsService.recordFromMercadoPago(bk.payment, bk).catch(() => {});
+          }
+
+          // Hook Loyalty Points: 100% Pagado online
+          if (this.loyaltyService && bk.payment && (bk.payment.type === PaymentType.PAGO_COMPLETO || bk.payment.saldoStatus === 'NO_APLICA')) {
+            const clubId = bk.club?.id || bk.court?.club?.id;
+            const userId = bk.user?.id;
+            if (clubId && userId) {
+              this.loyaltyService.handleBookingPaid({
+                clubId,
+                userId,
+                bookingId: bk.id,
+                bookingStartTime: bk.startTime || bk.date,
+              }).catch((err) => {
+                console.error(`⚠️ [Loyalty Hook Webhook] Error no bloqueante: ${err?.message}`);
+              });
+            }
           }
         }
       }
@@ -1688,6 +1707,22 @@ export class PaymentService {
 
           if (payment.type === PaymentType.PAGO_COMPLETO || payment.saldoStatus === 'PAGADO') {
             b.paymentStatus = PaymentStatus.PAID;
+
+            // Hook Loyalty Points: 100% Pagado auditado
+            if (this.loyaltyService) {
+              const clubId = b.club?.id || b.court?.club?.id;
+              const userId = b.user?.id;
+              if (clubId && userId) {
+                this.loyaltyService.handleBookingPaid({
+                  clubId,
+                  userId,
+                  bookingId: b.id,
+                  bookingStartTime: b.startTime || b.date,
+                }).catch((err) => {
+                  console.error(`⚠️ [Loyalty Hook Audit] Error no bloqueante: ${err?.message}`);
+                });
+              }
+            }
           } else if (payment.type === PaymentType.ADELANTO && payment.saldoStatus !== 'PAGADO') {
             b.paymentStatus = PaymentStatus.PENDING;
           }
@@ -1825,6 +1860,22 @@ export class PaymentService {
               b.status = BookingStatus.CONFIRMED;
             }
             await this.bookingRepo.save(b);
+
+            // Hook Loyalty Points: Saldo confirmado completando el 100%
+            if (this.loyaltyService) {
+              const clubId = b.club?.id || b.court?.club?.id;
+              const userId = b.user?.id;
+              if (clubId && userId) {
+                this.loyaltyService.handleBookingPaid({
+                  clubId,
+                  userId,
+                  bookingId: b.id,
+                  bookingStartTime: b.startTime || b.date,
+                }).catch((err) => {
+                  console.error(`⚠️ [Loyalty Hook Saldo Audit] Error no bloqueante: ${err?.message}`);
+                });
+              }
+            }
           }
         }
       }
@@ -1945,6 +1996,22 @@ export class PaymentService {
         b.status = BookingStatus.CONFIRMED;
         b.paymentStatus = PaymentStatus.PAID;
         await this.bookingRepo.save(b);
+
+        // Hook Loyalty Points: Saldo liquidado en club completando el 100%
+        if (this.loyaltyService) {
+          const clubId = b.club?.id || b.court?.club?.id;
+          const userId = b.user?.id;
+          if (clubId && userId) {
+            this.loyaltyService.handleBookingPaid({
+              clubId,
+              userId,
+              bookingId: b.id,
+              bookingStartTime: b.startTime || b.date,
+            }).catch((err) => {
+              console.error(`⚠️ [Loyalty Hook Settle Saldo] Error no bloqueante: ${err?.message}`);
+            });
+          }
+        }
       }
     }
 

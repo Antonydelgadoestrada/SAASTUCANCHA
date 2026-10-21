@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Booking } from './booking.entity';
 import { Repository } from 'typeorm';
@@ -22,6 +22,7 @@ import { isNight } from '../helpers/helpers';
 import { Payment, PaymentType } from '../payment/payment.entity';
 import { PaymentMethod } from '../payment/payment-method.enum';
 import { TransactionsService } from '../transactions/transactions.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 function generateTimeSlots(start: string, duration: number): string[] {
   const [hours, minutes] = start.split(':').map(Number);
@@ -69,6 +70,8 @@ export class BookingService implements OnModuleInit {
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
     private readonly transactionsService: TransactionsService,
+    @Optional()
+    private readonly loyaltyService?: LoyaltyService,
   ) {}
 
   async onModuleInit() {
@@ -218,6 +221,14 @@ export class BookingService implements OnModuleInit {
    await this.scheduleTemplateService.bulkUpdate(payload as any);
 
    await this.mailerService.sendBookingCancelledEmail(result.customerInfo.email, result);
+
+   // Hook Loyalty Points: Reversión por cancelación de reserva
+   if (this.loyaltyService) {
+     this.loyaltyService.handleBookingCancelled({ bookingId: booking.id }).catch((err) => {
+       console.error(`⚠️ [Loyalty Hook Cancel] Error no bloqueante: ${err?.message}`);
+     });
+   }
+
    return booking;
   }
 
@@ -233,6 +244,23 @@ export class BookingService implements OnModuleInit {
    slots= slots.map((slot)=>(Object.assign(slot, { status: 'occupied' })))
    await this.scheduleTemplateService.bulkUpdate(slots);
    await this.mailerService.sendBookingPaidNotifications(result);
+
+   // Hook Loyalty Points: Reserva manual marcada como pagada
+   if (this.loyaltyService) {
+     const clubId = booking.club?.id || booking.court?.club?.id;
+     const userId = booking.user?.id;
+     if (clubId && userId) {
+       this.loyaltyService.handleBookingPaid({
+         clubId,
+         userId,
+         bookingId: booking.id,
+         bookingStartTime: booking.startTime || booking.date,
+       }).catch((err) => {
+         console.error(`⚠️ [Loyalty Hook Manual] Error no bloqueante: ${err?.message}`);
+       });
+     }
+   }
+
    return booking;
  }
 
