@@ -92,10 +92,16 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
   const [isCreateTemplateDialogOpen, setIsCreateTemplateDialogOpen] = useState(false)
 
   useEffect(() => {
-    if (templates) {
+    if (templates && templates.length > 0) {
       setLocalTemplates(templates)
+      // Si es una cancha nueva y no tiene plantilla seleccionada, auto-seleccionar la primera disponible
+      if (!court && !form.getValues("schedule_template_id")) {
+        const defaultTplId = String(templates[0].id)
+        form.setValue("schedule_template_id", defaultTplId, { shouldValidate: true })
+        setCurrentTemplateId(defaultTplId)
+      }
     }
-  }, [templates])
+  }, [templates, court, form])
 
   const form = useForm<CourtFormData>({
     defaultValues: {
@@ -140,7 +146,8 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
     } else {
       // Resetear formulario para nueva cancha
       setImages([])
-      setCurrentTemplateId("")
+      const defaultId = templates && templates.length > 0 ? String(templates[0].id) : ""
+      setCurrentTemplateId(defaultId)
       form.reset({
         name: "",
         type: "",
@@ -153,11 +160,11 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
         promoNight: null,
         minimumBookingTime: '1',
         description: "",
-        schedule_template_id: "",
+        schedule_template_id: defaultId,
       })
       setIsReady(true)
     }
-  }, [court, form])
+  }, [court, form, templates])
 
   const addImage = () => {
     if (newImageUrl && !images.includes(newImageUrl)) {
@@ -170,7 +177,7 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
   const handleTemplateChange = (newTemplateId: string) => {
     // Si es una nueva cancha o no hay plantilla actual, cambiar directamente
     if (!court || !currentTemplateId || currentTemplateId === "") {
-      form.setValue("schedule_template_id", newTemplateId)
+      form.setValue("schedule_template_id", newTemplateId, { shouldValidate: true, shouldDirty: true })
       setCurrentTemplateId(newTemplateId)
       return
     }
@@ -183,7 +190,7 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
   }
 
   const confirmTemplateChange = () => {
-    form.setValue("schedule_template_id", tempTemplateId)
+    form.setValue("schedule_template_id", tempTemplateId, { shouldValidate: true, shouldDirty: true })
     setCurrentTemplateId(tempTemplateId)
     setShowTemplateChangeDialog(false)
     setTempTemplateId("")
@@ -191,6 +198,7 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
   }
 
   const cancelTemplateChange = () => {
+    form.setValue("schedule_template_id", currentTemplateId, { shouldValidate: true })
     setShowTemplateChangeDialog(false)
     setTempTemplateId("")
   }
@@ -213,7 +221,8 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
   }
 
   async function handleSubmit(values: CourtFormData) {
-    if (!values.schedule_template_id || values.schedule_template_id === "none" || values.schedule_template_id.trim() === "") {
+    const templateId = values.schedule_template_id || currentTemplateId || form.getValues("schedule_template_id")
+    if (!templateId || templateId === "none" || String(templateId).trim() === "") {
       toast.error("Debes seleccionar o crear una plantilla de horarios para la cancha.")
       return
     }
@@ -221,9 +230,10 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
     setIsLoading(true)
 
     try {
-      // Incluir las imágenes en los valores
+      // Incluir las imágenes y asegurar el ID de la plantilla
       const dataToSubmit = {
         ...values,
+        schedule_template_id: templateId,
         existingImages,
         selectedFiles,
         ...(court && { id: court.id }),
@@ -465,8 +475,11 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
                 </Button>
               </div>
               <Select
-                value={field.value ? String(field.value) : undefined}
-                onValueChange={handleTemplateChange}
+                value={field.value ? String(field.value) : (currentTemplateId ? String(currentTemplateId) : undefined)}
+                onValueChange={(val) => {
+                  field.onChange(val)
+                  handleTemplateChange(val)
+                }}
               >
                 <FormControl>
                   <SelectTrigger className="w-full">
