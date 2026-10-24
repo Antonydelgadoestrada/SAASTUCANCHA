@@ -109,6 +109,20 @@ export function LoyaltyContent() {
       ),
   });
 
+  // Query global de canjes para badges informativos y métricas rápidas
+  const { data: allRedemptions = [] } = useQuery({
+    queryKey: ["club-loyalty-redemptions", "ALL_OVERVIEW"],
+    queryFn: () => getClubLoyaltyRedemptions(),
+  });
+
+  const pendingRedemptions = allRedemptions.filter((r) => r.status === "PENDING");
+  const deliveredRedemptions = allRedemptions.filter((r) => r.status === "DELIVERED");
+  const totalRedemptionsCount = allRedemptions.length;
+  const totalPointsRedeemed = deliveredRedemptions.reduce(
+    (sum, r) => sum + (r.rewardCostSnapshot || 0),
+    0
+  );
+
   // =========================================================================
   // 2. CONFIGURATION FORM STATE
   // =========================================================================
@@ -349,7 +363,7 @@ export function LoyaltyContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="flex flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full pb-16">
       {/* HEADER PRINCIPAL */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b pb-5">
         <div>
@@ -366,7 +380,7 @@ export function LoyaltyContent() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 bg-muted/40 p-2.5 rounded-xl border">
+        <div className="flex items-center gap-3 bg-muted/40 p-2.5 rounded-xl border self-start md:self-auto">
           <span className="text-sm font-medium">
             Estado del Programa:
           </span>
@@ -385,22 +399,62 @@ export function LoyaltyContent() {
 
       {/* TABS DE GESTIÓN */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full h-auto p-1 bg-muted/60">
-          <TabsTrigger value="redeem-desk" className="py-2.5 flex items-center gap-2">
-            <CheckCircle2Icon className="w-4 h-4" />
-            <span>Validar Canje</span>
+        <TabsList className="grid grid-cols-2 lg:grid-cols-4 w-full h-auto p-1.5 bg-muted/60 rounded-xl gap-1.5">
+          <TabsTrigger
+            value="redeem-desk"
+            className="py-2.5 px-3 flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-all"
+          >
+            <CheckCircle2Icon className="w-4 h-4 shrink-0" />
+            <span className="truncate">Validar Canje</span>
+            {pendingRedemptions.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 px-1.5 py-0.2 text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold"
+              >
+                {pendingRedemptions.length}
+              </Badge>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="rewards" className="py-2.5 flex items-center gap-2">
-            <GiftIcon className="w-4 h-4" />
-            <span>Catálogo de Premios</span>
+          <TabsTrigger
+            value="rewards"
+            className="py-2.5 px-3 flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-all"
+          >
+            <GiftIcon className="w-4 h-4 shrink-0" />
+            <span className="truncate">Catálogo de Premios</span>
+            {(rewards?.length ?? 0) > 0 && (
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0.2 text-[10px]">
+                {rewards?.length}
+              </Badge>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="history" className="py-2.5 flex items-center gap-2">
-            <ClockIcon className="w-4 h-4" />
-            <span>Historial de Canjes</span>
+          <TabsTrigger
+            value="history"
+            className="py-2.5 px-3 flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-all"
+          >
+            <ClockIcon className="w-4 h-4 shrink-0" />
+            <span className="truncate">Historial de Canjes</span>
+            {totalRedemptionsCount > 0 && (
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0.2 text-[10px]">
+                {totalRedemptionsCount}
+              </Badge>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="config" className="py-2.5 flex items-center gap-2">
-            <SettingsIcon className="w-4 h-4" />
-            <span>Configuración</span>
+          <TabsTrigger
+            value="config"
+            className="py-2.5 px-3 flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-all"
+          >
+            <SettingsIcon className="w-4 h-4 shrink-0" />
+            <span className="truncate">Configuración</span>
+            <Badge
+              variant="outline"
+              className={`ml-1 px-1.5 py-0.2 text-[10px] ${
+                currentConfig.isActive
+                  ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                  : "border-slate-400 text-slate-500"
+              }`}
+            >
+              {currentConfig.isActive ? "Activo" : "Pausado"}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -408,157 +462,236 @@ export function LoyaltyContent() {
         {/* TAB 1: VALIDAR CANJE (RECEPCIÓN / CAJA) */}
         {/* ================================================================= */}
         <TabsContent value="redeem-desk" className="space-y-6">
-          <Card className="border-primary/20 shadow-sm">
-            <CardHeader className="bg-muted/20">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <SearchIcon className="w-5 h-5 text-primary" />
-                Mesa de Validación y Entrega de Premios
-              </CardTitle>
-              <CardDescription>
-                Pide al usuario el código alfanumérico generado en su app (ej: TC-A7K29B) para verificar y entregar el premio.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3 max-w-xl">
-                <div className="relative flex-1">
-                  <Input
-                    placeholder="Escribe el código (ej: TC-ABC123)"
-                    value={searchCode}
-                    onChange={(e) => setSearchCode(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearchCode()}
-                    className="font-mono text-base uppercase tracking-wider pl-3 pr-10"
-                  />
-                  {searchCode && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchCode("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* PANEL PRINCIPAL DE BÚSQUEDA Y VALIDACIÓN */}
+            <div className="lg:col-span-7 space-y-6">
+              <Card className="border-primary/20 shadow-sm">
+                <CardHeader className="bg-muted/20">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <SearchIcon className="w-5 h-5 text-primary" />
+                    Mesa de Validación y Entrega de Premios
+                  </CardTitle>
+                  <CardDescription>
+                    Pide al usuario el código alfanumérico generado en su app (ej: TC-A7K29B) para verificar y entregar el premio.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-3 w-full">
+                    <div className="relative flex-1">
+                      <Input
+                        placeholder="Escribe el código (ej: TC-ABC123)"
+                        value={searchCode}
+                        onChange={(e) => setSearchCode(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => e.key === "Enter" && handleSearchCode()}
+                        className="font-mono text-base uppercase tracking-wider pl-3 pr-10 w-full"
+                      />
+                      {searchCode && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchCode("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleSearchCode}
+                      disabled={isSearching || !searchCode.trim()}
+                      className="sm:w-36 font-medium"
                     >
-                      Limpiar
-                    </button>
-                  )}
-                </div>
-                <Button
-                  onClick={handleSearchCode}
-                  disabled={isSearching || !searchCode.trim()}
-                  className="sm:w-36 font-medium"
-                >
-                  {isSearching ? (
-                    <Loader2Icon className="w-4 h-4 animate-spin mr-2" />
+                      {isSearching ? (
+                        <Loader2Icon className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <SearchIcon className="w-4 h-4 mr-2" />
+                      )}
+                      Validar Código
+                    </Button>
+                  </div>
+
+                  {/* TARJETA DE RESULTADO DE VALIDACIÓN */}
+                  {foundRedemption ? (
+                    <div className="mt-6 border rounded-xl p-5 bg-card shadow-sm space-y-5 animate-in fade-in-50 duration-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
+                        <div>
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Código de Canje
+                          </span>
+                          <h3 className="text-2xl font-mono font-bold text-primary tracking-widest mt-0.5">
+                            {foundRedemption.code}
+                          </h3>
+                        </div>
+                        <div>{getStatusBadge(foundRedemption.status)}</div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border">
+                          <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                            <GiftIcon className="w-3.5 h-3.5 text-primary" /> Premio Solicitado
+                          </span>
+                          <p className="text-base font-semibold">
+                            {foundRedemption.rewardNameSnapshot}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Costo: <span className="font-bold text-foreground">{foundRedemption.rewardCostSnapshot} pts</span>
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border">
+                          <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                            <UserIcon className="w-3.5 h-3.5 text-primary" /> Datos del Jugador
+                          </span>
+                          <p className="text-base font-semibold">
+                            {foundRedemption.user?.name || "Usuario registrado"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {foundRedemption.user?.email || "Sin email"}
+                            {foundRedemption.user?.phone && ` • Cel: ${foundRedemption.user.phone}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between text-xs text-muted-foreground pt-1 border-t">
+                        <span>
+                          Solicitado el:{" "}
+                          <strong className="text-foreground">
+                            {format(new Date(foundRedemption.requestedAt), "dd/MM/yyyy HH:mm", { locale: es })}
+                          </strong>
+                        </span>
+                        <span>
+                          Válido hasta:{" "}
+                          <strong className="text-foreground">
+                            {format(new Date(foundRedemption.expiresAt), "dd/MM/yyyy", { locale: es })}
+                          </strong>
+                        </span>
+                      </div>
+
+                      {/* ACCIONES DISPONIBLES SEGÚN ESTADO */}
+                      {foundRedemption.status === "PENDING" && (
+                        <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-end border-t">
+                          <Button
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive/10 border-destructive/30"
+                            onClick={() => handleOpenReject(foundRedemption.id)}
+                            disabled={rejectMutation.isPending}
+                          >
+                            <XCircleIcon className="w-4 h-4 mr-2" />
+                            Rechazar y Reembolsar
+                          </Button>
+                          <Button
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                            onClick={() => deliverMutation.mutate(foundRedemption.code)}
+                            disabled={deliverMutation.isPending}
+                          >
+                            {deliverMutation.isPending ? (
+                              <Loader2Icon className="w-4 h-4 animate-spin mr-2" />
+                            ) : (
+                              <CheckCircle2Icon className="w-4 h-4 mr-2" />
+                            )}
+                            Confirmar Entrega del Premio
+                          </Button>
+                        </div>
+                      )}
+
+                      {foundRedemption.status === "DELIVERED" && (
+                        <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+                          <CheckCircle2Icon className="w-4 h-4 shrink-0" />
+                          <span>
+                            Este premio ya fue entregado y validado
+                            {foundRedemption.resolvedAt &&
+                              ` el ${format(new Date(foundRedemption.resolvedAt), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`}.
+                          </span>
+                        </div>
+                      )}
+
+                      {foundRedemption.status === "REJECTED" && (
+                        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-300 text-xs flex items-center gap-2">
+                          <XCircleIcon className="w-4 h-4 shrink-0" />
+                          <span>
+                            Canje rechazado. Motivo: &quot;{foundRedemption.rejectReason || "No especificado"}&quot;. Los puntos fueron reembolsados.
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <SearchIcon className="w-4 h-4 mr-2" />
-                  )}
-                  Validar Código
-                </Button>
-              </div>
-
-              {/* TARJETA DE RESULTADO DE VALIDACIÓN */}
-              {foundRedemption && (
-                <div className="mt-6 border rounded-xl p-5 bg-card shadow-sm space-y-5 animate-in fade-in-50 duration-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
-                    <div>
-                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Código de Canje
-                      </span>
-                      <h3 className="text-2xl font-mono font-bold text-primary tracking-widest mt-0.5">
-                        {foundRedemption.code}
-                      </h3>
+                    <div className="mt-6 p-4 rounded-xl border border-dashed bg-muted/10 text-muted-foreground flex items-center gap-3">
+                      <CheckCircle2Icon className="w-5 h-5 text-primary/70 shrink-0" />
+                      <div className="text-xs">
+                        <p className="font-semibold text-foreground">Instrucciones para Recepción / Caja</p>
+                        <p className="mt-0.5">Ingresa el código que el cliente te muestre en su teléfono o haz clic en &quot;Cargar&quot; en la lista de canjes pendientes de la derecha.</p>
+                      </div>
                     </div>
-                    <div>{getStatusBadge(foundRedemption.status)}</div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* PANEL LATERAL: CANJES PENDIENTES DE RETIRO */}
+            <div className="lg:col-span-5">
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3 bg-muted/10">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <ClockIcon className="w-4 h-4 text-amber-500" />
+                      Canjes Pendientes de Retiro
+                    </CardTitle>
+                    <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold">
+                      {pendingRedemptions.length} en espera
+                    </Badge>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border">
-                      <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                        <GiftIcon className="w-3.5 h-3.5 text-primary" /> Premio Solicitado
-                      </span>
-                      <p className="text-base font-semibold">
-                        {foundRedemption.rewardNameSnapshot}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Costo: <span className="font-bold text-foreground">{foundRedemption.rewardCostSnapshot} pts</span>
-                      </p>
+                  <CardDescription className="text-xs">
+                    Premios solicitados por jugadores listos para ser entregados en el club.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4">
+                  {pendingRedemptions.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-muted-foreground border rounded-xl border-dashed flex flex-col items-center justify-center">
+                      <CheckCircle2Icon className="w-8 h-8 text-emerald-500/50 mb-2" />
+                      <p className="font-medium text-foreground">No hay canjes pendientes</p>
+                      <p className="mt-0.5">Todos los premios canjeados ya fueron entregados.</p>
                     </div>
-
-                    <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border">
-                      <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                        <UserIcon className="w-3.5 h-3.5 text-primary" /> Datos del Jugador
-                      </span>
-                      <p className="text-base font-semibold">
-                        {foundRedemption.user?.name || "Usuario registrado"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {foundRedemption.user?.email || "Sin email"}
-                        {foundRedemption.user?.phone && ` • Cel: ${foundRedemption.user.phone}`}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between text-xs text-muted-foreground pt-1 border-t">
-                    <span>
-                      Solicitado el:{" "}
-                      <strong className="text-foreground">
-                        {format(new Date(foundRedemption.requestedAt), "dd/MM/yyyy HH:mm", { locale: es })}
-                      </strong>
-                    </span>
-                    <span>
-                      Válido hasta:{" "}
-                      <strong className="text-foreground">
-                        {format(new Date(foundRedemption.expiresAt), "dd/MM/yyyy", { locale: es })}
-                      </strong>
-                    </span>
-                  </div>
-
-                  {/* ACCIONES DISPONIBLES SEGÚN ESTADO */}
-                  {foundRedemption.status === "PENDING" && (
-                    <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-end border-t">
-                      <Button
-                        variant="outline"
-                        className="text-destructive hover:bg-destructive/10 border-destructive/30"
-                        onClick={() => handleOpenReject(foundRedemption.id)}
-                        disabled={rejectMutation.isPending}
-                      >
-                        <XCircleIcon className="w-4 h-4 mr-2" />
-                        Rechazar y Reembolsar
-                      </Button>
-                      <Button
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                        onClick={() => deliverMutation.mutate(foundRedemption.code)}
-                        disabled={deliverMutation.isPending}
-                      >
-                        {deliverMutation.isPending ? (
-                          <Loader2Icon className="w-4 h-4 animate-spin mr-2" />
-                        ) : (
-                          <CheckCircle2Icon className="w-4 h-4 mr-2" />
-                        )}
-                        Confirmar Entrega del Premio
-                      </Button>
+                  ) : (
+                    <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                      {pendingRedemptions.map((red) => (
+                        <div
+                          key={red.id}
+                          className="p-3 rounded-xl border bg-card hover:bg-muted/30 transition-all flex items-center justify-between gap-3 text-xs shadow-sm"
+                        >
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-primary text-sm">
+                                {red.code}
+                              </span>
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+                                {red.rewardCostSnapshot} pts
+                              </Badge>
+                            </div>
+                            <p className="font-medium text-foreground truncate">
+                              {red.rewardNameSnapshot}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {red.user?.name || "Jugador"} • {format(new Date(red.requestedAt), "dd/MM HH:mm", { locale: es })}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs shrink-0 font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
+                            onClick={() => {
+                              setSearchCode(red.code);
+                              setFoundRedemption(red);
+                            }}
+                          >
+                            Cargar
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   )}
-
-                  {foundRedemption.status === "DELIVERED" && (
-                    <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
-                      <CheckCircle2Icon className="w-4 h-4 shrink-0" />
-                      <span>
-                        Este premio ya fue entregado y validado
-                        {foundRedemption.resolvedAt &&
-                          ` el ${format(new Date(foundRedemption.resolvedAt), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`}.
-                      </span>
-                    </div>
-                  )}
-
-                  {foundRedemption.status === "REJECTED" && (
-                    <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-300 text-xs flex items-center gap-2">
-                      <XCircleIcon className="w-4 h-4 shrink-0" />
-                      <span>
-                        Canje rechazado. Motivo: &quot;{foundRedemption.rejectReason || "No especificado"}&quot;. Los puntos fueron reembolsados.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* ================================================================= */}
@@ -569,12 +702,37 @@ export function LoyaltyContent() {
             <div>
               <h2 className="text-xl font-bold">Catálogo de Premios</h2>
               <p className="text-sm text-muted-foreground">
-                Configura los productos, bebidas o descuentos que los jugadores pueden canjear con sus puntos.
+                Configura los productos, bebidas o beneficios que los jugadores pueden canjear con sus puntos.
               </p>
             </div>
             <Button onClick={openCreateReward} className="gap-2">
               <PlusIcon className="w-4 h-4" /> Nuevo Premio
             </Button>
+          </div>
+
+          {/* KPI CARDS RESUMEN CATÁLOGO */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <Card className="p-4 bg-card shadow-sm border">
+              <span className="text-xs text-muted-foreground font-medium">Premios Activos</span>
+              <p className="text-2xl font-bold mt-1 text-primary">
+                {rewards?.filter((r) => r.isActive).length ?? 0}
+              </p>
+            </Card>
+            <Card className="p-4 bg-card shadow-sm border">
+              <span className="text-xs text-muted-foreground font-medium">Puntaje Mínimo de Canje</span>
+              <p className="text-2xl font-bold mt-1">
+                {rewards && rewards.length > 0
+                  ? Math.min(...rewards.map((r) => r.pointsCost))
+                  : 0}{" "}
+                <span className="text-xs font-normal text-muted-foreground">pts</span>
+              </p>
+            </Card>
+            <Card className="p-4 bg-card shadow-sm border col-span-2 md:col-span-1">
+              <span className="text-xs text-muted-foreground font-medium">Total de Variedad de Premios</span>
+              <p className="text-2xl font-bold mt-1">
+                {rewards?.length ?? 0}
+              </p>
+            </Card>
           </div>
 
           {isLoadingRewards ? (
@@ -664,7 +822,7 @@ export function LoyaltyContent() {
         {/* ================================================================= */}
         {/* TAB 3: HISTORIAL DE CANJES */}
         {/* ================================================================= */}
-        <TabsContent value="history" className="space-y-4">
+        <TabsContent value="history" className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold">Historial de Canjes</h2>
@@ -687,6 +845,45 @@ export function LoyaltyContent() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* KPI CARDS RESUMEN HISTORIAL */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4 bg-card shadow-sm border">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-medium">Total Solicitudes</span>
+                <GiftIcon className="w-4 h-4 text-primary" />
+              </div>
+              <p className="text-2xl font-bold mt-1">{totalRedemptionsCount}</p>
+            </Card>
+            <Card className="p-4 bg-card shadow-sm border">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-medium">Entregados</span>
+                <CheckCircle2Icon className="w-4 h-4 text-emerald-500" />
+              </div>
+              <p className="text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">
+                {deliveredRedemptions.length}
+              </p>
+            </Card>
+            <Card className="p-4 bg-card shadow-sm border">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-medium">Pendientes</span>
+                <ClockIcon className="w-4 h-4 text-amber-500" />
+              </div>
+              <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">
+                {pendingRedemptions.length}
+              </p>
+            </Card>
+            <Card className="p-4 bg-card shadow-sm border">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-medium">Puntos Entregados</span>
+                <AwardIcon className="w-4 h-4 text-indigo-500" />
+              </div>
+              <p className="text-2xl font-bold mt-1">
+                {totalPointsRedeemed}{" "}
+                <span className="text-xs font-normal text-muted-foreground">pts</span>
+              </p>
+            </Card>
           </div>
 
           <Card>
