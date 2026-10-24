@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Readable } from 'stream';
 
 import { PutBucketPolicyCommand } from '@aws-sdk/client-s3';
+import axios from 'axios';
 
 @Injectable()
 export class S3Service implements OnModuleInit {
@@ -75,18 +76,37 @@ export class S3Service implements OnModuleInit {
     const fileName = `${uuidv4()}-${safeName}`;
     const key = cleanFolderPath ? `${cleanFolderPath}/${fileName}`.replace(/\/+/g, '/') : fileName;
 
-    await this.s3Client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: buffer,
-        ContentType: mimetype,
-      })
-    );
+    if (process.env.DO_SPACES_KEY && process.env.DO_SPACES_SECRET) {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: buffer,
+          ContentType: mimetype,
+        })
+      );
 
-    // Retornamos la URL usando nuestro propio backend como proxy para evitar problemas de privacidad de DO
-    const servicesUrl = (process.env.SERVICES_URL || 'http://localhost:3001').replace(/\/+$/, '');
-    return `${servicesUrl}/media/${key}`;
+      // Retornamos la URL usando nuestro propio backend como proxy para evitar problemas de privacidad de DO
+      const servicesUrl = (process.env.SERVICES_URL || 'http://localhost:3001').replace(/\/+$/, '');
+      return `${servicesUrl}/media/${key}`;
+    } else if (process.env.SUPABASE_KEY) {
+      // Fallback a Supabase Storage cuando DO Spaces no esté configurado en el entorno
+      const supabaseUrl = (process.env.SUPABASE_URL || 'https://fartlyhtwqgklcvweetb.supabase.co').replace(/\/$/, '');
+      const supabaseBucket = process.env.SUPABASE_BUCKET || 'tucancha';
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/${supabaseBucket}/${key}`;
+
+      await axios.post(uploadUrl, buffer, {
+        headers: {
+          Authorization: `Bearer ${process.env.SUPABASE_KEY}`,
+          'Content-Type': mimetype,
+          'x-upsert': 'true',
+        },
+      });
+
+      return `${supabaseUrl}/storage/v1/object/public/${supabaseBucket}/${key}`;
+    } else {
+      throw new Error('No hay almacenamiento de archivos configurado (faltan credenciales de DO Spaces o Supabase)');
+    }
   }
 
   extractKeyFromUrl(url: string): string {
