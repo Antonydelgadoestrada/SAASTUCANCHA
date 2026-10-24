@@ -91,18 +91,6 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
   const [localTemplates, setLocalTemplates] = useState<any[]>(templates || [])
   const [isCreateTemplateDialogOpen, setIsCreateTemplateDialogOpen] = useState(false)
 
-  useEffect(() => {
-    if (templates && templates.length > 0) {
-      setLocalTemplates(templates)
-      // Si es una cancha nueva y no tiene plantilla seleccionada, auto-seleccionar la primera disponible
-      if (!court && !form.getValues("schedule_template_id")) {
-        const defaultTplId = String(templates[0].id)
-        form.setValue("schedule_template_id", defaultTplId, { shouldValidate: true })
-        setCurrentTemplateId(defaultTplId)
-      }
-    }
-  }, [templates, court, form])
-
   const form = useForm<CourtFormData>({
     defaultValues: {
       name: "",
@@ -114,9 +102,21 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
       promoDay: null,
       promoNight: null,
       description: "",
-      schedule_template_id: "",
+      schedule_template_id: !court && templates && templates.length > 0 ? String(templates[0].id) : "",
     },
   })
+
+  useEffect(() => {
+    if (templates && templates.length > 0) {
+      setLocalTemplates(templates)
+      // Si es una cancha nueva y no tiene plantilla seleccionada, auto-seleccionar la primera disponible
+      if (!court && !form.getValues("schedule_template_id")) {
+        const defaultTplId = String(templates[0].id)
+        form.setValue("schedule_template_id", defaultTplId, { shouldValidate: true })
+        setCurrentTemplateId(defaultTplId)
+      }
+    }
+  }, [templates, court, form])
 
   // Efecto para cargar datos cuando se está editando
   useEffect(() => {
