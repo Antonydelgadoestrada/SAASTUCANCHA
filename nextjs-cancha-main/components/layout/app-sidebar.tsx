@@ -113,6 +113,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
       href: "/user/bookings",
       active: isActive("/user/bookings"),
     },
+    {
+      title: "Mis Puntos",
+      icon: AwardIcon,
+      href: "/user/loyalty",
+      active: isActive("/user/loyalty"),
+    },
   ]
 
   // Menú para clubes
