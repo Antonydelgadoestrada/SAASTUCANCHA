@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, LessThan } from 'typeorm';
+import { Repository, DataSource, In, LessThan, EntityManager } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { LoyaltyConfig } from './entities/loyalty_config.entity';
 import { LoyaltyReward } from './entities/loyalty_reward.entity';
@@ -23,6 +23,13 @@ import {
   CreateLoyaltyRewardDto,
   UpdateLoyaltyRewardDto,
 } from './dto/loyalty-reward.dto';
+import { LoyaltyRewardType } from './enums/loyalty-reward-type.enum';
+import { calculateCouponDiscount } from './utils/discount-calculator';
+import { PreviewCouponDto } from './dto/preview-coupon.dto';
+import { User } from '../user/user.entity';
+import { Court } from '../court/court.entity';
+import { Booking } from '../booking/booking.entity';
+import { BookingStatus } from '../booking/booking-status.enum';
 
 @Injectable()
 export class LoyaltyService {
@@ -92,6 +99,24 @@ export class LoyaltyService {
       );
       if (!enabled || !config) {
         return null;
+      }
+
+      // RN5: Guarda anti-abuso: reservas con total <= 0 (bonificadas/gratuitas) no otorgan puntos
+      if ((params as any).totalPrice !== undefined && (params as any).totalPrice <= 0) {
+        this.logger.log(
+          `[Loyalty] Reserva ${params.bookingId} tiene total <= 0. Omitiendo otorgamiento de puntos.`,
+        );
+        return null;
+      }
+      if ((params as any).totalPrice === undefined) {
+        const bookingRepo = this.dataSource.getRepository(Booking);
+        const booking = await bookingRepo.findOne({ where: { id: params.bookingId } });
+        if (booking && Number((booking.pricing as any)?.totalPrice ?? 0) <= 0 && Number((booking.pricing as any)?.discounts ?? 0) > 0) {
+          this.logger.log(
+            `[Loyalty] Reserva ${params.bookingId} cubierta por cupón (total <= 0). Omitiendo otorgamiento de puntos.`,
+          );
+          return null;
+        }
       }
 
       // 2. Idempotencia: comprobar si ya se otorgaron puntos por este bookingId
@@ -273,9 +298,9 @@ export class LoyaltyService {
       balance.balance -= reward.pointsCost;
       await manager.save(LoyaltyBalance, balance);
 
-      // 5. Crear registro de redención con expiración a 30 días
+      // 5. Crear registro de redención con expiración a 15 días (RN3)
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
+      expiresAt.setDate(expiresAt.getDate() + 15);
 
       const redemption = manager.create(LoyaltyRedemption, {
         clubId: params.clubId,
@@ -283,6 +308,9 @@ export class LoyaltyService {
         rewardId: reward.id,
         rewardNameSnapshot: reward.name,
         rewardCostSnapshot: reward.pointsCost,
+        rewardTypeSnapshot: reward.rewardType || LoyaltyRewardType.TEXT_ONLY,
+        discountValueSnapshot: reward.discountValue || null,
+        maxDiscountSnapshot: reward.maxDiscountAmount || null,
         code,
         status: LoyaltyRedemptionStatus.PENDING,
         requestedAt: new Date(),
@@ -344,6 +372,16 @@ export class LoyaltyService {
       await this.expireSingleRedemption(redemption);
       throw new BadRequestException(
         'El código de canje ha expirado y los puntos han sido reembolsados al usuario.',
+      );
+    }
+
+    // RN2: Los cupones de descuento y hora gratis se aplican al reservar, no se entregan en mostrador
+    if (
+      redemption.rewardTypeSnapshot &&
+      redemption.rewardTypeSnapshot !== LoyaltyRewardType.TEXT_ONLY
+    ) {
+      throw new BadRequestException(
+        'Los cupones de descuento se aplican al reservar una cancha, no se entregan manualmente',
       );
     }
 
@@ -450,6 +488,9 @@ export class LoyaltyService {
     bookingId: string;
   }): Promise<void> {
     try {
+      // RN6: Revertir cupón de fidelidad si fue aplicado a esta reserva
+      await this.rollbackAppliedCoupon(params.bookingId);
+
       // 1. Buscar transacciones de otorgamiento para este booking
       const earnTxs = await this.loyaltyTxRepo.find({
         where: {
@@ -626,6 +667,366 @@ export class LoyaltyService {
   }
 
   // =========================================================================
+  // 7.1. CUPONES DE DESCUENTO Y HORA GRATIS (NIVEL 2)
+  // =========================================================================
+
+  async previewCoupon(
+    clubId: string,
+    dto: PreviewCouponDto,
+  ): Promise<{
+    valid: boolean;
+    redemptionId?: string;
+    rewardType?: LoyaltyRewardType;
+    discountValue?: number | null;
+    calculatedDiscount?: number;
+    newTotalPrice?: number;
+    message?: string;
+    reason?: string;
+  }> {
+    try {
+      const { enabled } = await this.isLoyaltyActiveForClub(clubId);
+      if (!enabled) {
+        return {
+          valid: false,
+          reason: 'El programa de fidelidad no está activo para este club',
+        };
+      }
+
+      const formattedCode = (dto.code || '').trim().toUpperCase();
+      if (!formattedCode) {
+        return { valid: false, reason: 'Código de cupón requerido' };
+      }
+
+      // Resolver usuario objetivo
+      let targetUserId = dto.userId;
+      if (!targetUserId && dto.userEmail) {
+        const user = await this.dataSource.getRepository(User).findOne({
+          where: { email: dto.userEmail.trim().toLowerCase() },
+        });
+        if (!user) {
+          return {
+            valid: false,
+            reason: `No se encontró ningún usuario con el correo ${dto.userEmail}`,
+          };
+        }
+        targetUserId = user.id;
+      }
+
+      if (!targetUserId) {
+        return {
+          valid: false,
+          reason: 'Se requiere el correo o identificador del cliente para validar el cupón',
+        };
+      }
+
+      // Buscar cupón en redenciones
+      const redemption = await this.loyaltyRedemptionRepo.findOne({
+        where: {
+          code: formattedCode,
+          clubId,
+        },
+      });
+
+      if (!redemption) {
+        return {
+          valid: false,
+          reason: `Cupón "${formattedCode}" no encontrado o no pertenece a este club`,
+        };
+      }
+
+      // Validar pertenencia al usuario
+      if (redemption.userId !== targetUserId) {
+        return {
+          valid: false,
+          reason: 'El cupón no pertenece al cliente seleccionado',
+        };
+      }
+
+      // Validar estado pendiente
+      if (redemption.status !== LoyaltyRedemptionStatus.PENDING) {
+        return {
+          valid: false,
+          reason: `El cupón ya no está disponible (estado actual: ${redemption.status})`,
+        };
+      }
+
+      // Validar vigencia
+      if (new Date() > redemption.expiresAt) {
+        return {
+          valid: false,
+          reason: 'El cupón ha expirado y no puede ser utilizado',
+        };
+      }
+
+      // Validar tipo de recompensa
+      const rewardType =
+        redemption.rewardTypeSnapshot || LoyaltyRewardType.TEXT_ONLY;
+      if (rewardType === LoyaltyRewardType.TEXT_ONLY) {
+        return {
+          valid: false,
+          reason: 'Este premio es informativo y no aplica descuento sobre reservas de cancha',
+        };
+      }
+
+      // Cargar información de la cancha para obtener tarifa diurna
+      const court = await this.dataSource.getRepository(Court).findOne({
+        where: { id: dto.courtId },
+      });
+
+      if (!court) {
+        return { valid: false, reason: 'Cancha no encontrada' };
+      }
+
+      const { discountAmount, netPrice } = calculateCouponDiscount({
+        rewardType,
+        discountValue: redemption.discountValueSnapshot,
+        maxDiscountAmount: redemption.maxDiscountSnapshot,
+        basePrice: dto.basePrice,
+        courtPriceDay: court.priceDay,
+      });
+
+      return {
+        valid: true,
+        redemptionId: redemption.id,
+        rewardType,
+        discountValue: redemption.discountValueSnapshot,
+        calculatedDiscount: discountAmount,
+        newTotalPrice: netPrice,
+        message: `Cupón válido: descuento de S/ ${discountAmount.toFixed(2)}`,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error al previsualizar cupón ${dto?.code}: ${error.message}`,
+        error.stack,
+      );
+      return {
+        valid: false,
+        reason: 'Error interno al validar el cupón',
+      };
+    }
+  }
+
+  async applyManualCouponInsideTransaction(
+    manager: EntityManager,
+    params: {
+      clubId: string;
+      userId: string;
+      couponCode: string;
+      bookingId: string;
+      courtId: string;
+      basePrice: number;
+    },
+  ): Promise<{
+    discountAmount: number;
+    redemptionId: string;
+    rewardType: LoyaltyRewardType;
+  }> {
+    const { enabled } = await this.isLoyaltyActiveForClub(params.clubId);
+    if (!enabled) {
+      throw new BadRequestException(
+        'El programa de fidelidad no está activo para este club',
+      );
+    }
+
+    const formattedCode = (params.couponCode || '').trim().toUpperCase();
+    if (!formattedCode) {
+      throw new BadRequestException('El código del cupón es obligatorio');
+    }
+
+    // Bloqueo pesimista exclusivo para evitar concurrencia y doble uso
+    const redemption = await manager
+      .createQueryBuilder(LoyaltyRedemption, 'r')
+      .setLock('pessimistic_write')
+      .where('r.code = :code AND r.clubId = :clubId', {
+        code: formattedCode,
+        clubId: params.clubId,
+      })
+      .getOne();
+
+    if (!redemption) {
+      throw new NotFoundException(
+        `El cupón "${formattedCode}" no existe o no pertenece a este club`,
+      );
+    }
+
+    if (redemption.userId !== params.userId) {
+      throw new BadRequestException(
+        'El cupón de fidelidad no pertenece al cliente de la reserva',
+      );
+    }
+
+    if (redemption.status !== LoyaltyRedemptionStatus.PENDING) {
+      throw new BadRequestException(
+        `El cupón ya fue utilizado o no está disponible (estado: ${redemption.status})`,
+      );
+    }
+
+    if (new Date() > redemption.expiresAt) {
+      throw new BadRequestException('El cupón de fidelidad ha expirado');
+    }
+
+    const rewardType =
+      redemption.rewardTypeSnapshot || LoyaltyRewardType.TEXT_ONLY;
+    if (rewardType === LoyaltyRewardType.TEXT_ONLY) {
+      throw new BadRequestException(
+        'Este premio no es un cupón de descuento aplicable a reservas',
+      );
+    }
+
+    const court = await manager.findOne(Court, {
+      where: { id: params.courtId },
+    });
+    if (!court) {
+      throw new NotFoundException('Cancha no encontrada');
+    }
+
+    const { discountAmount } = calculateCouponDiscount({
+      rewardType,
+      discountValue: redemption.discountValueSnapshot,
+      maxDiscountAmount: redemption.maxDiscountSnapshot,
+      basePrice: params.basePrice,
+      courtPriceDay: court.priceDay,
+    });
+
+    // Actualizar estado del cupón a APPLIED y asociar a la reserva
+    redemption.status = LoyaltyRedemptionStatus.APPLIED;
+    redemption.bookingId = params.bookingId;
+    redemption.appliedDiscountAmount = discountAmount;
+    redemption.appliedAt = new Date();
+    await manager.save(LoyaltyRedemption, redemption);
+
+    this.logger.log(
+      `[Loyalty] Cupón ${redemption.code} APLICADO exitosamente a la reserva ${params.bookingId}. Descuento: S/ ${discountAmount}`,
+    );
+
+    return {
+      discountAmount,
+      redemptionId: redemption.id,
+      rewardType,
+    };
+  }
+
+  async rollbackAppliedCoupon(
+    bookingId: string,
+    existingManager?: EntityManager,
+  ): Promise<{ rolledBack: boolean; status?: LoyaltyRedemptionStatus }> {
+    const executeRollback = async (manager: EntityManager) => {
+      const redemption = await manager
+        .createQueryBuilder(LoyaltyRedemption, 'r')
+        .setLock('pessimistic_write')
+        .where('r.bookingId = :bookingId', { bookingId })
+        .getOne();
+
+      if (!redemption || redemption.status !== LoyaltyRedemptionStatus.APPLIED) {
+        return { rolledBack: false };
+      }
+
+      const now = new Date();
+      if (now < redemption.expiresAt) {
+        // Aún vigente: restaurar a PENDING para que el usuario pueda usarlo nuevamente
+        redemption.status = LoyaltyRedemptionStatus.PENDING;
+        redemption.bookingId = null as any;
+        redemption.appliedDiscountAmount = null as any;
+        redemption.appliedAt = null as any;
+        await manager.save(LoyaltyRedemption, redemption);
+
+        this.logger.log(
+          `[Loyalty] Cupón ${redemption.code} revertido a PENDING tras cancelación de reserva ${bookingId}`,
+        );
+        return { rolledBack: true, status: LoyaltyRedemptionStatus.PENDING };
+      } else {
+        // Expiró mientras la reserva estuvo activa: marcar EXPIRED y reembolsar los puntos
+        redemption.status = LoyaltyRedemptionStatus.EXPIRED;
+        redemption.resolvedAt = now;
+        redemption.bookingId = null as any;
+        await manager.save(LoyaltyRedemption, redemption);
+
+        let balance = await manager
+          .createQueryBuilder(LoyaltyBalance, 'b')
+          .setLock('pessimistic_write')
+          .where('b.clubId = :clubId AND b.userId = :userId', {
+            clubId: redemption.clubId,
+            userId: redemption.userId,
+          })
+          .getOne();
+
+        if (!balance) {
+          balance = manager.create(LoyaltyBalance, {
+            clubId: redemption.clubId,
+            userId: redemption.userId,
+            balance: 0,
+            paidReservationsCount: 0,
+          });
+        }
+
+        balance.balance = (balance.balance || 0) + redemption.rewardCostSnapshot;
+        await manager.save(LoyaltyBalance, balance);
+
+        const refundTx = manager.create(LoyaltyTransaction, {
+          clubId: redemption.clubId,
+          userId: redemption.userId,
+          type: LoyaltyTransactionType.REFUND,
+          points: redemption.rewardCostSnapshot,
+          redemptionId: redemption.id,
+          note: `Reembolso por cupón expirado durante reserva cancelada (${redemption.code})`,
+        });
+        await manager.save(LoyaltyTransaction, refundTx);
+
+        this.logger.log(
+          `[Loyalty] Cupón ${redemption.code} expirado tras cancelación de reserva ${bookingId}. Reembolsados ${redemption.rewardCostSnapshot} pts a usuario ${redemption.userId}`,
+        );
+        return { rolledBack: true, status: LoyaltyRedemptionStatus.EXPIRED };
+      }
+    };
+
+    if (existingManager) {
+      return await executeRollback(existingManager);
+    } else {
+      return await this.dataSource.transaction(executeRollback);
+    }
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async handleReconcileCancelledBookingsCouponsCron(): Promise<number> {
+    try {
+      const appliedRedemptions = await this.loyaltyRedemptionRepo.find({
+        where: {
+          status: LoyaltyRedemptionStatus.APPLIED,
+        },
+        relations: ['booking'],
+      });
+
+      if (!appliedRedemptions || appliedRedemptions.length === 0) {
+        return 0;
+      }
+
+      let reconciledCount = 0;
+      for (const redemption of appliedRedemptions) {
+        const booking = redemption.booking;
+        if (
+          !booking ||
+          booking.status === BookingStatus.CANCELLED ||
+          (booking.status as any) === 'REJECTED'
+        ) {
+          this.logger.warn(
+            `[Loyalty Cron] Conciliando cupón huérfano ${redemption.code} de reserva ${redemption.bookingId} con estado ${booking?.status || 'NOT_FOUND'}`,
+          );
+          await this.rollbackAppliedCoupon(redemption.bookingId);
+          reconciledCount++;
+        }
+      }
+
+      return reconciledCount;
+    } catch (error) {
+      this.logger.error(
+        `Error en handleReconcileCancelledBookingsCouponsCron: ${error.message}`,
+        error.stack,
+      );
+      return 0;
+    }
+  }
+
+  // =========================================================================
   // 8. GESTIÓN DE CONFIGURACIÓN Y CATÁLOGO DE PREMIOS (CRUD)
   // =========================================================================
 
@@ -695,6 +1096,7 @@ export class LoyaltyService {
     clubId: string,
     dto: CreateLoyaltyRewardDto,
   ): Promise<LoyaltyReward> {
+    this.validateRewardTypeAndValues(dto);
     const reward = this.loyaltyRewardRepo.create({
       ...dto,
       clubId,
@@ -716,8 +1118,75 @@ export class LoyaltyService {
       throw new NotFoundException('Premio no encontrado para este club');
     }
 
+    const mergedType = dto.rewardType ?? reward.rewardType;
+    const mergedDiscountValue =
+      dto.discountValue !== undefined ? dto.discountValue : reward.discountValue;
+    const mergedMaxDiscount =
+      dto.maxDiscountAmount !== undefined
+        ? dto.maxDiscountAmount
+        : reward.maxDiscountAmount;
+
+    this.validateRewardTypeAndValues({
+      rewardType: mergedType,
+      discountValue: mergedDiscountValue,
+      maxDiscountAmount: mergedMaxDiscount,
+    });
+
+    if (
+      mergedType === LoyaltyRewardType.FREE_HOUR ||
+      mergedType === LoyaltyRewardType.TEXT_ONLY
+    ) {
+      dto.discountValue = null as any;
+      dto.maxDiscountAmount = null as any;
+    }
+
     Object.assign(reward, dto);
     return await this.loyaltyRewardRepo.save(reward);
+  }
+
+  private validateRewardTypeAndValues(dto: {
+    rewardType?: LoyaltyRewardType;
+    discountValue?: number | null;
+    maxDiscountAmount?: number | null;
+  }): void {
+    const type = dto.rewardType || LoyaltyRewardType.TEXT_ONLY;
+    if (type === LoyaltyRewardType.FIXED_DISCOUNT) {
+      if (
+        dto.discountValue === undefined ||
+        dto.discountValue === null ||
+        Number(dto.discountValue) <= 0
+      ) {
+        throw new BadRequestException(
+          'Para un premio de descuento fijo, discountValue debe ser mayor a 0',
+        );
+      }
+    } else if (type === LoyaltyRewardType.PERCENT_DISCOUNT) {
+      if (
+        dto.discountValue === undefined ||
+        dto.discountValue === null ||
+        Number(dto.discountValue) <= 0 ||
+        Number(dto.discountValue) > 100
+      ) {
+        throw new BadRequestException(
+          'Para un porcentaje de descuento, discountValue debe estar entre 1 y 100',
+        );
+      }
+      if (
+        dto.maxDiscountAmount !== undefined &&
+        dto.maxDiscountAmount !== null &&
+        Number(dto.maxDiscountAmount) <= 0
+      ) {
+        throw new BadRequestException(
+          'maxDiscountAmount debe ser mayor a 0 si se especifica',
+        );
+      }
+    } else if (
+      type === LoyaltyRewardType.FREE_HOUR ||
+      type === LoyaltyRewardType.TEXT_ONLY
+    ) {
+      dto.discountValue = null as any;
+      dto.maxDiscountAmount = null as any;
+    }
   }
 
   async deleteReward(clubId: string, rewardId: string): Promise<void> {

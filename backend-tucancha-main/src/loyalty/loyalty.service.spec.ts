@@ -14,6 +14,9 @@ import {
   LoyaltyTransaction,
   LoyaltyTransactionType,
 } from './entities/loyalty_transaction.entity';
+import { LoyaltyRewardType } from './enums/loyalty-reward-type.enum';
+import { User } from '../user/user.entity';
+import { Court } from '../court/court.entity';
 
 describe('LoyaltyService', () => {
   let service: LoyaltyService;
@@ -62,9 +65,22 @@ describe('LoyaltyService', () => {
   let mockManager: any;
   let mockQueryBuilder: any;
 
+  const mockUserRepo = {
+    findOne: jest.fn(),
+  };
+
+  const mockCourtRepo = {
+    findOne: jest.fn(),
+  };
+
   const mockDataSource = {
     transaction: jest.fn(async (cb) => {
       return await cb(mockManager);
+    }),
+    getRepository: jest.fn((entity) => {
+      if (entity === User) return mockUserRepo;
+      if (entity === Court) return mockCourtRepo;
+      return { findOne: jest.fn() };
     }),
   };
 
@@ -73,6 +89,16 @@ describe('LoyaltyService', () => {
 
     process.env.LOYALTY_ENABLED = 'true';
     delete process.env.LOYALTY_ALLOWED_CLUB_IDS;
+
+    mockUserRepo.findOne.mockResolvedValue({
+      id: mockUserId,
+      email: 'user@example.com',
+    });
+    mockCourtRepo.findOne.mockResolvedValue({
+      id: 'court-uuid-1',
+      priceDay: 25,
+      priceNight: 35,
+    });
 
     mockQueryBuilder = {
       setLock: jest.fn().mockReturnThis(),
@@ -479,6 +505,29 @@ describe('LoyaltyService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('12c. Entrega rechazada: los premios tipo cupón no se pueden entregar manualmente en mostrador (RN2)', async () => {
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-coupon',
+        code: 'TC-COUPON',
+        clubId: mockClubId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardCostSnapshot: 50,
+        rewardTypeSnapshot: LoyaltyRewardType.FIXED_DISCOUNT,
+        userId: mockUserId,
+      });
+
+      await expect(
+        service.deliverReward({
+          clubId: mockClubId,
+          code: 'TC-COUPON',
+          staffUserId: mockStaffId,
+        }),
+      ).rejects.toThrow(
+        'Los cupones de descuento se aplican al reservar una cancha, no se entregan manualmente',
+      );
+    });
   });
 
   // =========================================================================
@@ -544,6 +593,499 @@ describe('LoyaltyService', () => {
 
       expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(mockManager.save).toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // 7. Previsualización de Cupón (previewCoupon)
+  // =========================================================================
+  describe('previewCoupon', () => {
+    it('15a. Preview exitoso con cupón FIXED_DISCOUNT', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-fixed',
+        code: 'TC-DESC15',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardTypeSnapshot: LoyaltyRewardType.FIXED_DISCOUNT,
+        discountValueSnapshot: 15,
+        maxDiscountSnapshot: null,
+      });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-DESC15',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 50,
+      });
+
+      expect(res.valid).toBe(true);
+      expect(res.calculatedDiscount).toBe(15);
+      expect(res.newTotalPrice).toBe(35);
+      expect(res.redemptionId).toBe('red-fixed');
+    });
+
+    it('15b. Preview exitoso con cupón PERCENT_DISCOUNT con tope maxDiscount', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-pct',
+        code: 'TC-PCT50',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardTypeSnapshot: LoyaltyRewardType.PERCENT_DISCOUNT,
+        discountValueSnapshot: 50,
+        maxDiscountSnapshot: 20, // 50% de 60 = 30, pero tope es 20
+      });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-PCT50',
+        userEmail: 'user@example.com',
+        courtId: 'court-uuid-1',
+        basePrice: 60,
+      });
+
+      expect(res.valid).toBe(true);
+      expect(res.calculatedDiscount).toBe(20);
+      expect(res.newTotalPrice).toBe(40);
+    });
+
+    it('15c. Preview exitoso con cupón FREE_HOUR (2 * priceDay)', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-free',
+        code: 'TC-GRATIS1',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardTypeSnapshot: LoyaltyRewardType.FREE_HOUR,
+        discountValueSnapshot: null,
+        maxDiscountSnapshot: null,
+      });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-GRATIS1',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 60,
+      });
+
+      expect(res.valid).toBe(true);
+      expect(res.calculatedDiscount).toBe(50);
+      expect(res.newTotalPrice).toBe(10);
+    });
+
+    it('15d. Preview fallido si fidelidad está desactivada para el club', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: false });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-DESC15',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 50,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.reason).toBe('El programa de fidelidad no está activo para este club');
+    });
+
+    it('15e. Preview fallido si el cupón está expirado', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-exp',
+        code: 'TC-EXP',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() - 50000), // Pasado
+        rewardTypeSnapshot: LoyaltyRewardType.FIXED_DISCOUNT,
+        discountValueSnapshot: 10,
+      });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-EXP',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 50,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('ha expirado');
+    });
+
+    it('15f. Preview fallido si el cupón no pertenece al club', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue(null);
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-OTROCLUB',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 50,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('no encontrado o no pertenece');
+    });
+
+    it('15g. Preview fallido si el cupón pertenece a otro cliente', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-user2',
+        code: 'TC-USER2',
+        clubId: mockClubId,
+        userId: 'different-user-uuid',
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardTypeSnapshot: LoyaltyRewardType.FIXED_DISCOUNT,
+      });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-USER2',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 50,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.reason).toBe('El cupón no pertenece al cliente seleccionado');
+    });
+
+    it('15h. Preview fallido si el cupón ya no está PENDING (e.g. APPLIED)', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-applied',
+        code: 'TC-APPLIED',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.APPLIED,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardTypeSnapshot: LoyaltyRewardType.FIXED_DISCOUNT,
+      });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-APPLIED',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 50,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('ya no está disponible');
+    });
+
+    it('15i. Preview fallido si el premio es TEXT_ONLY', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockRedemptionRepo.findOne.mockResolvedValue({
+        id: 'red-text',
+        code: 'TC-TEXT',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardTypeSnapshot: LoyaltyRewardType.TEXT_ONLY,
+      });
+
+      const res = await service.previewCoupon(mockClubId, {
+        code: 'TC-TEXT',
+        userId: mockUserId,
+        courtId: 'court-uuid-1',
+        basePrice: 50,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('es informativo y no aplica descuento');
+    });
+  });
+
+  // =========================================================================
+  // 8. Aplicación de Cupón en Transacción (applyManualCouponInsideTransaction)
+  // =========================================================================
+  describe('applyManualCouponInsideTransaction', () => {
+    it('16a. Aplica cupón exitosamente con lock pesimista y actualiza estado a APPLIED', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+
+      const redemptionEntity: any = {
+        id: 'red-10',
+        code: 'TC-VALID',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+        rewardTypeSnapshot: LoyaltyRewardType.FIXED_DISCOUNT,
+        discountValueSnapshot: 20,
+        maxDiscountSnapshot: null,
+      };
+
+      mockQueryBuilder.getOne.mockResolvedValue(redemptionEntity);
+      mockManager.findOne.mockImplementation((entityClass: any) => {
+        if (entityClass === Court) {
+          return Promise.resolve({ id: 'court-1', priceDay: 25 });
+        }
+        return Promise.resolve(null);
+      });
+
+      const result = await service.applyManualCouponInsideTransaction(
+        mockManager,
+        {
+          clubId: mockClubId,
+          userId: mockUserId,
+          couponCode: 'tc-valid',
+          bookingId: mockBookingId,
+          courtId: 'court-1',
+          basePrice: 50,
+        },
+      );
+
+      expect(mockQueryBuilder.setLock).toHaveBeenCalledWith('pessimistic_write');
+      expect(redemptionEntity.status).toBe(LoyaltyRedemptionStatus.APPLIED);
+      expect(redemptionEntity.bookingId).toBe(mockBookingId);
+      expect(redemptionEntity.appliedDiscountAmount).toBe(20);
+      expect(mockManager.save).toHaveBeenCalledWith(LoyaltyRedemption, redemptionEntity);
+      expect(result.discountAmount).toBe(20);
+      expect(result.redemptionId).toBe('red-10');
+    });
+
+    it('16b. Falla si el cupón no existe en el club', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockQueryBuilder.getOne.mockResolvedValue(null);
+
+      await expect(
+        service.applyManualCouponInsideTransaction(mockManager, {
+          clubId: mockClubId,
+          userId: mockUserId,
+          couponCode: 'TC-NOEXISTE',
+          bookingId: mockBookingId,
+          courtId: 'court-1',
+          basePrice: 50,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('16c. Falla si el cupón pertenece a otro usuario', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockQueryBuilder.getOne.mockResolvedValue({
+        id: 'red-other',
+        code: 'TC-OTHER',
+        clubId: mockClubId,
+        userId: 'different-user',
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 1000000),
+      });
+
+      await expect(
+        service.applyManualCouponInsideTransaction(mockManager, {
+          clubId: mockClubId,
+          userId: mockUserId,
+          couponCode: 'TC-OTHER',
+          bookingId: mockBookingId,
+          courtId: 'court-1',
+          basePrice: 50,
+        }),
+      ).rejects.toThrow('El cupón de fidelidad no pertenece al cliente de la reserva');
+    });
+
+    it('16d. Falla si el cupón ya no está en estado PENDING', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockQueryBuilder.getOne.mockResolvedValue({
+        id: 'red-applied',
+        code: 'TC-APPLIED',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.APPLIED,
+        expiresAt: new Date(Date.now() + 1000000),
+      });
+
+      await expect(
+        service.applyManualCouponInsideTransaction(mockManager, {
+          clubId: mockClubId,
+          userId: mockUserId,
+          couponCode: 'TC-APPLIED',
+          bookingId: mockBookingId,
+          courtId: 'court-1',
+          basePrice: 50,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('16e. Falla si el cupón ha expirado', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockQueryBuilder.getOne.mockResolvedValue({
+        id: 'red-exp',
+        code: 'TC-EXP',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() - 100000),
+      });
+
+      await expect(
+        service.applyManualCouponInsideTransaction(mockManager, {
+          clubId: mockClubId,
+          userId: mockUserId,
+          couponCode: 'TC-EXP',
+          bookingId: mockBookingId,
+          courtId: 'court-1',
+          basePrice: 50,
+        }),
+      ).rejects.toThrow('El cupón de fidelidad ha expirado');
+    });
+
+    it('16f. Falla si el premio es TEXT_ONLY', async () => {
+      mockConfigRepo.findOne.mockResolvedValue({ clubId: mockClubId, isActive: true });
+      mockQueryBuilder.getOne.mockResolvedValue({
+        id: 'red-text',
+        code: 'TC-TEXT',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.PENDING,
+        expiresAt: new Date(Date.now() + 100000),
+        rewardTypeSnapshot: LoyaltyRewardType.TEXT_ONLY,
+      });
+
+      await expect(
+        service.applyManualCouponInsideTransaction(mockManager, {
+          clubId: mockClubId,
+          userId: mockUserId,
+          couponCode: 'TC-TEXT',
+          bookingId: mockBookingId,
+          courtId: 'court-1',
+          basePrice: 50,
+        }),
+      ).rejects.toThrow('Este premio no es un cupón de descuento aplicable a reservas');
+    });
+  });
+
+  // =========================================================================
+  // 9. Reversión de Cupón Aplicado (rollbackAppliedCoupon)
+  // =========================================================================
+  describe('rollbackAppliedCoupon', () => {
+    it('17a. Cupón vigente: regresa a PENDING y desvincula la reserva', async () => {
+      const redemptionEntity: any = {
+        id: 'red-applied-1',
+        code: 'TC-ROLLBACK1',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.APPLIED,
+        bookingId: mockBookingId,
+        appliedDiscountAmount: 25,
+        appliedAt: new Date(),
+        expiresAt: new Date(Date.now() + 1000000), // Vigente
+      };
+
+      mockQueryBuilder.getOne.mockResolvedValue(redemptionEntity);
+
+      const res = await service.rollbackAppliedCoupon(mockBookingId);
+
+      expect(res.rolledBack).toBe(true);
+      expect(res.status).toBe(LoyaltyRedemptionStatus.PENDING);
+      expect(redemptionEntity.status).toBe(LoyaltyRedemptionStatus.PENDING);
+      expect(redemptionEntity.bookingId).toBeNull();
+      expect(redemptionEntity.appliedDiscountAmount).toBeNull();
+      expect(mockManager.save).toHaveBeenCalledWith(LoyaltyRedemption, redemptionEntity);
+    });
+
+    it('17b. Cupón expirado durante la reserva: pasa a EXPIRED y reembolsa los puntos al usuario', async () => {
+      const redemptionEntity: any = {
+        id: 'red-applied-2',
+        code: 'TC-ROLLBACK2',
+        clubId: mockClubId,
+        userId: mockUserId,
+        status: LoyaltyRedemptionStatus.APPLIED,
+        bookingId: mockBookingId,
+        rewardCostSnapshot: 60,
+        expiresAt: new Date(Date.now() - 50000), // Ya expiró
+      };
+
+      const balanceEntity = {
+        clubId: mockClubId,
+        userId: mockUserId,
+        balance: 10,
+        paidReservationsCount: 1,
+      };
+
+      mockQueryBuilder.getOne
+        .mockResolvedValueOnce(redemptionEntity) // En query de redemption
+        .mockResolvedValueOnce(balanceEntity); // En query de balance
+
+      const res = await service.rollbackAppliedCoupon(mockBookingId);
+
+      expect(res.rolledBack).toBe(true);
+      expect(res.status).toBe(LoyaltyRedemptionStatus.EXPIRED);
+      expect(redemptionEntity.status).toBe(LoyaltyRedemptionStatus.EXPIRED);
+      expect(balanceEntity.balance).toBe(70); // 10 + 60
+      expect(mockManager.save).toHaveBeenCalledWith(LoyaltyBalance, balanceEntity);
+      expect(mockManager.save).toHaveBeenCalledWith(
+        LoyaltyTransaction,
+        expect.objectContaining({
+          type: LoyaltyTransactionType.REFUND,
+          points: 60,
+        }),
+      );
+    });
+
+    it('17c. Idempotencia: no hace nada si la redención no existe o no está en APPLIED', async () => {
+      mockQueryBuilder.getOne.mockResolvedValue(null);
+
+      const res = await service.rollbackAppliedCoupon('booking-inexistente');
+
+      expect(res.rolledBack).toBe(false);
+    });
+  });
+
+  // =========================================================================
+  // 10. Validaciones en Catálogo de Premios (createReward / updateReward)
+  // =========================================================================
+  describe('createReward & updateReward validations', () => {
+    it('18a. createReward falla si FIXED_DISCOUNT no especifica discountValue > 0', async () => {
+      await expect(
+        service.createReward(mockClubId, {
+          name: 'Descuento Inválido',
+          pointsCost: 50,
+          rewardType: LoyaltyRewardType.FIXED_DISCOUNT,
+          discountValue: 0,
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('18b. createReward falla si PERCENT_DISCOUNT tiene discountValue fuera de 1..100', async () => {
+      await expect(
+        service.createReward(mockClubId, {
+          name: 'Descuento 150%',
+          pointsCost: 50,
+          rewardType: LoyaltyRewardType.PERCENT_DISCOUNT,
+          discountValue: 150,
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('18c. createReward falla si PERCENT_DISCOUNT especifica maxDiscountAmount <= 0', async () => {
+      await expect(
+        service.createReward(mockClubId, {
+          name: 'Descuento 20% con tope 0',
+          pointsCost: 50,
+          rewardType: LoyaltyRewardType.PERCENT_DISCOUNT,
+          discountValue: 20,
+          maxDiscountAmount: 0,
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('18d. createReward limpia discountValue y maxDiscountAmount para FREE_HOUR', async () => {
+      const rewardCreated = await service.createReward(mockClubId, {
+        name: 'Hora Gratis',
+        pointsCost: 100,
+        rewardType: LoyaltyRewardType.FREE_HOUR,
+        discountValue: 999 as any,
+        maxDiscountAmount: 999 as any,
+      } as any);
+
+      expect(rewardCreated.discountValue).toBeNull();
+      expect(rewardCreated.maxDiscountAmount).toBeNull();
     });
   });
 });
