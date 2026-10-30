@@ -959,21 +959,28 @@ export class PaymentService {
 
       // Calcular precio total de la reserva
       let totalPrice = 0;
+      let hasExplicitPricing = false;
+      let discounts = 0;
       const firstBooking = p.bookings?.[0];
       if (firstBooking && typeof firstBooking.pricing === 'object' && firstBooking.pricing !== null) {
         totalPrice = Number((firstBooking.pricing as any).totalPrice ?? (firstBooking.pricing as any).basePrice);
+        discounts = Number((firstBooking.pricing as any).discounts ?? 0);
+        hasExplicitPricing = true;
       } else if (firstBooking && typeof firstBooking.pricing === 'string') {
         try {
           const parsed = JSON.parse(firstBooking.pricing);
           totalPrice = Number(parsed?.totalPrice ?? parsed?.basePrice);
+          discounts = Number(parsed?.discounts ?? 0);
+          hasExplicitPricing = true;
         } catch {}
       }
-      if (isNaN(totalPrice) || totalPrice <= 0) {
+      const isZeroDueToDiscount = hasExplicitPricing && discounts > 0 && totalPrice === 0;
+      if (!isZeroDueToDiscount && (isNaN(totalPrice) || totalPrice <= 0)) {
         const courtPrice = Number(firstBooking?.court?.priceDay || firstBooking?.court?.priceNight || 0);
         const dur = Number(firstBooking?.duration || 1);
         totalPrice = courtPrice * dur * 2;
       }
-      if (isNaN(totalPrice) || totalPrice <= 0) {
+      if (isNaN(totalPrice) || (totalPrice <= 0 && !isZeroDueToDiscount)) {
         totalPrice = amount;
       }
 

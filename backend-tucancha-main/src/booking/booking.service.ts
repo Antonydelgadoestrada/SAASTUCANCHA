@@ -364,6 +364,12 @@ export class BookingService implements OnModuleInit {
       throw new BadRequestException('Se requiere una fecha o un arreglo de fechas');
     }
 
+    if (dto.couponCode && dto.couponCode.trim() !== '' && datesToBook.length > 1) {
+      throw new BadRequestException(
+        'Los cupones de descuento solo pueden aplicarse a reservas individuales, no a reservas recurrentes',
+      );
+    }
+
     const court: any = await this.courtService.findOne(dto.courtId, ['club', 'club.owner']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
 
@@ -486,7 +492,8 @@ export class BookingService implements OnModuleInit {
 
       allBookingsToCreate.push(bookingData);
 
-      slots = slots.map((slot) => Object.assign(slot, { status: isUnpaid ? 'on-hold' : 'occupied' }));
+      const isSlotUnpaid = dto.couponCode ? false : isUnpaid;
+      slots = slots.map((slot) => Object.assign(slot, { status: isSlotUnpaid ? 'on-hold' : 'occupied' }));
       allSlotsPayload.push(...slots);
     }
 
@@ -506,8 +513,105 @@ export class BookingService implements OnModuleInit {
           throw error;
         }
 
-        // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
-        if (!isUnpaid) {
+        // Aplicación de cupón de fidelidad (Nivel 2)
+        if (dto.couponCode) {
+          if (!this.loyaltyService) {
+            throw new BadRequestException('El servicio de fidelidad no está disponible');
+          }
+
+          const couponResult = await this.loyaltyService.applyManualCouponInsideTransaction(manager, {
+            clubId: court.club?.id || court.club,
+            userId: userReservation.id,
+            couponCode: dto.couponCode,
+            bookingId: savedBooking.id,
+            courtId: court.id,
+            basePrice: singleTotalPrice,
+          });
+
+          const discountAmount = couponResult.discountAmount;
+          const newTotalPrice = Math.max(0, Number((singleTotalPrice - discountAmount).toFixed(2)));
+
+          savedBooking.pricing = {
+            ...(finalPricing || {}),
+            basePrice: singleTotalPrice,
+            discounts: Number(((finalPricing?.discounts || 0) + discountAmount).toFixed(2)),
+            totalPrice: newTotalPrice,
+          };
+
+          if (newTotalPrice === 0) {
+            // Reserva 100% bonificada por hora gratis o cupón total
+            savedBooking.status = BookingStatus.CONFIRMED;
+            savedBooking.paymentStatus = PaymentStatus.PAID;
+            savedBooking.paymentMethod = 'coupon';
+
+            const paymentData = manager.create(Payment, {
+              bookings: [savedBooking],
+              user: userReservation,
+              amount: 0,
+              netAmount: 0,
+              feeAmount: 0,
+              currency: 'PEN',
+              method: PaymentMethod.EFECTIVO,
+              paymentMethod: PaymentMethod.EFECTIVO,
+              status: PaymentStatus.PAID,
+              type: PaymentType.PAGO_COMPLETO,
+              saldoStatus: 'NO_APLICA',
+              saldoAmount: 0,
+              pendingAudit: false,
+              confirmadoPor: user,
+              fechaConfirmacion: new Date(),
+            });
+            const savedPayment = await manager.save(Payment, paymentData);
+            savedBooking.payment = savedPayment;
+            await manager.save(Booking, savedBooking);
+          } else {
+            // newTotalPrice > 0: Cobro del saldo restante
+            const rawPaid = dto.amountPaid !== undefined && dto.amountPaid !== null && String(dto.amountPaid).trim() !== ''
+              ? Number(dto.amountPaid)
+              : newTotalPrice;
+            const effectivePaid = isNaN(rawPaid) ? 0 : Math.min(rawPaid, newTotalPrice);
+            const isCouponFullPaid = effectivePaid >= newTotalPrice - 0.05;
+            const isCouponUnpaid = effectivePaid <= 0;
+
+            savedBooking.status = isCouponUnpaid ? BookingStatus.PENDING : BookingStatus.CONFIRMED;
+            savedBooking.paymentStatus = isCouponFullPaid ? PaymentStatus.PAID : PaymentStatus.PENDING;
+
+            if (!isCouponUnpaid) {
+              let netAmount = effectivePaid;
+              let feeAmount = 0;
+              if (safeMethod === PaymentMethod.POS && dto.posCommission) {
+                feeAmount = effectivePaid * (Number(dto.posCommission) / 100);
+                netAmount = effectivePaid - feeAmount;
+              }
+
+              const paymentData = manager.create(Payment, {
+                bookings: [savedBooking],
+                user: userReservation,
+                amount: effectivePaid,
+                netAmount: Number(netAmount.toFixed(2)),
+                feeAmount: Number(feeAmount.toFixed(2)),
+                currency: 'PEN',
+                method: safeMethod,
+                paymentMethod: safeMethod,
+                status: PaymentStatus.PAID,
+                type: isCouponFullPaid ? PaymentType.PAGO_COMPLETO : PaymentType.ADELANTO,
+                saldoStatus: isCouponFullPaid ? 'NO_APLICA' : 'PENDIENTE',
+                saldoAmount: isCouponFullPaid ? 0 : Math.max(0, Number((newTotalPrice - effectivePaid).toFixed(2))),
+                pendingAudit: false,
+                confirmadoPor: user,
+                fechaConfirmacion: new Date(),
+              });
+              const savedPayment = await manager.save(Payment, paymentData);
+              savedBooking.payment = savedPayment;
+              await manager.save(Booking, savedBooking);
+
+              this.transactionsService.recordFromManualReservationPayment(savedPayment, savedBooking, userReservation.id).catch(() => {});
+            } else {
+              await manager.save(Booking, savedBooking);
+            }
+          }
+        } else if (!isUnpaid) {
+          // Si el club registró un cobro (completo o adelanto) sin cupón, comportamiento original
           let netAmount = amountPaidPerBooking;
           let feeAmount = 0;
           if (safeMethod === PaymentMethod.POS && dto.posCommission) {
