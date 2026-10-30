@@ -21,11 +21,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey: configService.get<string>('JWT_SECRET') || process.env.JWT_SECRET || 'JWT_SECRET_KEY',
     });
   }
-  
+
   async validate(payload: { sub: string; email: string }): Promise<User> {
     const user = await this.userService.findOneById(payload.sub);
     if (!user) {
       throw new UnauthorizedException();
+    }
+
+    if (user.isActive === false) {
+      const clubName = user.club?.name || user.assignedClub?.name || 'tu club';
+      throw new UnauthorizedException(`Tu acceso ha sido desactivado. Comunícate con el encargado de ${clubName}.`);
     }
 
     if (user.club) {

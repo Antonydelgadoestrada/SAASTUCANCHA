@@ -22,6 +22,7 @@ import { MailerService } from '../mailer/mailer.service';
 import { GoogleAuthService } from './google-auth.service';
 import { Response } from 'express';
 import { error } from 'console';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -35,12 +36,19 @@ export class AuthService {
     private readonly googleAuthService: GoogleAuthService,
   ) {}
 
-  async login(loginDto: LoginDto): Promise<{ access_token: string, refresh_token:string }> {
+  async login(loginDto: LoginDto): Promise<{ access_token: string; refresh_token: string }> {
     const { email, password } = loginDto;
     const user = await this.userService.findByEmail(email);
     if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
+
+    // 1. Verificación de estado activo (Bloqueo individual)
+    if (user.isActive === false) {
+      const clubName = user.club?.name || user.assignedClub?.name || 'tu club';
+      throw new UnauthorizedException(`Tu acceso ha sido desactivado. Comunícate con el encargado de ${clubName}.`);
+    }
+
     if (!user.isVerified) {
       if (process.env.NODE_ENV !== 'production') {
         user.isVerified = true;
@@ -49,8 +57,8 @@ export class AuthService {
         throw new UnauthorizedException('Debes confirmar tu cuenta por correo');
       }
     }
-    // let payload = { id: user.id, name:user.name, email: user.email, role: user.role}
-    let payload = { sub: user.id, name: user.name, email: user.email, role: user.role }
+
+    let payload: any = { sub: user.id, name: user.name, email: user.email, role: user.role };
 
     if (user.club) {
       if (user.club.status === 'PENDING') {
@@ -103,42 +111,60 @@ export class AuthService {
       }
     }
 
-    if (user.role === 'CLUB') {
-      payload = Object.assign(payload, { clubId: user.club.id })
+    if (user.role === UserRole.CLUB && user.club) {
+      payload = Object.assign(payload, { clubId: user.club.id });
+    } else if (user.role === UserRole.RECEPCIONISTA) {
+      const clubId = user.assignedClubId || user.club?.id;
+      payload = Object.assign(payload, {
+        clubId,
+        permissions: user.permissions || [],
+      });
     }
-    
-    const refresh_token = this.jwtService.sign({ sub: user.id }, {
-      secret: process.env.JWT_REFRESH_SECRET,
-      expiresIn: '7d', // duración del refresh token
-    });
-    await this.userService.update(user.id, {refreshToken:refresh_token})
+
+    const refresh_token = this.jwtService.sign(
+      { sub: user.id },
+      {
+        secret: process.env.JWT_REFRESH_SECRET,
+        expiresIn: '7d', // duración del refresh token
+      },
+    );
+    await this.userService.update(user.id, { refreshToken: refresh_token });
     return { access_token: this.jwtService.sign(payload), refresh_token };
   }
 
-  async refreshToken(refreshToken){
+  async refreshToken(refreshToken: string) {
     const decoded = this.jwtService.verify(refreshToken, {
       secret: process.env.JWT_REFRESH_SECRET,
     });
-  
+
     const user = await this.userService.findOneById(decoded.sub);
-  
+
     if (!user || user.refreshToken !== refreshToken) {
       throw new UnauthorizedException('Refresh token inválido');
     }
-  
+
+    if (user.isActive === false) {
+      const clubName = user.club?.name || user.assignedClub?.name || 'tu club';
+      throw new UnauthorizedException(`Tu acceso ha sido desactivado. Comunícate con el encargado de ${clubName}.`);
+    }
+
     const payload = {
       sub: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      ...(user.role === 'CLUB' && { clubId: user.club.id }),
+      ...(user.role === UserRole.CLUB && { clubId: user.club?.id }),
+      ...(user.role === UserRole.RECEPCIONISTA && {
+        clubId: user.assignedClubId || user.club?.id,
+        permissions: user.permissions || [],
+      }),
     };
-  
+
     const newAccessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_ACCESS_SECRET,
       expiresIn: '15m',
     });
-  
+
     return { access_token: newAccessToken };
   }
 
@@ -182,7 +208,7 @@ export class AuthService {
 
   async confirm(token: string, res: Response) {
     let payload: any;
-  
+
     try {
       payload = this.jwtService.verify(token);
     } catch (err) {
@@ -191,27 +217,27 @@ export class AuthService {
       }
       return res.send(this.buildHtml('Enlace inválido.'));
     }
-  
+
     const user = await this.userRepository.findOne({ where: { email: payload.email } });
     if (!user) {
       return res.send(this.buildHtml('Usuario no encontrado.'));
     }
-  
+
     if (user.isVerified) {
       return res.send(this.buildHtml('Tu cuenta ya estaba confirmada.'));
     }
-  
+
     if (user.emailConfirmationToken !== token) {
       return res.send(this.buildHtml('El token no coincide.'));
     }
-  
+
     user.isVerified = true;
     user.emailConfirmationToken = null;
     await this.userRepository.save(user);
-  
+
     return res.send(this.buildHtml('Tu cuenta ha sido confirmada con éxito.'));
   }
-  
+
   async register(registerDto: RegisterDto) {
     const { email, password, name, role, club } = registerDto;
 
@@ -221,11 +247,11 @@ export class AuthService {
 
     const existing = await this.userService.findByEmail(email);
     if (existing) throw new ConflictException('El correo ya está registrado');
-  
+
     const isDev = process.env.NODE_ENV !== 'production';
     const hashedPassword = await bcrypt.hash(password, 10);
     const emailToken = this.jwtService.sign({ email }, { expiresIn: '10m' });
-  
+
     // Si el rol es CLUB, no requiere verificación de correo (el admin lo aprueba manualmente)
     const isVerifiedInit = role === UserRole.CLUB ? true : isDev;
 
@@ -237,9 +263,9 @@ export class AuthService {
       isVerified: isVerifiedInit,
       emailConfirmationToken: emailToken,
     });
-  
+
     const savedUser = await this.userRepository.save(newUser);
-  
+
     let createdClub = null;
     try {
       // Si es usuario regular (jugador), enviar correo de bienvenida
@@ -262,16 +288,16 @@ export class AuthService {
         try {
           const adminEmail = process.env.ADMIN_EMAIL || 'tucancha100@gmail.com';
           const clubEmails = Array.from(new Set([savedUser.email, createdClub.email].filter(Boolean)));
-          
-          // Ejecutamos el envío de correos en segundo plano (sin await) 
+
+          // Ejecutamos el envío de correos en segundo plano (sin await)
           // para evitar que el Load Balancer de Digital Ocean (App Platform)
           // cierre la conexión por timeout (504 Gateway Timeout).
           Promise.all([
-            ...clubEmails.map(targetEmail =>
-              this.mailerService.sendClubRegisteredPendingApprovalEmail(targetEmail, createdClub, savedUser.name)
+            ...clubEmails.map((targetEmail) =>
+              this.mailerService.sendClubRegisteredPendingApprovalEmail(targetEmail, createdClub, savedUser.name),
             ),
-            this.mailerService.sendNewClubAdminNotificationEmail(adminEmail, createdClub, savedUser)
-          ]).catch(mailErr => {
+            this.mailerService.sendNewClubAdminNotificationEmail(adminEmail, createdClub, savedUser),
+          ]).catch((mailErr) => {
             console.warn('⚠️ No se pudieron enviar correos de notificación de club:', mailErr?.message);
           });
         } catch (mailErr) {
@@ -280,15 +306,16 @@ export class AuthService {
       }
 
       return {
-        message: 'Usuario registrado correctamente.' + (isDev ? ' Cuenta verificada automáticamente en modo desarrollo.' : ' Revisa tu correo para confirmar tu cuenta.'),
+        message:
+          'Usuario registrado correctamente.' +
+          (isDev ? ' Cuenta verificada automáticamente en modo desarrollo.' : ' Revisa tu correo para confirmar tu cuenta.'),
         user: {
           id: savedUser.id,
           name: savedUser.name,
           email: savedUser.email,
-          role: savedUser.role
+          role: savedUser.role,
         },
       };
-
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof ConflictException) {
         throw error;
@@ -300,23 +327,20 @@ export class AuthService {
           id: savedUser.id,
           name: savedUser.name,
           email: savedUser.email,
-          role: savedUser.role
+          role: savedUser.role,
         },
       };
     }
   }
-  
+
   async sendResetPasswordEmail(email: string) {
     const user = await this.userService.findByEmail(email);
     if (!user) throw new NotFoundException('Usuario no encontrado');
-  
-    const token = this.jwtService.sign(
-      { sub: user.id },
-      { expiresIn: '20m' },
-    );
-  
+
+    const token = this.jwtService.sign({ sub: user.id }, { expiresIn: '20m' });
+
     await this.mailerService.sendResetPasswordEmail(user.email, token);
-  
+
     return { message: 'Se ha enviado un correo para restablecer tu contraseña' };
   }
 
@@ -329,12 +353,11 @@ export class AuthService {
       const hashed = await bcrypt.hash(newPassword, 10);
       user.password = hashed;
 
-      await this.userService.update(user.id, {password: hashed});
+      await this.userService.update(user.id, { password: hashed });
 
       return { message: 'Contraseña restablecida correctamente' };
     } catch (e) {
       throw new BadRequestException('Token inválido o expirado');
     }
   }
-  
 }

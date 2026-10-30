@@ -9,6 +9,7 @@ declare module "next-auth" {
       name?: string
       clubId?: string
       email?: string
+      permissions?: string[]
     } & DefaultSession["user"],
     accessToken?: string
     refreshToken?: string;
@@ -18,6 +19,7 @@ declare module "next-auth" {
     id: string
     role?: string
     clubId?: string
+    permissions?: string[]
   }
 }
 
@@ -31,18 +33,20 @@ declare module "next-auth/jwt" {
     email?: string;
     name?: string;
     sub?: string;
+    permissions?: string[];
   }
 }
 
-export type UserRole = "USER" | "CLUB" | "ADMIN"
+export type UserRole = "USER" | "CLUB" | "ADMIN" | "RECEPCIONISTA"
 
 export interface User {
   id?: string
   name?: string
   email?: string
   role?: any
-  clubId?:string
-  accessToken?:string
+  clubId?: string
+  permissions?: string[]
+  accessToken?: string
 }
 
 export interface Court {
