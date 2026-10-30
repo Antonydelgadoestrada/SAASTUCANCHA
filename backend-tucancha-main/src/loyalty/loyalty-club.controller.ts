@@ -13,6 +13,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { LoyaltyService } from './loyalty.service';
 import { UpdateLoyaltyConfigDto } from './dto/loyalty-config.dto';
 import {
@@ -23,6 +24,7 @@ import {
   DeliverRewardDto,
   RejectRedemptionDto,
 } from './dto/loyalty-redemption.dto';
+import { PreviewCouponDto } from './dto/preview-coupon.dto';
 import { LoyaltyRedemptionStatus } from './entities/loyalty_redemption.entity';
 
 @Controller('loyalty/club')
@@ -33,8 +35,17 @@ export class LoyaltyClubController {
   /**
    * Validador estricto de Tenant: Siempre extrae el clubId del usuario autenticado en JWT.
    * Prohíbe que el frontend envíe un clubId para afectar a otro tenant.
+   * Si es ADMIN, permite targetClubId si se envía en la query.
    */
-  private getClubIdOrThrow(user: Partial<User>): string {
+  private getClubIdOrThrow(user: Partial<User>, targetClubId?: string): string {
+    if (user?.role === UserRole.ADMIN && targetClubId) {
+      return targetClubId;
+    }
+    if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.CLUB) {
+      throw new ForbiddenException(
+        'Acceso restringido: no tienes permisos de club o administración',
+      );
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException(
         'Acceso restringido: no tienes un club asociado a tu cuenta',
@@ -137,5 +148,16 @@ export class LoyaltyClubController {
       reason: dto.reason,
       staffUserId: user.id,
     });
+  }
+
+  // 10. Previsualizar cupón de descuento o hora gratis (Nivel 2)
+  @Post('coupons/preview')
+  async previewCoupon(
+    @GetUser() user: Partial<User>,
+    @Body() dto: PreviewCouponDto,
+    @Query('clubId') queryClubId?: string,
+  ) {
+    const clubId = this.getClubIdOrThrow(user, queryClubId);
+    return await this.loyaltyService.previewCoupon(clubId, dto);
   }
 }

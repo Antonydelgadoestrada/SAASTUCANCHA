@@ -20,5 +20,18 @@ export class PreviewCouponDto {
   @IsNumber({}, { message: 'El precio base debe ser numérico' })
   @Min(0, { message: 'El precio base no puede ser negativo' })
   basePrice: number;
+
+  @IsOptional()
+  @IsNumber()
+  duration?: number;
+
+  @IsOptional()
+  @IsString()
+  bookingDate?: string;
+
+  @IsOptional()
+  @IsString()
+  startTime?: string;
 }
+
 

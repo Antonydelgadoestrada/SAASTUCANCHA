@@ -1253,7 +1253,7 @@ export class LoyaltyService {
     return await this.loyaltyRedemptionRepo.find({
       where,
       order: { requestedAt: 'DESC' },
-      relations: ['user', 'reward', 'resolvedByUser'],
+      relations: ['user', 'reward', 'resolvedByUser', 'booking'],
     });
   }
 

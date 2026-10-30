@@ -4,6 +4,8 @@ import { LoyaltyClubController } from './loyalty-club.controller';
 import { LoyaltyUserController } from './loyalty-user.controller';
 import { LoyaltyService } from './loyalty.service';
 import { LoyaltyRedemptionStatus } from './entities/loyalty_redemption.entity';
+import { UserRole } from '../user/user-role.enum';
+import { LoyaltyRewardType } from './enums/loyalty-reward-type.enum';
 
 describe('Loyalty Controllers', () => {
   let clubController: LoyaltyClubController;
@@ -15,13 +17,28 @@ describe('Loyalty Controllers', () => {
   const mockUserWithClub: any = {
     id: mockUserId,
     email: 'clubowner@tucancha.pe',
+    role: UserRole.CLUB,
     club: { id: mockClubId, name: 'Club Central' },
   };
 
   const mockUserWithoutClub: any = {
     id: mockUserId,
     email: 'player@tucancha.pe',
+    role: UserRole.CLUB,
     club: null,
+  };
+
+  const mockPlayerUser: any = {
+    id: 'player-id',
+    email: 'player@tucancha.pe',
+    role: UserRole.USER,
+    club: null,
+  };
+
+  const mockAdminUser: any = {
+    id: 'admin-id',
+    email: 'admin@tucancha.pe',
+    role: UserRole.ADMIN,
   };
 
   const mockLoyaltyService = {
@@ -38,6 +55,7 @@ describe('Loyalty Controllers', () => {
     getUserRedemptions: jest.fn(),
     getUserTransactions: jest.fn(),
     redeemReward: jest.fn(),
+    previewCoupon: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -175,6 +193,73 @@ describe('Loyalty Controllers', () => {
         staffUserId: mockUserId,
       });
       expect(result.status).toBe(LoyaltyRedemptionStatus.REJECTED);
+    });
+
+    it('10b. Debe lanzar ForbiddenException si un usuario con rol USER intenta acceder a endpoints del club', async () => {
+      await expect(
+        clubController.getConfig(mockPlayerUser),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('10c. previewCoupon: staff autenticado del club puede previsualizar un cupón', async () => {
+      const previewDto = {
+        code: 'TC-DESC20',
+        userEmail: 'cliente@ejemplo.com',
+        courtId: 'court-1',
+        basePrice: 60,
+      };
+
+      mockLoyaltyService.previewCoupon.mockResolvedValue({
+        valid: true,
+        calculatedDiscount: 20,
+        newTotalPrice: 40,
+      });
+
+      const result = await clubController.previewCoupon(mockUserWithClub, previewDto);
+
+      expect(mockLoyaltyService.previewCoupon).toHaveBeenCalledWith(mockClubId, previewDto);
+      expect(result.valid).toBe(true);
+      expect(result.calculatedDiscount).toBe(20);
+    });
+
+    it('10d. previewCoupon: ADMIN puede previsualizar cupón pasando query clubId', async () => {
+      const previewDto = {
+        code: 'TC-DESC20',
+        userEmail: 'cliente@ejemplo.com',
+        courtId: 'court-1',
+        basePrice: 60,
+      };
+
+      mockLoyaltyService.previewCoupon.mockResolvedValue({
+        valid: true,
+        calculatedDiscount: 20,
+        newTotalPrice: 40,
+      });
+
+      const result = await clubController.previewCoupon(
+        mockAdminUser,
+        previewDto,
+        'club-target-99',
+      );
+
+      expect(mockLoyaltyService.previewCoupon).toHaveBeenCalledWith('club-target-99', previewDto);
+      expect(result.valid).toBe(true);
+    });
+
+    it('10e. createReward: crea premio con tipo de descuento y valores', async () => {
+      const dto = {
+        name: 'Cupón S/ 20 OFF',
+        pointsCost: 60,
+        rewardType: LoyaltyRewardType.FIXED_DISCOUNT,
+        discountValue: 20,
+      };
+
+      mockLoyaltyService.createReward.mockResolvedValue({ id: 'r-fixed', ...dto });
+
+      const result = await clubController.createReward(mockUserWithClub, dto as any);
+
+      expect(mockLoyaltyService.createReward).toHaveBeenCalledWith(mockClubId, dto);
+      expect(result.id).toBe('r-fixed');
     });
   });
 
