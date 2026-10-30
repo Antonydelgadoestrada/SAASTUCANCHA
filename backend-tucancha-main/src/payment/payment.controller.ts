@@ -15,6 +15,7 @@ import {
     UseInterceptors,
     UploadedFile,
     UnauthorizedException,
+    ForbiddenException,
     Headers,
   } from '@nestjs/common';
   import { PaymentService } from './payment.service';
@@ -23,6 +24,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { GetUser } from '../auth/get-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage, File as MulterFile } from 'multer';
@@ -140,7 +142,14 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @GetUser() user: User,
       @Query('clubId') clubId?: string,
     ) {
-      return this.service.getClubPaymentMetrics(user, clubId);
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para consultar métricas de pagos');
+      }
+      const effectiveClubId = user.role === UserRole.ADMIN ? clubId : user.club?.id;
+      return this.service.getClubPaymentMetrics(user, effectiveClubId);
     }
 
     /**
@@ -156,6 +165,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Query('type') type?: string,
       @Query('search') search?: string,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para ver los pagos del club');
+      }
       return this.service.getClubPaymentsList(user, { status, method, type, search });
     }
 
@@ -170,6 +185,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
       @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para auditar comprobantes de pago');
+      }
       return this.service.auditManualPayment(id, dto.action, user, dto.motivoRechazo);
     }
 
@@ -180,6 +201,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
       @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para auditar comprobantes de pago');
+      }
       return this.service.auditManualPayment(id, dto.action, user, dto.motivoRechazo);
     }
 
@@ -194,6 +221,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string; posCommission?: number },
       @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para liquidar saldos de pago');
+      }
       return this.service.settleManualSaldo(id, dto, user);
     }
 
@@ -204,6 +237,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: { monto?: number; metodo?: string; comprobanteUrl?: string; notas?: string; posCommission?: number },
       @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para liquidar saldos de pago');
+      }
       return this.service.settleManualSaldo(id, dto, user);
     }
 
@@ -218,6 +257,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
       @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para auditar comprobantes de saldo');
+      }
       return this.service.auditSaldoComprobante(id, dto.action, user, dto.motivoRechazo);
     }
 
@@ -228,6 +273,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: { action: 'CONFIRMAR' | 'RECHAZAR'; motivoRechazo?: string },
       @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.includes('payments')
+      ) {
+        throw new ForbiddenException('No tienes permisos para auditar comprobantes de saldo');
+      }
       return this.service.auditSaldoComprobante(id, dto.action, user, dto.motivoRechazo);
     }
 
@@ -258,6 +309,12 @@ import { memoryStorage, File as MulterFile } from 'multer';
       @Body() dto: any,
       @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
+      ) {
+        throw new ForbiddenException('No tienes permisos para registrar pagos de reservas');
+      }
       return this.service.createBookingManualPayment({ ...dto, bookingId }, user);
     }
 
@@ -269,7 +326,14 @@ import { memoryStorage, File as MulterFile } from 'multer';
     @Get('booking/:id')
     async getBookingPayments(
       @Param('id') bookingId: string,
+      @GetUser() user: User,
     ) {
+      if (
+        user.role === UserRole.RECEPCIONISTA &&
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
+      ) {
+        throw new ForbiddenException('No tienes permisos para consultar pagos de la reserva');
+      }
       return this.service.getPaymentsByBooking(bookingId);
     }
   }

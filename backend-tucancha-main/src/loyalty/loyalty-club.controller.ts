@@ -41,9 +41,16 @@ export class LoyaltyClubController {
     if (user?.role === UserRole.ADMIN && targetClubId) {
       return targetClubId;
     }
-    if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.CLUB) {
+    const isAuthorized =
+      user?.role === UserRole.ADMIN ||
+      user?.role === UserRole.CLUB ||
+      (user?.role === UserRole.RECEPCIONISTA &&
+        user?.isActive !== false &&
+        user?.permissions?.includes('loyalty'));
+
+    if (!isAuthorized) {
       throw new ForbiddenException(
-        'Acceso restringido: no tienes permisos de club o administración',
+        'Acceso restringido: no tienes permisos de fidelidad para este club',
       );
     }
     if (!user?.club?.id) {

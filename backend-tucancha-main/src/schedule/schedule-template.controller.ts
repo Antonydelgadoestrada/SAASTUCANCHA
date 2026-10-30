@@ -14,6 +14,15 @@ export class ScheduleTemplateController {
   @UseGuards(JwtAuthGuard)
   @Get()
   async getTemplates(@GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.some((p) => ['schedules', 'courts'].includes(p))
+    ) {
+      throw new ForbiddenException('No tienes permisos para consultar las plantillas de horarios');
+    }
+    if (!user?.club?.id) {
+      throw new ForbiddenException('Club no disponible');
+    }
     return this.templateService.findAllByClub(user.club.id)
   }
 
@@ -34,6 +43,12 @@ export class ScheduleTemplateController {
   @UseGuards(JwtAuthGuard)
   @Post('bulk-update')
   async bulkUpdate(@Body() body: any, @GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('schedules')
+    ) {
+      throw new ForbiddenException('No tienes permisos para modificar horarios');
+    }
     if (!user?.club?.id) {
       throw new NotFoundException('Club no disponible');
     }
@@ -43,6 +58,15 @@ export class ScheduleTemplateController {
   @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Body() body: CreateScheduleTemplateDto, @GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('schedules')
+    ) {
+      throw new ForbiddenException('No tienes permisos para crear plantillas de horarios');
+    }
+    if (!user?.club?.id) {
+      throw new ForbiddenException('Club no disponible');
+    }
     body.clubId = user.club.id
     return this.templateService.create(body)
   }
@@ -55,6 +79,12 @@ export class ScheduleTemplateController {
     @Param('id') id: string,
     @GetUser() user: Partial<User>,
   ) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('schedules')
+    ) {
+      throw new ForbiddenException('No tienes permisos para modificar plantillas de horarios');
+    }
     if (!user?.club?.id) {
       throw new NotFoundException('Plantilla no encontrada');
     }
@@ -81,7 +111,13 @@ export class ScheduleTemplateController {
   @UseGuards(JwtAuthGuard)
   @Post('applyTemplateToCourts')
   async applyTemplateToCourts(@Body() body:any, @GetUser() user: Partial<User>) {
-    if(!user.club) return ``
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('schedules')
+    ) {
+      throw new ForbiddenException('No tienes permisos para aplicar plantillas');
+    }
+    if(!user.club) return ''
     body.club = {id: user.club.id}
     // Ya no se materializan slots; se mantiene endpoint por compatibilidad.
     await this.templateService.applyTemplateToCourts(body)
@@ -93,6 +129,12 @@ export class ScheduleTemplateController {
     @Body() data: any,
     @GetUser() user: User,
   ){
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.some((p) => ['schedules', 'courts'].includes(p))
+    ) {
+      throw new ForbiddenException('No tienes permisos para aplicar plantillas');
+    }
     if (user.role !== UserRole.ADMIN) {
       const courtClubId = data.court?.club?.id || data.court?.club;
       if (!user.club || (courtClubId && user.club.id !== courtClubId)) {
