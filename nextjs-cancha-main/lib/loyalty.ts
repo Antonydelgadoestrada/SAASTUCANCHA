@@ -26,6 +26,12 @@ export interface UpdateLoyaltyConfigDto {
   bonusPoints?: number;
 }
 
+export type LoyaltyRewardType =
+  | "TEXT_ONLY"
+  | "FIXED_DISCOUNT"
+  | "PERCENT_DISCOUNT"
+  | "FREE_HOUR";
+
 export interface LoyaltyReward {
   id: string;
   clubId: string;
@@ -33,6 +39,9 @@ export interface LoyaltyReward {
   description?: string;
   pointsCost: number;
   isActive: boolean;
+  rewardType?: LoyaltyRewardType;
+  discountValue?: number | null;
+  maxDiscountAmount?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +51,9 @@ export interface CreateLoyaltyRewardDto {
   description?: string;
   pointsCost: number;
   isActive?: boolean;
+  rewardType?: LoyaltyRewardType;
+  discountValue?: number | null;
+  maxDiscountAmount?: number | null;
 }
 
 export interface UpdateLoyaltyRewardDto {
@@ -49,13 +61,17 @@ export interface UpdateLoyaltyRewardDto {
   description?: string;
   pointsCost?: number;
   isActive?: boolean;
+  rewardType?: LoyaltyRewardType;
+  discountValue?: number | null;
+  maxDiscountAmount?: number | null;
 }
 
 export type LoyaltyRedemptionStatus =
   | "PENDING"
   | "DELIVERED"
   | "REJECTED"
-  | "EXPIRED";
+  | "EXPIRED"
+  | "APPLIED";
 
 export interface LoyaltyRedemption {
   id: string;
@@ -71,6 +87,12 @@ export interface LoyaltyRedemption {
   expiresAt: string;
   resolvedAt?: string | null;
   resolvedByUserId?: string | null;
+  rewardTypeSnapshot?: LoyaltyRewardType;
+  discountValueSnapshot?: number | null;
+  maxDiscountSnapshot?: number | null;
+  bookingId?: string | null;
+  appliedDiscountAmount?: number | null;
+  appliedAt?: string | null;
   user?: {
     id: string;
     name: string;
@@ -78,6 +100,14 @@ export interface LoyaltyRedemption {
     phone?: string;
   };
   reward?: LoyaltyReward;
+  booking?: {
+    id: string;
+    reservationNumber?: string;
+    date?: string;
+    startTime?: string;
+    endTime?: string;
+    totalPrice?: number;
+  };
 }
 
 export type LoyaltyTransactionType =
@@ -169,6 +199,42 @@ export const rejectClubLoyaltyRedemption = async (
   const res = await api.post(`/loyalty/club/redemptions/${id}/reject`, {
     reason,
   });
+  return res.data;
+};
+
+export interface PreviewCouponDto {
+  code: string;
+  courtId: string;
+  basePrice: number;
+  date?: string;
+  duration?: number;
+  startTime?: string;
+  userEmail?: string;
+}
+
+export interface PreviewCouponResult {
+  valid: boolean;
+  code: string;
+  redemptionId: string;
+  rewardType: LoyaltyRewardType;
+  rewardName: string;
+  discountAmount: number;
+  netPrice: number;
+  originalPrice: number;
+  requiresPayment: boolean;
+  courtPriceDay: number;
+  message?: string;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+  };
+}
+
+export const previewClubCoupon = async (
+  dto: PreviewCouponDto
+): Promise<PreviewCouponResult> => {
+  const res = await api.post("/loyalty/club/coupons/preview", dto);
   return res.data;
 };
 

@@ -37,6 +37,7 @@ import {
   rejectClubLoyaltyRedemption,
   LoyaltyConfig,
   LoyaltyReward,
+  LoyaltyRewardType,
   LoyaltyRedemption,
   LoyaltyRedemptionStatus,
   UpdateLoyaltyConfigDto,
@@ -116,9 +117,10 @@ export function LoyaltyContent() {
   });
 
   const pendingRedemptions = allRedemptions.filter((r) => r.status === "PENDING");
+  const appliedRedemptions = allRedemptions.filter((r) => r.status === "APPLIED");
   const deliveredRedemptions = allRedemptions.filter((r) => r.status === "DELIVERED");
   const totalRedemptionsCount = allRedemptions.length;
-  const totalPointsRedeemed = deliveredRedemptions.reduce(
+  const totalPointsRedeemed = [...deliveredRedemptions, ...appliedRedemptions].reduce(
     (sum, r) => sum + (r.rewardCostSnapshot || 0),
     0
   );
@@ -176,11 +178,22 @@ export function LoyaltyContent() {
   // =========================================================================
   const [isRewardModalOpen, setIsRewardModalOpen] = useState(false);
   const [editingReward, setEditingReward] = useState<LoyaltyReward | null>(null);
-  const [rewardForm, setRewardForm] = useState({
+  const [rewardForm, setRewardForm] = useState<{
+    name: string;
+    description: string;
+    pointsCost: number;
+    isActive: boolean;
+    rewardType: LoyaltyRewardType;
+    discountValue: number;
+    maxDiscountAmount: number;
+  }>({
     name: "",
     description: "",
     pointsCost: 50,
     isActive: true,
+    rewardType: "TEXT_ONLY",
+    discountValue: 0,
+    maxDiscountAmount: 0,
   });
 
   const openCreateReward = () => {
@@ -190,6 +203,9 @@ export function LoyaltyContent() {
       description: "",
       pointsCost: 50,
       isActive: true,
+      rewardType: "TEXT_ONLY",
+      discountValue: 0,
+      maxDiscountAmount: 0,
     });
     setIsRewardModalOpen(true);
   };
@@ -201,16 +217,35 @@ export function LoyaltyContent() {
       description: reward.description || "",
       pointsCost: reward.pointsCost,
       isActive: reward.isActive,
+      rewardType: reward.rewardType || "TEXT_ONLY",
+      discountValue: Number(reward.discountValue) || 0,
+      maxDiscountAmount: Number(reward.maxDiscountAmount) || 0,
     });
     setIsRewardModalOpen(true);
   };
 
   const saveRewardMutation = useMutation({
     mutationFn: async () => {
+      const payload: any = {
+        name: rewardForm.name.trim(),
+        description: rewardForm.description.trim() || undefined,
+        pointsCost: Number(rewardForm.pointsCost) || 1,
+        isActive: rewardForm.isActive,
+        rewardType: rewardForm.rewardType,
+        discountValue:
+          rewardForm.rewardType === "FIXED_DISCOUNT" || rewardForm.rewardType === "PERCENT_DISCOUNT"
+            ? Number(rewardForm.discountValue)
+            : undefined,
+        maxDiscountAmount:
+          rewardForm.rewardType === "PERCENT_DISCOUNT" && Number(rewardForm.maxDiscountAmount) > 0
+            ? Number(rewardForm.maxDiscountAmount)
+            : undefined,
+      };
+
       if (editingReward) {
-        return await updateClubLoyaltyReward(editingReward.id, rewardForm);
+        return await updateClubLoyaltyReward(editingReward.id, payload);
       } else {
-        return await createClubLoyaltyReward(rewardForm);
+        return await createClubLoyaltyReward(payload);
       }
     },
     onSuccess: () => {
@@ -341,6 +376,12 @@ export function LoyaltyContent() {
             <ClockIcon className="w-3 h-3 mr-1" /> Pendiente de Entrega
           </Badge>
         );
+      case "APPLIED":
+        return (
+          <Badge variant="outline" className="bg-teal-500/10 text-teal-600 border-teal-500/30 font-medium">
+            <CheckCircle2Icon className="w-3 h-3 mr-1" /> Aplicado en Reserva
+          </Badge>
+        );
       case "DELIVERED":
         return (
           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-medium">
@@ -357,6 +398,39 @@ export function LoyaltyContent() {
         return (
           <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/30 font-medium">
             <AlertCircleIcon className="w-3 h-3 mr-1" /> Expirado
+          </Badge>
+        );
+    }
+  };
+
+  const getRewardTypeBadge = (
+    rewardType?: LoyaltyRewardType,
+    discountValue?: number | null
+  ) => {
+    switch (rewardType) {
+      case "FREE_HOUR":
+        return (
+          <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] font-semibold">
+            1 Hora Gratis
+          </Badge>
+        );
+      case "FIXED_DISCOUNT":
+        return (
+          <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px] font-semibold">
+            S/ {discountValue || 0} OFF
+          </Badge>
+        );
+      case "PERCENT_DISCOUNT":
+        return (
+          <Badge className="bg-purple-600 hover:bg-purple-600 text-white text-[10px] font-semibold">
+            {discountValue || 0}% OFF
+          </Badge>
+        );
+      case "TEXT_ONLY":
+      default:
+        return (
+          <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">
+            Informativo / Físico
           </Badge>
         );
     }
@@ -568,28 +642,58 @@ export function LoyaltyContent() {
 
                       {/* ACCIONES DISPONIBLES SEGÚN ESTADO */}
                       {foundRedemption.status === "PENDING" && (
-                        <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-end border-t">
-                          <Button
-                            variant="outline"
-                            className="text-destructive hover:bg-destructive/10 border-destructive/30"
-                            onClick={() => handleOpenReject(foundRedemption.id)}
-                            disabled={rejectMutation.isPending}
-                          >
-                            <XCircleIcon className="w-4 h-4 mr-2" />
-                            Rechazar y Reembolsar
-                          </Button>
-                          <Button
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                            onClick={() => deliverMutation.mutate(foundRedemption.code)}
-                            disabled={deliverMutation.isPending}
-                          >
-                            {deliverMutation.isPending ? (
-                              <Loader2Icon className="w-4 h-4 animate-spin mr-2" />
-                            ) : (
-                              <CheckCircle2Icon className="w-4 h-4 mr-2" />
+                        <div className="space-y-3 pt-2 border-t">
+                          {foundRedemption.rewardTypeSnapshot && foundRedemption.rewardTypeSnapshot !== "TEXT_ONLY" && (
+                            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-blue-900 dark:text-blue-200 text-xs flex items-start gap-2.5">
+                              <AlertCircleIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                              <div className="space-y-1">
+                                <p className="font-semibold">Cupón aplicable en reservas de cancha</p>
+                                <p className="text-blue-700 dark:text-blue-300">
+                                  Este beneficio otorga un descuento o una hora gratis. No se entrega físicamente en caja: el jugador o el club deben ingresar el código <strong>{foundRedemption.code}</strong> en el modal de Reserva Manual de recepción o en la reserva online.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex flex-col sm:flex-row gap-3 justify-end">
+                            <Button
+                              variant="outline"
+                              className="text-destructive hover:bg-destructive/10 border-destructive/30"
+                              onClick={() => handleOpenReject(foundRedemption.id)}
+                              disabled={rejectMutation.isPending}
+                            >
+                              <XCircleIcon className="w-4 h-4 mr-2" />
+                              Rechazar y Reembolsar
+                            </Button>
+                            {(!foundRedemption.rewardTypeSnapshot || foundRedemption.rewardTypeSnapshot === "TEXT_ONLY") && (
+                              <Button
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                onClick={() => deliverMutation.mutate(foundRedemption.code)}
+                                disabled={deliverMutation.isPending}
+                              >
+                                {deliverMutation.isPending ? (
+                                  <Loader2Icon className="w-4 h-4 animate-spin mr-2" />
+                                ) : (
+                                  <CheckCircle2Icon className="w-4 h-4 mr-2" />
+                                )}
+                                Confirmar Entrega del Premio
+                              </Button>
                             )}
-                            Confirmar Entrega del Premio
-                          </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {foundRedemption.status === "APPLIED" && (
+                        <div className="p-3.5 rounded-lg bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-900 text-teal-900 dark:text-teal-200 text-xs space-y-1">
+                          <div className="flex items-center gap-2 font-semibold">
+                            <CheckCircle2Icon className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                            <span>Cupón Aplicado en Reserva</span>
+                          </div>
+                          <p className="text-teal-700 dark:text-teal-300">
+                            Descuento aplicado: <strong>S/ {Number(foundRedemption.appliedDiscountAmount || 0).toFixed(2)}</strong>
+                            {foundRedemption.booking?.reservationNumber && ` • N° Reserva: #${foundRedemption.booking.reservationNumber}`}
+                            {foundRedemption.appliedAt && ` • Aplicado el: ${format(new Date(foundRedemption.appliedAt), "dd/MM/yyyy 'a las' HH:mm", { locale: es })}`}
+                          </p>
                         </div>
                       )}
 
@@ -658,13 +762,14 @@ export function LoyaltyContent() {
                           className="p-3 rounded-xl border bg-card hover:bg-muted/30 transition-all flex items-center justify-between gap-3 text-xs shadow-sm"
                         >
                           <div className="space-y-0.5 min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono font-bold text-primary text-sm">
                                 {red.code}
                               </span>
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
                                 {red.rewardCostSnapshot} pts
                               </Badge>
+                              {getRewardTypeBadge(red.rewardTypeSnapshot, red.discountValueSnapshot)}
                             </div>
                             <p className="font-medium text-foreground truncate">
                               {red.rewardNameSnapshot}
@@ -765,9 +870,14 @@ export function LoyaltyContent() {
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-base font-semibold line-clamp-1">
-                        {reward.name}
-                      </CardTitle>
+                      <div className="space-y-1">
+                        <CardTitle className="text-base font-semibold line-clamp-1">
+                          {reward.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-1.5">
+                          {getRewardTypeBadge(reward.rewardType, reward.discountValue)}
+                        </div>
+                      </div>
                       <Badge
                         variant={reward.isActive ? "default" : "secondary"}
                         className="text-xs shrink-0"
@@ -833,13 +943,14 @@ export function LoyaltyContent() {
             <div className="flex items-center gap-2">
               <FilterIcon className="w-4 h-4 text-muted-foreground" />
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="w-48">
                   <SelectValue placeholder="Filtrar por estado" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Todos los Estados</SelectItem>
-                  <SelectItem value="PENDING">Pendientes</SelectItem>
-                  <SelectItem value="DELIVERED">Entregados</SelectItem>
+                  <SelectItem value="PENDING">Pendientes de Canje</SelectItem>
+                  <SelectItem value="APPLIED">Aplicados en Reserva</SelectItem>
+                  <SelectItem value="DELIVERED">Entregados en Mano</SelectItem>
                   <SelectItem value="REJECTED">Rechazados</SelectItem>
                   <SelectItem value="EXPIRED">Expirados</SelectItem>
                 </SelectContent>
@@ -858,7 +969,16 @@ export function LoyaltyContent() {
             </Card>
             <Card className="p-4 bg-card shadow-sm border">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-medium">Entregados</span>
+                <span className="text-xs text-muted-foreground font-medium">Aplicados en Reserva</span>
+                <CheckCircle2Icon className="w-4 h-4 text-teal-500" />
+              </div>
+              <p className="text-2xl font-bold mt-1 text-teal-600 dark:text-teal-400">
+                {appliedRedemptions.length}
+              </p>
+            </Card>
+            <Card className="p-4 bg-card shadow-sm border">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-medium">Entregados Físicos</span>
                 <CheckCircle2Icon className="w-4 h-4 text-emerald-500" />
               </div>
               <p className="text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">
@@ -872,16 +992,6 @@ export function LoyaltyContent() {
               </div>
               <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">
                 {pendingRedemptions.length}
-              </p>
-            </Card>
-            <Card className="p-4 bg-card shadow-sm border">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-medium">Puntos Entregados</span>
-                <AwardIcon className="w-4 h-4 text-indigo-500" />
-              </div>
-              <p className="text-2xl font-bold mt-1">
-                {totalPointsRedeemed}{" "}
-                <span className="text-xs font-normal text-muted-foreground">pts</span>
               </p>
             </Card>
           </div>
@@ -909,7 +1019,7 @@ export function LoyaltyContent() {
                         <TableHead>Jugador</TableHead>
                         <TableHead>Fecha Solicitud</TableHead>
                         <TableHead>Estado</TableHead>
-                        <TableHead className="text-right">Acción</TableHead>
+                        <TableHead className="text-right">Detalle / Acción</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -919,7 +1029,10 @@ export function LoyaltyContent() {
                             {red.code}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {red.rewardNameSnapshot}
+                            <div className="font-semibold text-foreground">{red.rewardNameSnapshot}</div>
+                            <div className="mt-1 flex items-center gap-1.5">
+                              {getRewardTypeBadge(red.rewardTypeSnapshot, red.discountValueSnapshot)}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <span className="font-bold">{red.rewardCostSnapshot}</span> pts
@@ -937,7 +1050,16 @@ export function LoyaltyContent() {
                           </TableCell>
                           <TableCell>{getStatusBadge(red.status)}</TableCell>
                           <TableCell className="text-right">
-                            {red.status === "PENDING" ? (
+                            {red.status === "APPLIED" ? (
+                              <div className="text-right">
+                                <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 block">
+                                  -S/ {Number(red.appliedDiscountAmount || 0).toFixed(2)}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground block">
+                                  {red.booking?.reservationNumber ? `Reserva #${red.booking.reservationNumber}` : "En reserva"}
+                                </span>
+                              </div>
+                            ) : red.status === "PENDING" ? (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -947,7 +1069,7 @@ export function LoyaltyContent() {
                                   setActiveTab("redeem-desk");
                                 }}
                               >
-                                Procesar
+                                Verificar
                               </Button>
                             ) : (
                               <span className="text-xs text-muted-foreground">
@@ -1213,13 +1335,140 @@ export function LoyaltyContent() {
               <Label htmlFor="reward-name">Nombre del Premio *</Label>
               <Input
                 id="reward-name"
-                placeholder="Ej: Bebida Hidratante 500ml"
+                placeholder="Ej: Bebida Hidratante 500ml o 1 Hora de Alquiler"
                 value={rewardForm.name}
                 onChange={(e) =>
                   setRewardForm({ ...rewardForm, name: e.target.value })
                 }
               />
             </div>
+
+            {/* Tipo de Beneficio */}
+            <div className="space-y-1.5">
+              <Label htmlFor="reward-type">Tipo de Beneficio *</Label>
+              <Select
+                value={rewardForm.rewardType}
+                onValueChange={(val) =>
+                  setRewardForm({
+                    ...rewardForm,
+                    rewardType: val as LoyaltyRewardType,
+                  })
+                }
+              >
+                <SelectTrigger id="reward-type">
+                  <SelectValue placeholder="Selecciona el tipo de premio" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TEXT_ONLY">
+                    Premio Físico / Tradicional (Bebidas, pelotas, toallas)
+                  </SelectItem>
+                  <SelectItem value="FIXED_DISCOUNT">
+                    Cupón de Descuento Fijo (S/)
+                  </SelectItem>
+                  <SelectItem value="PERCENT_DISCOUNT">
+                    Cupón de Descuento Porcentual (%)
+                  </SelectItem>
+                  <SelectItem value="FREE_HOUR">
+                    1 Hora Gratis (Tarifa Diurna)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Campos condicionales según tipo de premio */}
+            {rewardForm.rewardType === "FIXED_DISCOUNT" && (
+              <div className="space-y-1.5 p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900">
+                <Label htmlFor="reward-fixed-val" className="text-xs font-semibold text-blue-950 dark:text-blue-200">
+                  Monto de Descuento (S/) *
+                </Label>
+                <Input
+                  id="reward-fixed-val"
+                  type="number"
+                  step="0.50"
+                  min="0.50"
+                  placeholder="Ej: 20.00"
+                  value={rewardForm.discountValue || ""}
+                  onChange={(e) =>
+                    setRewardForm({
+                      ...rewardForm,
+                      discountValue: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  El jugador obtendrá un cupón con este descuento exacto en Soles al momento de reservar su cancha.
+                </p>
+              </div>
+            )}
+
+            {rewardForm.rewardType === "PERCENT_DISCOUNT" && (
+              <div className="space-y-2 p-3 rounded-lg bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label htmlFor="reward-pct-val" className="text-xs font-semibold text-purple-950 dark:text-purple-200">
+                      Porcentaje (%) *
+                    </Label>
+                    <Input
+                      id="reward-pct-val"
+                      type="number"
+                      min="1"
+                      max="100"
+                      placeholder="Ej: 25"
+                      value={rewardForm.discountValue || ""}
+                      onChange={(e) =>
+                        setRewardForm({
+                          ...rewardForm,
+                          discountValue: Math.min(100, Math.max(1, Number(e.target.value) || 1)),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="reward-max-val" className="text-xs font-semibold text-purple-950 dark:text-purple-200">
+                      Tope Máximo S/ (Opcional)
+                    </Label>
+                    <Input
+                      id="reward-max-val"
+                      type="number"
+                      step="0.50"
+                      min="0"
+                      placeholder="0 = Sin tope"
+                      value={rewardForm.maxDiscountAmount || ""}
+                      onChange={(e) =>
+                        setRewardForm({
+                          ...rewardForm,
+                          maxDiscountAmount: Math.max(0, Number(e.target.value) || 0),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Descuento porcentual sobre la tarifa de reserva. Si indicas un tope máximo, el descuento nunca excederá ese monto.
+                </p>
+              </div>
+            )}
+
+            {rewardForm.rewardType === "FREE_HOUR" && (
+              <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <SparklesIcon className="w-3.5 h-3.5 text-emerald-600" />
+                  Beneficio de 1 Hora Gratis
+                </p>
+                <p className="text-emerald-700 dark:text-emerald-400">
+                  El cupón bonificará el equivalente a 1 hora (2 bloques de 30 min) calculada con la tarifa diurna de la cancha seleccionada.
+                </p>
+              </div>
+            )}
+
+            {rewardForm.rewardType === "TEXT_ONLY" && (
+              <div className="p-2.5 rounded-lg bg-muted/40 border text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">Premio Físico Tradicional</p>
+                <p className="mt-0.5">
+                  Entregado en recepción cuando el jugador presenta su código de canje en el club.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="reward-cost">Costo en Puntos *</Label>
@@ -1279,7 +1528,12 @@ export function LoyaltyContent() {
             </Button>
             <Button
               onClick={() => saveRewardMutation.mutate()}
-              disabled={saveRewardMutation.isPending || !rewardForm.name.trim()}
+              disabled={
+                saveRewardMutation.isPending ||
+                !rewardForm.name.trim() ||
+                (rewardForm.rewardType === "FIXED_DISCOUNT" && (!rewardForm.discountValue || rewardForm.discountValue <= 0)) ||
+                (rewardForm.rewardType === "PERCENT_DISCOUNT" && (!rewardForm.discountValue || rewardForm.discountValue <= 0 || rewardForm.discountValue > 100))
+              }
             >
               {saveRewardMutation.isPending && (
                 <Loader2Icon className="w-4 h-4 animate-spin mr-2" />

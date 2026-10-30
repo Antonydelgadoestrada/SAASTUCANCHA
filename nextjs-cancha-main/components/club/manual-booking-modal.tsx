@@ -1,9 +1,9 @@
 "use client"
-
 import { useState, useEffect, useMemo } from "react"
 import { format } from "date-fns"
-import { CalendarIcon } from "lucide-react"
+import { CalendarIcon, TicketIcon, CheckCircle2, XCircle, Loader2, Sparkles } from "lucide-react"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 
 import {
   Dialog,
@@ -26,6 +26,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { createReservationManual } from "@/lib/reservation"
 import { getAllCourtsByQuery } from "@/lib/courts"
+import { previewClubCoupon, PreviewCouponResult } from "@/lib/loyalty"
 
 interface ManualBookingModalProps {
   open: boolean
@@ -72,6 +73,12 @@ export function ManualBookingModal({
   const [isSaving, setIsSaving] = useState<boolean>(false)
   const [isManualPriceEdited, setIsManualPriceEdited] = useState<boolean>(false)
   const [remoteAvailabilities, setRemoteAvailabilities] = useState<string[] | null>(null)
+
+  // Estados para cupón de fidelidad
+  const [couponCodeInput, setCouponCodeInput] = useState<string>("")
+  const [appliedCoupon, setAppliedCoupon] = useState<PreviewCouponResult | null>(null)
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState<boolean>(false)
+  const [couponError, setCouponError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open || !selectedCourtId || !dateStr) {
@@ -170,6 +177,10 @@ export function ManualBookingModal({
 
       setDuration("1.0")
       setIsManualPriceEdited(false)
+      setCouponCodeInput("")
+      setAppliedCoupon(null)
+      setIsValidatingCoupon(false)
+      setCouponError(null)
     }
   }, [open, initialCourtId, initialDate, initialTime, courts, todayStr])
 
@@ -179,6 +190,14 @@ export function ManualBookingModal({
       setStartTime(availableTimeSlots[0])
     }
   }, [availableTimeSlots, startTime])
+
+  // Limpiar cupón si cambian detalles de la reserva (cancha, fecha, hora, duración)
+  useEffect(() => {
+    if (appliedCoupon) {
+      setAppliedCoupon(null)
+      setCouponError("Los detalles de la reserva cambiaron. Por favor vuelve a validar el cupón.")
+    }
+  }, [selectedCourtId, dateStr, startTime, duration])
 
   const selectedCourt = useMemo(() => {
     return courts.find((c) => String(c.id) === String(selectedCourtId))
@@ -222,18 +241,88 @@ export function ManualBookingModal({
   // Actualizar precio automáticamente
   useEffect(() => {
     if (!isManualPriceEdited && calculatedPricing.totalPrice > 0) {
-      setTotalPrice(String(calculatedPricing.totalPrice))
-      setAmountPaid(String(calculatedPricing.totalPrice))
+      if (appliedCoupon) {
+        setTotalPrice(String(appliedCoupon.netPrice))
+        setAmountPaid(String(appliedCoupon.netPrice))
+      } else {
+        setTotalPrice(String(calculatedPricing.totalPrice))
+        setAmountPaid(String(calculatedPricing.totalPrice))
+      }
     }
-  }, [calculatedPricing, isManualPriceEdited])
+  }, [calculatedPricing, isManualPriceEdited, appliedCoupon])
+
+  // Validación de cupón en API
+  const handleValidateCoupon = async () => {
+    const code = couponCodeInput.trim().toUpperCase()
+    if (!code) {
+      toast.error("Por favor ingresa un código de cupón")
+      return
+    }
+    if (!selectedCourtId) {
+      toast.error("Por favor selecciona una cancha primero")
+      return
+    }
+
+    setIsValidatingCoupon(true)
+    setCouponError(null)
+
+    try {
+      const res = await previewClubCoupon({
+        code,
+        courtId: selectedCourtId,
+        basePrice: calculatedPricing.totalPrice,
+        date: dateStr,
+        startTime,
+        duration: Number(duration),
+        userEmail: userEmail.trim() || undefined,
+      })
+
+      setAppliedCoupon(res)
+      setTotalPrice(String(res.netPrice))
+      setAmountPaid(String(res.netPrice))
+
+      if (res.user?.email && !userEmail.trim()) {
+        setUserEmail(res.user.email)
+      }
+      if (res.user?.name && !customerName.trim()) {
+        setCustomerName(res.user.name)
+      }
+
+      toast.success(
+        res.netPrice === 0
+          ? `¡Cupón aplicado! Reserva 100% bonificada (${res.rewardName})`
+          : `¡Cupón aplicado! Descuento de S/ ${res.discountAmount.toFixed(2)} (${res.rewardName})`
+      )
+    } catch (err: any) {
+      console.error("Error al validar cupón:", err)
+      const msg =
+        err?.response?.data?.message ||
+        "No se pudo validar el cupón. Verifica que el código sea correcto y pertenezca a este club."
+      setCouponError(msg)
+      setAppliedCoupon(null)
+      toast.error(msg)
+    } finally {
+      setIsValidatingCoupon(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null)
+    setCouponCodeInput("")
+    setCouponError(null)
+    setTotalPrice(String(calculatedPricing.totalPrice))
+    setAmountPaid(String(calculatedPricing.totalPrice))
+    toast.info("Cupón removido")
+  }
 
   // Cálculos de saldo
-  const numTotal = Number(totalPrice || calculatedPricing.totalPrice || 0)
-  const numPaid = Number(amountPaid !== "" ? amountPaid : numTotal)
-  const saldoFaltante = Math.max(0, Number((numTotal - numPaid).toFixed(2)))
-  const isFullPaid = numTotal > 0 && numPaid >= numTotal - 0.05
-  const isPartial = !isFullPaid && numPaid > 0
-  const isUnpaid = numPaid === 0
+  const numTotal = Number(totalPrice || (appliedCoupon ? appliedCoupon.netPrice : calculatedPricing.totalPrice) || 0)
+  const isBonified = appliedCoupon !== null && numTotal === 0
+  const numPaid = isBonified ? 0 : Number(amountPaid !== "" ? amountPaid : numTotal)
+  const saldoFaltante = isBonified ? 0 : Math.max(0, Number((numTotal - numPaid).toFixed(2)))
+  const isFullPaid = isBonified || (numTotal > 0 && numPaid >= numTotal - 0.05)
+  const isPartial = !isBonified && !isFullPaid && numPaid > 0
+  const isUnpaid = !isBonified && numPaid === 0
 
   const handleSave = async () => {
     if (!selectedCourtId) {
@@ -276,8 +365,8 @@ export function ManualBookingModal({
         duration: Number(duration),
         price: String(numTotal),
         userEmail: userEmail.trim(),
-        paymentMethod: paymentMethod.toLowerCase(),
-        posCommission: paymentMethod === 'pos' ? Number(posCommission) : undefined,
+        paymentMethod: isBonified ? 'coupon' : paymentMethod.toLowerCase(),
+        posCommission: paymentMethod === 'pos' && !isBonified ? Number(posCommission) : undefined,
         amountPaid: numPaid,
         customerInfo: {
           name: customerName.trim() || undefined,
@@ -286,19 +375,23 @@ export function ManualBookingModal({
           notes: notes.trim() || undefined,
         },
         pricing: {
-          basePrice: numTotal / Number(duration),
-          discounts: calculatedPricing.hasPromo
-            ? (calculatedPricing.regularSlotPrice - calculatedPricing.unitSlotPrice) * calculatedPricing.slotCount
-            : 0,
+          basePrice: calculatedPricing.totalPrice / Number(duration),
+          discounts:
+            (calculatedPricing.hasPromo
+              ? (calculatedPricing.regularSlotPrice - calculatedPricing.unitSlotPrice) * calculatedPricing.slotCount
+              : 0) + (appliedCoupon ? appliedCoupon.discountAmount : 0),
           taxes: 0,
           totalPrice: numTotal,
         },
+        couponCode: appliedCoupon ? appliedCoupon.code : undefined,
       }
 
       await createReservationManual(payload)
 
       toast.success(
-        isFullPaid
+        isBonified
+          ? "¡Reserva 100% bonificada registrada con éxito!"
+          : isFullPaid
           ? "Reserva registrada y confirmada (Pago Completo)"
           : isPartial
           ? `Reserva registrada con adelanto de S/ ${numPaid.toFixed(2)}. Saldo pendiente: S/ ${saldoFaltante.toFixed(2)}`
@@ -470,6 +563,99 @@ export function ManualBookingModal({
             </div>
           </div>
 
+          {/* Cupón de Fidelidad */}
+          <div className="space-y-2 p-2.5 bg-muted/20 border rounded-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <TicketIcon className="w-3.5 h-3.5 text-primary" />
+                <span>Cupón de Fidelidad (opcional)</span>
+              </div>
+              {appliedCoupon && (
+                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] px-1.5 py-0">
+                  Cupón Aplicado
+                </Badge>
+              )}
+            </div>
+
+            {!appliedCoupon ? (
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Código de canje (ej: TC-ABC123)"
+                    value={couponCodeInput}
+                    onChange={(e) => {
+                      setCouponCodeInput(e.target.value.toUpperCase())
+                      setCouponError(null)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleValidateCoupon()
+                      }
+                    }}
+                    className="h-8 text-xs font-mono uppercase tracking-wide"
+                    disabled={isValidatingCoupon}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 text-xs shrink-0 font-medium"
+                    onClick={handleValidateCoupon}
+                    disabled={isValidatingCoupon || !couponCodeInput.trim() || !selectedCourtId}
+                  >
+                    {isValidatingCoupon ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                        Validando...
+                      </>
+                    ) : (
+                      "Validar"
+                    )}
+                  </Button>
+                </div>
+                {couponError && (
+                  <p className="text-[11px] text-destructive flex items-center gap-1">
+                    <XCircle className="w-3 h-3 shrink-0" />
+                    {couponError}
+                  </p>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  Aplica un cupón de puntos para descontar o bonificar la hora de la reserva.
+                </p>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-xs text-emerald-800 dark:text-emerald-300">
+                        {appliedCoupon.code}
+                      </span>
+                      <span className="text-xs font-medium text-emerald-900 dark:text-emerald-200">
+                        • {appliedCoupon.rewardName}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                      {appliedCoupon.netPrice === 0
+                        ? "¡100% Bonificado! Descuento total de S/ " + appliedCoupon.discountAmount.toFixed(2)
+                        : `Descuento aplicado: S/ ${appliedCoupon.discountAmount.toFixed(2)}`}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10"
+                    onClick={handleRemoveCoupon}
+                  >
+                    Remover
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Sección de Pago */}
           <div className="space-y-2 p-2.5 bg-muted/30 border rounded-md">
             <div className="flex items-center justify-between">
@@ -478,92 +664,131 @@ export function ManualBookingModal({
               </span>
               <span
                 className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                  isFullPaid
+                  isBonified
+                    ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                    : isFullPaid
                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                     : isPartial
                     ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
                     : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
                 }`}
               >
-                {isFullPaid ? "Pago Completo" : isPartial ? "Adelanto" : "Pendiente"}
+                {isBonified ? "Bonificado (S/ 0.00)" : isFullPaid ? "Pago Completo" : isPartial ? "Adelanto" : "Pendiente"}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Precio Total (S/)</Label>
-                <Input
-                  type="number"
-                  step="0.50"
-                  className="h-8 text-xs"
-                  value={totalPrice}
-                  onChange={(e) => {
-                    setTotalPrice(e.target.value)
-                    setIsManualPriceEdited(true)
-                  }}
-                />
+            {/* Resumen de Desglose si hay cupón */}
+            {appliedCoupon && (
+              <div className="p-2 rounded bg-muted/40 border text-xs space-y-1">
+                <div className="flex justify-between text-muted-foreground text-[11px]">
+                  <span>Tarifa base calculada:</span>
+                  <span>S/ {calculatedPricing.totalPrice.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+                  <span>Descuento cupón ({appliedCoupon.rewardName}):</span>
+                  <span>-S/ {appliedCoupon.discountAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-semibold border-t pt-1">
+                  <span>Total a pagar:</span>
+                  <span className={isBonified ? "text-purple-600 dark:text-purple-400 font-bold" : "text-foreground"}>
+                    {isBonified ? "S/ 0.00 (100% Bonificado)" : `S/ ${appliedCoupon.netPrice.toFixed(2)}`}
+                  </span>
+                </div>
               </div>
+            )}
 
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Método de Pago</Label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Método" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                    <SelectItem value="pos">POS (Tarjeta)</SelectItem>
-                    <SelectItem value="yape">Yape</SelectItem>
-                    <SelectItem value="plin">Plin</SelectItem>
-                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                    <SelectItem value="mercadopago">Mercado Pago</SelectItem>
-                  </SelectContent>
-                </Select>
+            {isBonified ? (
+              <div className="p-2.5 rounded bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 text-xs text-purple-800 dark:text-purple-300">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                  Reserva bonificada al 100%
+                </p>
+                <p className="text-[11px] mt-0.5 text-purple-700 dark:text-purple-400">
+                  No requiere cobro en caja. La reserva se confirmará automáticamente como bonificada por el cupón de fidelidad.
+                </p>
               </div>
-
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Monto Cobrado (S/)</Label>
-                <Input
-                  type="number"
-                  step="0.50"
-                  className="h-8 text-xs font-medium"
-                  value={amountPaid}
-                  onChange={(e) => setAmountPaid(e.target.value)}
-                />
-              </div>
-
-              {paymentMethod === 'pos' && (
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Comisión POS (%)</Label>
+                  <Label className="text-[11px] text-muted-foreground">
+                    {appliedCoupon ? "Total con Descuento (S/)" : "Precio Total (S/)"}
+                  </Label>
                   <Input
                     type="number"
-                    step="0.1"
+                    step="0.50"
                     className="h-8 text-xs font-medium"
-                    value={posCommission}
-                    onChange={(e) => setPosCommission(e.target.value)}
+                    value={totalPrice}
+                    disabled={appliedCoupon !== null}
+                    onChange={(e) => {
+                      setTotalPrice(e.target.value)
+                      setIsManualPriceEdited(true)
+                    }}
                   />
                 </div>
-              )}
-            </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Método de Pago</Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Método" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="efectivo">Efectivo</SelectItem>
+                      <SelectItem value="pos">POS (Tarjeta)</SelectItem>
+                      <SelectItem value="yape">Yape</SelectItem>
+                      <SelectItem value="plin">Plin</SelectItem>
+                      <SelectItem value="transferencia">Transferencia</SelectItem>
+                      <SelectItem value="mercadopago">Mercado Pago</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Monto Cobrado (S/)</Label>
+                  <Input
+                    type="number"
+                    step="0.50"
+                    className="h-8 text-xs font-medium"
+                    value={amountPaid}
+                    onChange={(e) => setAmountPaid(e.target.value)}
+                  />
+                </div>
+
+                {paymentMethod === 'pos' && (
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Comisión POS (%)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      className="h-8 text-xs font-medium"
+                      value={posCommission}
+                      onChange={(e) => setPosCommission(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Mensaje de saldo */}
-            <div className="text-xs pt-1">
-              {isFullPaid && (
-                <p className="text-emerald-700 dark:text-emerald-400">
-                  Total cobrado: S/ {numPaid.toFixed(2)}. Saldo restante: S/ 0.00.
-                </p>
-              )}
-              {isPartial && (
-                <p className="text-amber-700 dark:text-amber-400">
-                  Adelanto cobrado: S/ {numPaid.toFixed(2)}. Saldo restante por pagar: S/ {saldoFaltante.toFixed(2)}.
-                </p>
-              )}
-              {isUnpaid && (
-                <p className="text-muted-foreground">
-                  Sin cobro inicial. Queda pendiente S/ {numTotal.toFixed(2)}.
-                </p>
-              )}
-            </div>
+            {!isBonified && (
+              <div className="text-xs pt-1">
+                {isFullPaid && (
+                  <p className="text-emerald-700 dark:text-emerald-400">
+                    Total cobrado: S/ {numPaid.toFixed(2)}. Saldo restante: S/ 0.00.
+                  </p>
+                )}
+                {isPartial && (
+                  <p className="text-amber-700 dark:text-amber-400">
+                    Adelanto cobrado: S/ {numPaid.toFixed(2)}. Saldo restante por pagar: S/ {saldoFaltante.toFixed(2)}.
+                  </p>
+                )}
+                {isUnpaid && (
+                  <p className="text-muted-foreground">
+                    Sin cobro inicial. Queda pendiente S/ {numTotal.toFixed(2)}.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Notas */}
@@ -589,11 +814,19 @@ export function ManualBookingModal({
           </Button>
           <Button
             size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+            className={
+              isBonified
+                ? "bg-purple-600 hover:bg-purple-700 text-white font-medium"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+            }
             disabled={isSaving || availableTimeSlots.length === 0}
             onClick={handleSave}
           >
-            {isSaving ? "Guardando..." : "Guardar Reserva"}
+            {isSaving
+              ? "Guardando..."
+              : isBonified
+              ? "Confirmar Reserva Bonificada"
+              : "Guardar Reserva"}
           </Button>
         </DialogFooter>
       </DialogContent>

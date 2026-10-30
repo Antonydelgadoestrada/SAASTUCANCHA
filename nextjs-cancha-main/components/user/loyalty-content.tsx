@@ -178,6 +178,15 @@ export function UserLoyaltyContent() {
             <ClockIcon className="w-3 h-3 mr-1" /> Por Retirar
           </Badge>
         );
+      case "APPLIED":
+        return (
+          <Badge
+            variant="outline"
+            className="bg-teal-500/10 text-teal-600 border-teal-500/30 font-medium"
+          >
+            <CheckCircle2Icon className="w-3 h-3 mr-1" /> Aplicado en Reserva
+          </Badge>
+        );
       case "DELIVERED":
         return (
           <Badge
