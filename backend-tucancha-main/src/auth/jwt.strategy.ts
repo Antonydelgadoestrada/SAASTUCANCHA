@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UserService } from '../user/user.service';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { Club } from '../club/club.entity';
 import { ClubMembership } from '../membership/entities/club_membership.entity';
 import { MembershipStatus } from '../membership/enums/membership-status.enum';
@@ -81,6 +82,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           user.club.status = 'SUSPENDED';
           await this.dataSource.getRepository(Club).save(user.club);
         }
+      }
+    }
+
+    if (user.role === UserRole.RECEPCIONISTA) {
+      const club = user.club || user.assignedClub;
+      const clubName = club?.name || 'tu club';
+      if (!club || club.status !== 'APPROVED') {
+        throw new UnauthorizedException(
+          `El acceso al club se encuentra temporalmente suspendido. Comunícate con el encargado de ${clubName}.`,
+        );
       }
     }
 

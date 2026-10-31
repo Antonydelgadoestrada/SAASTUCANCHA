@@ -61,53 +61,21 @@ export class AuthService {
     let payload: any = { sub: user.id, name: user.name, email: user.email, role: user.role };
 
     if (user.club) {
-      if (user.club.status === 'PENDING') {
+      if (user.role === UserRole.CLUB && user.club.status === 'PENDING') {
         throw new UnauthorizedException('El administrador debe aceptar el club');
       }
 
-      // Chequeo dinámico de prueba gratuita y membresía activa
-      const membership = await this.clubRepository.manager.getRepository(ClubMembership).findOne({
-        where: { clubId: user.club.id },
-        order: { endDate: 'DESC' },
-      });
+      await this.checkAndSyncClubMembership(user.club);
+    }
 
-      const now = new Date();
-      let hasActiveMembership = false;
-
-      if (membership) {
-        if (new Date(membership.endDate) >= now) {
-          hasActiveMembership = true;
-          if (membership.status !== MembershipStatus.ACTIVE) {
-            membership.status = MembershipStatus.ACTIVE;
-            await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
-          }
-        } else if (membership.graceEndDate && new Date(membership.graceEndDate) >= now) {
-          hasActiveMembership = true;
-          if (membership.status !== MembershipStatus.GRACE) {
-            membership.status = MembershipStatus.GRACE;
-            await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
-          }
-        } else {
-          // Ya venció
-          if (membership.status !== MembershipStatus.EXPIRED) {
-            membership.status = MembershipStatus.EXPIRED;
-            await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
-          }
-        }
-      }
-
-      const trialExpired = user.club.trialEndDate ? new Date(user.club.trialEndDate) < now : false;
-
-      if (hasActiveMembership) {
-        if (user.club.status === 'SUSPENDED') {
-          user.club.status = 'APPROVED';
-          await this.clubRepository.save(user.club);
-        }
-      } else if (trialExpired) {
-        if (user.club.status === 'APPROVED') {
-          user.club.status = 'SUSPENDED';
-          await this.clubRepository.save(user.club);
-        }
+    // 2. Verificación de estado del club (Bloqueo heredado para recepcionistas)
+    if (user.role === UserRole.RECEPCIONISTA) {
+      const club = user.club || user.assignedClub;
+      const clubName = club?.name || 'tu club';
+      if (!club || club.status !== 'APPROVED') {
+        throw new UnauthorizedException(
+          `El acceso al club se encuentra temporalmente suspendido. Comunícate con el encargado de ${clubName}.`,
+        );
       }
     }
 
@@ -360,4 +328,53 @@ export class AuthService {
       throw new BadRequestException('Token inválido o expirado');
     }
   }
+
+  private async checkAndSyncClubMembership(club: Club): Promise<Club> {
+    const membership = await this.clubRepository.manager.getRepository(ClubMembership).findOne({
+      where: { clubId: club.id },
+      order: { endDate: 'DESC' },
+    });
+
+    const now = new Date();
+    let hasActiveMembership = false;
+
+    if (membership) {
+      if (new Date(membership.endDate) >= now) {
+        hasActiveMembership = true;
+        if (membership.status !== MembershipStatus.ACTIVE) {
+          membership.status = MembershipStatus.ACTIVE;
+          await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
+        }
+      } else if (membership.graceEndDate && new Date(membership.graceEndDate) >= now) {
+        hasActiveMembership = true;
+        if (membership.status !== MembershipStatus.GRACE) {
+          membership.status = MembershipStatus.GRACE;
+          await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
+        }
+      } else {
+        // Ya venció
+        if (membership.status !== MembershipStatus.EXPIRED) {
+          membership.status = MembershipStatus.EXPIRED;
+          await this.clubRepository.manager.getRepository(ClubMembership).save(membership);
+        }
+      }
+    }
+
+    const trialExpired = club.trialEndDate ? new Date(club.trialEndDate) < now : false;
+
+    if (hasActiveMembership) {
+      if (club.status === 'SUSPENDED') {
+        club.status = 'APPROVED';
+        await this.clubRepository.save(club);
+      }
+    } else if (trialExpired) {
+      if (club.status === 'APPROVED') {
+        club.status = 'SUSPENDED';
+        await this.clubRepository.save(club);
+      }
+    }
+
+    return club;
+  }
+
 }

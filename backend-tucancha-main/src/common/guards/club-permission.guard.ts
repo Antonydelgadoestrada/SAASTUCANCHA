@@ -45,6 +45,14 @@ export class ClubPermissionGuard implements CanActivate {
         throw new ForbiddenException('Acceso desactivado por el administrador del club');
       }
 
+      const club = user.club || user.assignedClub;
+      if (club && club.status !== 'APPROVED') {
+        const clubName = club.name || 'tu club';
+        throw new ForbiddenException(
+          `El acceso al club se encuentra temporalmente suspendido. Comunícate con el encargado de ${clubName}.`,
+        );
+      }
+
       const permissions: string[] = user.permissions || [];
       if (!permissions.includes(requiredPermission)) {
         throw new ForbiddenException(
