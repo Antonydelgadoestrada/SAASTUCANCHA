@@ -7,14 +7,27 @@ const PUBLIC_ROUTES = ['/login', '/register']
 const ROLE_ROUTES: Record<string, string> = {
   ADMIN: '/admin',
   CLUB: '/club',
+  RECEPCIONISTA: '/club',
   USER: '/user',
+}
+
+const ROUTE_PERMISSION_MAP: Record<string, string> = {
+  '/club/dashboard': 'dashboard',
+  '/club/payments': 'payments',
+  '/club/transactions': 'transactions',
+  '/club/schedules': 'schedules',
+  '/club/events': 'events',
+  '/club/courts': 'courts',
+  '/club/bookings': 'bookings',
+  '/club/membership': 'membership',
+  '/club/loyalty': 'loyalty',
 }
 
 export async function middleware(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
   const { pathname } = req.nextUrl
-  
-  // 1. Si no hay token y va a una ruta protegida → redirigir
+
+  // 1. Si no hay token y va a una ruta protegida → redirigir a login
   if (!token) {
     const isProtected = pathname.startsWith('/admin') || pathname.startsWith('/club') || pathname.startsWith('/user')
     if (isProtected) {
@@ -23,27 +36,48 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // 2. Si el usuario logueado va al login → redirigir según su rol
+  // 2. Si el usuario logueado va al login o registro → redirigir según su rol
   if (pathname === '/login' || pathname === '/register') {
-    const userRole = (token?.role as string) || 'USER';
-    const basePath = ROLE_ROUTES[userRole] || '/user';
+    const userRole = (token?.role as string) || 'USER'
+    const basePath = ROLE_ROUTES[userRole] || '/user'
     return NextResponse.redirect(new URL(`${basePath}/dashboard`, req.url))
   }
 
-  // 3. Protección por rol
+  // 3. Protección de rutas para ADMIN
   if (pathname.startsWith('/admin') && token.role !== 'ADMIN') {
     return NextResponse.redirect(new URL('/no-autorizado', req.url))
   }
-  if (pathname.startsWith('/club') && token.role !== 'CLUB') {
-    return NextResponse.redirect(new URL('/no-autorizado', req.url))
-  }
+
+  // 4. Protección de rutas para USER (jugadores)
   if (pathname.startsWith('/user') && token.role !== 'USER') {
     return NextResponse.redirect(new URL('/no-autorizado', req.url))
   }
 
+  // 5. Protección de rutas para CLUB y RECEPCIONISTA
+  if (pathname.startsWith('/club')) {
+    if (token.role !== 'CLUB' && token.role !== 'RECEPCIONISTA') {
+      return NextResponse.redirect(new URL('/no-autorizado', req.url))
+    }
+
+    // Regla especial: El módulo /club/users queda estrictamente reservado al administrador/dueño del club
+    if (pathname.startsWith('/club/users') && token.role !== 'CLUB') {
+      return NextResponse.redirect(new URL('/no-autorizado', req.url))
+    }
+
+    // Para recepcionistas, validar si tienen asignado el permiso de la sección
+    if (token.role === 'RECEPCIONISTA') {
+      const permissions = (token.permissions as string[]) || []
+
+      for (const [routePrefix, permKey] of Object.entries(ROUTE_PERMISSION_MAP)) {
+        if (pathname.startsWith(routePrefix) && !permissions.includes(permKey)) {
+          return NextResponse.redirect(new URL('/no-autorizado', req.url))
+        }
+      }
+    }
+  }
+
   return NextResponse.next()
 }
-
 
 export const config = {
   matcher: [

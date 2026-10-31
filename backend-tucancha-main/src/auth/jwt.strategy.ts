@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UserService } from '../user/user.service';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { Club } from '../club/club.entity';
 import { ClubMembership } from '../membership/entities/club_membership.entity';
 import { MembershipStatus } from '../membership/enums/membership-status.enum';
@@ -21,11 +22,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey: configService.get<string>('JWT_SECRET') || process.env.JWT_SECRET || 'JWT_SECRET_KEY',
     });
   }
-  
+
   async validate(payload: { sub: string; email: string }): Promise<User> {
     const user = await this.userService.findOneById(payload.sub);
     if (!user) {
       throw new UnauthorizedException();
+    }
+
+    if (user.isActive === false) {
+      const clubName = user.club?.name || user.assignedClub?.name || 'tu club';
+      throw new UnauthorizedException(`Tu acceso ha sido desactivado. Comunícate con el encargado de ${clubName}.`);
     }
 
     if (user.club) {
@@ -76,6 +82,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           user.club.status = 'SUSPENDED';
           await this.dataSource.getRepository(Club).save(user.club);
         }
+      }
+    }
+
+    if (user.role === UserRole.RECEPCIONISTA) {
+      const club = user.club || user.assignedClub;
+      const clubName = club?.name || 'tu club';
+      if (!club || club.status !== 'APPROVED') {
+        throw new UnauthorizedException(
+          `El acceso al club se encuentra temporalmente suspendido. Comunícate con el encargado de ${clubName}.`,
+        );
       }
     }
 

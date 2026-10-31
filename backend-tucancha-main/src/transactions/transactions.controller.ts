@@ -24,13 +24,20 @@ export class TransactionsController {
     @Query('category') category?: string,
   ) {
     const user = req.user;
-    if (!user || user.role !== 'CLUB' || !user.club) {
-      throw new UnauthorizedException('Solo el rol CLUB tiene acceso a sus transacciones.');
+    const isAuthorized =
+      user &&
+      user.club &&
+      (user.role === 'CLUB' ||
+        user.role === 'ADMIN' ||
+        (user.role === 'RECEPCIONISTA' && user.permissions?.includes('transactions')));
+
+    if (!isAuthorized) {
+      throw new UnauthorizedException('No tienes permisos para acceder a las transacciones del club.');
     }
-    
+
     const page = pageStr ? parseInt(pageStr, 10) : 1;
     const limit = limitStr ? parseInt(limitStr, 10) : 10;
-    
+
     const clubId = typeof user.club === 'string' ? user.club : user.club?.id || user.club;
     return this.transactionsService.findAllByClub(clubId, page, limit, startDate, endDate, status, paymentMethod, category);
   }
@@ -44,10 +51,17 @@ export class TransactionsController {
     @Query('category') category?: string,
   ) {
     const user = req.user;
-    if (!user || user.role !== 'CLUB' || !user.club) {
-      throw new UnauthorizedException('Solo el rol CLUB tiene acceso a sus métricas de transacciones.');
+    const isAuthorized =
+      user &&
+      user.club &&
+      (user.role === 'CLUB' ||
+        user.role === 'ADMIN' ||
+        (user.role === 'RECEPCIONISTA' && user.permissions?.includes('transactions')));
+
+    if (!isAuthorized) {
+      throw new UnauthorizedException('No tienes permisos para acceder a las métricas de transacciones del club.');
     }
-    
+
     const clubId = typeof user.club === 'string' ? user.club : user.club?.id || user.club;
     return this.transactionsService.getMetrics(clubId, startDate, endDate, paymentMethod, category);
   }
