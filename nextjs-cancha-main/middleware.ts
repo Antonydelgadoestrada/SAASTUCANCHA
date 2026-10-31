@@ -53,20 +53,27 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/no-autorizado', req.url))
   }
 
-  // 5. Protección de rutas para CLUB y RECEPCIONISTA
+  // 5. Protección de rutas para CLUB, RECEPCIONISTA y ADMIN
   if (pathname.startsWith('/club')) {
-    if (token.role !== 'CLUB' && token.role !== 'RECEPCIONISTA') {
+    if (token.role !== 'CLUB' && token.role !== 'RECEPCIONISTA' && token.role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/no-autorizado', req.url))
     }
 
     // Regla especial: El módulo /club/users queda estrictamente reservado al administrador/dueño del club
-    if (pathname.startsWith('/club/users') && token.role !== 'CLUB') {
+    if (pathname.startsWith('/club/users') && token.role !== 'CLUB' && token.role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/no-autorizado', req.url))
     }
 
     // Para recepcionistas, validar si tienen asignado el permiso de la sección
     if (token.role === 'RECEPCIONISTA') {
       const permissions = (token.permissions as string[]) || []
+
+      // Si entra a /club o /club/dashboard pero no tiene permiso 'dashboard', redirigir a su primer módulo habilitado
+      if ((pathname === '/club' || pathname === '/club/dashboard') && !permissions.includes('dashboard') && permissions.length > 0) {
+        const firstPerm = permissions[0]
+        const fallbackRoute = Object.entries(ROUTE_PERMISSION_MAP).find(([, p]) => p === firstPerm)?.[0] || '/no-autorizado'
+        return NextResponse.redirect(new URL(fallbackRoute, req.url))
+      }
 
       for (const [routePrefix, permKey] of Object.entries(ROUTE_PERMISSION_MAP)) {
         if (pathname.startsWith(routePrefix) && !permissions.includes(permKey)) {

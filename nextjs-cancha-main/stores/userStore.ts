@@ -6,6 +6,7 @@ type User = {
   role?: string
   clubId?: string
   accessToken?: string
+  permissions?: string[]
 }
 
 type UserState = {

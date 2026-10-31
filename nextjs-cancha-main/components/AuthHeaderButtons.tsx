@@ -32,8 +32,26 @@ export const AuthHeaderButtons = () => {
       router.push("/admin/dashboard")
     } else if (user.role === "CLUB") {
       router.push("/club/dashboard")
+    } else if (user.role === "RECEPCIONISTA") {
+      const perms = (user as any).permissions || []
+      if (perms.length === 0 || perms.includes("dashboard")) {
+        router.push("/club/dashboard")
+      } else {
+        const permRouteMap: Record<string, string> = {
+          bookings: "/club/bookings",
+          courts: "/club/courts",
+          schedules: "/club/schedules",
+          events: "/club/events",
+          payments: "/club/payments",
+          transactions: "/club/transactions",
+          membership: "/club/membership",
+          loyalty: "/club/loyalty",
+        }
+        const firstValidRoute = perms.map((p: string) => permRouteMap[p]).find(Boolean)
+        router.push(firstValidRoute || "/club/dashboard")
+      }
     } else {
-      router.push('/user/dashboard')
+      router.push("/user/dashboard")
     }
   }
 
