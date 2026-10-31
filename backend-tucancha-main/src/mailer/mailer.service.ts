@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
+import { Club } from '../club/club.entity';
 import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
 import { Booking } from '../booking/booking.entity';
@@ -9,7 +13,10 @@ export class MailerService {
   private resend: Resend;
   private transporter: nodemailer.Transporter | null = null;
 
-  constructor() {
+  constructor(
+    @Optional()
+    private readonly dataSource?: DataSource,
+  ) {
     this.resend = new Resend(process.env.RESEND_API_KEY || 're_dummy');
     this.initTransporter();
   }
@@ -71,6 +78,106 @@ export class MailerService {
   public getUserTargetEmail(booking: Booking): string | null {
     if (!booking) return null;
     return booking.customerInfo?.email || booking.user?.email || null;
+  }
+
+  /**
+   * Obtiene la lista de correos de los recepcionistas activos del club
+   * que tengan asignado el permiso de 'bookings'.
+   * Si el club está suspendido o no aprobado, devuelve lista vacía.
+   */
+  public async getStaffBookingEmails(clubId?: string): Promise<string[]> {
+    if (!clubId || !this.dataSource) return [];
+
+    try {
+      // 1. Verificar si el club está SUSPENDED o no está APPROVED
+      const club = await this.dataSource.getRepository(Club).findOne({
+        where: { id: clubId },
+      });
+      if (!club || club.status !== 'APPROVED') {
+        this.logger.warn(`[MailerService] Club ${clubId} suspendido o no aprobado. No se enviarán notificaciones operativas a recepcionistas.`);
+        return [];
+      }
+
+      // 2. Buscar recepcionistas activos (no eliminados ni desactivados)
+      const staffUsers = await this.dataSource.getRepository(User).find({
+        where: {
+          assignedClubId: clubId,
+          role: UserRole.RECEPCIONISTA,
+          isActive: true,
+        },
+      });
+
+      // 3. Filtrar aquellos que tengan el permiso 'bookings'
+      const recipients = staffUsers
+        .filter((staff) => Array.isArray(staff.permissions) && staff.permissions.includes('bookings'))
+        .map((staff) => staff.email)
+        .filter((email) => Boolean(email && email.includes('@')));
+
+      return recipients;
+    } catch (err: any) {
+      this.logger.error(`[MailerService] Error al obtener correos de recepcionistas para el club ${clubId}: ${err?.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Envía correo de bienvenida oficial con credenciales al Recepcionista recién creado
+   */
+  async sendStaffWelcomeEmail({
+    to,
+    staffName,
+    clubName,
+    rawPassword,
+  }: {
+    to: string;
+    staffName: string;
+    clubName: string;
+    rawPassword: string;
+  }) {
+    const credentialsHtml = `
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #1e293b; font-size: 16px; font-weight: 700; margin-bottom: 12px;">
+          🔑 Tus credenciales de acceso
+        </h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #334155; line-height: 1.8;">
+          <tr>
+            <td style="padding: 4px 0; width: 160px; font-weight: 600;">Correo:</td>
+            <td style="padding: 4px 0;"><strong>${to}</strong></td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0; font-weight: 600;">Contraseña de acceso:</td>
+            <td style="padding: 4px 0;"><code style="background-color: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-size: 14px; font-family: monospace;">${rawPassword}</code></td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0; font-weight: 600;">Rol asignado:</td>
+            <td style="padding: 4px 0;"><span style="background-color: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">Recepcionista</span></td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0; font-weight: 600;">Club asignado:</td>
+            <td style="padding: 4px 0;"><strong>${clubName}</strong></td>
+          </tr>
+        </table>
+      </div>
+    `;
+
+    const html = this.getEmailTemplate({
+      title: '¡Bienvenido al equipo de TuCancha!',
+      greeting: `Hola ${staffName},`,
+      message: `Has sido registrado exitosamente como <strong>Recepcionista</strong> en el equipo de <strong>${clubName}</strong>.<br/><br/>A partir de ahora podrás acceder a TuCancha para gestionar las funciones que el administrador del club te haya asignado.`,
+      bookingDetailsHtml: credentialsHtml,
+      actionButton: {
+        text: 'IR AL PANEL DE CONTROL',
+        url: `${this.webUrl}/login`,
+        color: '#16A34A',
+      },
+      footerNote: `Por motivos de seguridad, te recomendamos cambiar tu contraseña luego de iniciar sesión por primera vez.<br/>Si tienes dudas sobre tus permisos asignados, consulta directamente con el administrador de tu club.<br/><br/><strong>Equipo TuCancha</strong>`,
+    });
+
+    return this.sendEmail({
+      to,
+      subject: `⚽ ¡Bienvenido al equipo de ${clubName}! - Credenciales de acceso | TuCancha`,
+      html,
+    });
   }
 
   private getEmailTemplate({
@@ -430,8 +537,12 @@ export class MailerService {
    */
   async sendPaymentReceiptUploadedClubNotificationEmail(booking: Booking, payment: any) {
     const clubEmail = this.getClubTargetEmail(booking);
-    if (!clubEmail) {
-      this.logger.warn(`⚠️ [Mailer] No se pudo encontrar email del club para la reserva ${booking.bookingReference || booking.id}`);
+    const clubId = booking.club?.id || booking.court?.club?.id;
+    const staffEmails = await this.getStaffBookingEmails(clubId);
+    const allRecipients = Array.from(new Set([clubEmail, ...staffEmails].filter(Boolean))) as string[];
+
+    if (allRecipients.length === 0) {
+      this.logger.warn(`⚠️ [Mailer] No se pudo encontrar email del club ni recepcionistas para la reserva ${booking.bookingReference || booking.id}`);
       return;
     }
 
@@ -864,14 +975,18 @@ export class MailerService {
       });
     }
 
-    // 2. Enviar a Club
-    if (clubEmail) {
+    // 2. Enviar a Club y a recepcionistas con permiso de reservas
+    const clubId = club?.id || court?.club?.id;
+    const staffEmails = await this.getStaffBookingEmails(clubId);
+    const clubRecipients = Array.from(new Set([clubEmail, ...staffEmails].filter(Boolean))) as string[];
+
+    for (const recipient of clubRecipients) {
       await this.sendEmail({
-        to: clubEmail,
+        to: recipient,
         subject: `🏟️ Nueva reserva registrada: #${bookingReference} (${court?.name || 'Cancha'}) - TuCancha`,
         html: this.getEmailTemplate({
           title: 'Nueva Reserva en tu Club',
-          greeting: `Hola ${club?.name || 'Club'},`,
+          greeting: `Hola ${club?.name || 'Equipo del Club'},`,
           message: `Se ha registrado una nueva reserva para la cancha <strong>${court?.name || 'Cancha'}</strong>.`,
           bookingDetailsHtml: detailsClub,
           actionButton: {
@@ -932,14 +1047,18 @@ export class MailerService {
       });
     }
 
-    // 2. Club
-    if (clubEmail) {
+    // 2. Club y recepcionistas con permiso de reservas
+    const clubId = club?.id || court?.club?.id;
+    const staffEmails = await this.getStaffBookingEmails(clubId);
+    const clubRecipients = Array.from(new Set([clubEmail, ...staffEmails].filter(Boolean))) as string[];
+
+    for (const recipient of clubRecipients) {
       await this.sendEmail({
-        to: clubEmail,
+        to: recipient,
         subject: `💰 Reserva Pagada y Confirmada: #${bookingReference} (${court?.name || 'Cancha'}) - TuCancha`,
         html: this.getEmailTemplate({
           title: 'Reserva Pagada y Confirmada',
-          greeting: `Hola ${club?.name || 'Club'},`,
+          greeting: `Hola ${club?.name || 'Equipo del Club'},`,
           message: `El pago de la reserva <strong>#${bookingReference}</strong> ha sido confirmado exitosamente.`,
           bookingDetailsHtml: details,
           actionButton: {
@@ -986,6 +1105,42 @@ export class MailerService {
         color: '#16A34A',
       },
     });
+
+    // Notificar también al club y a recepcionistas con acceso a reservas
+    const clubId = booking.club?.id || booking.court?.club?.id;
+    const clubEmail = this.getClubTargetEmail(booking);
+    const staffEmails = await this.getStaffBookingEmails(clubId);
+    const clubRecipients = Array.from(new Set([clubEmail, ...staffEmails].filter(Boolean))) as string[];
+
+    for (const recipient of clubRecipients) {
+      this.sendEmail({
+        to: recipient,
+        subject: `⚠️ Reserva #${bookingReference} cancelada (${court?.name || 'Cancha'}) - TuCancha`,
+        html: this.getEmailTemplate({
+          title: 'Reserva Cancelada',
+          greeting: `Hola ${club?.name || 'Equipo del Club'},`,
+          message: `La reserva <strong>#${bookingReference}</strong> ha sido cancelada.<br/>Motivo: <em>${effectiveReason}</em>.`,
+          bookingDetailsHtml: `
+            <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin: 18px 0; font-size: 13px;">
+              <ul style="padding-left: 20px; line-height: 1.8; color: #7f1d1d; margin: 0;">
+                <li><strong>Código de Reserva:</strong> ${bookingReference}</li>
+                <li><strong>Fecha:</strong> ${formattedDate}</li>
+                <li><strong>Horario:</strong> ${startTime} - ${endTime}</li>
+                <li><strong>Cancha:</strong> ${court?.name || 'Cancha'}</li>
+                <li><strong>Cliente:</strong> ${customerInfo?.name || 'Cliente'}</li>
+              </ul>
+            </div>
+          `,
+          actionButton: {
+            text: 'Ver en Panel de Reservas',
+            url: `${this.webUrl}/club/bookings`,
+            color: '#16A34A',
+          },
+        }),
+      }).catch((err) => {
+        this.logger.error(`[MailerService] Error enviando correo de cancelación a ${recipient}: ${err?.message}`);
+      });
+    }
 
     return this.sendEmail({
       to,

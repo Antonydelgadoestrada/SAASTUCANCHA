@@ -5,9 +5,10 @@ import { User } from './user.entity';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { ClubUserController } from './club-user.controller';
+import { MailerModule } from '../mailer/mailer.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User])],
+  imports: [TypeOrmModule.forFeature([User]), MailerModule],
   providers: [UserService],
   controllers: [UserController, ClubUserController],
   exports: [UserService],

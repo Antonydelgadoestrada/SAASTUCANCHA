@@ -14,6 +14,8 @@ import { Club } from '../club/club.entity';
 import { instanceToPlain } from 'class-transformer';
 import { CreateClubUserDto } from './dto/create-club-user.dto';
 import { UpdateClubUserDto } from './dto/update-club-user.dto';
+import { MailerService } from '../mailer/mailer.service';
+import { Optional } from '@nestjs/common';
 
 @Injectable()
 export class UserService {
@@ -21,6 +23,8 @@ export class UserService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly mailerService?: MailerService,
   ) {}
 
   async getAdminDashboardStats(): Promise<any> {
@@ -178,6 +182,21 @@ export class UserService {
     });
 
     const saved = await this.userRepository.save(newStaff);
+
+    // Enviar correo de bienvenida al recepcionista de forma asíncrona
+    if (this.mailerService) {
+      this.mailerService
+        .sendStaffWelcomeEmail({
+          to: saved.email,
+          staffName: saved.name,
+          clubName: club.name || 'tu club',
+          rawPassword: dto.password,
+        })
+        .catch((err) => {
+          console.error('[UserService] Error al enviar correo de bienvenida al recepcionista:', err?.message);
+        });
+    }
+
     return instanceToPlain(saved);
   }
 
