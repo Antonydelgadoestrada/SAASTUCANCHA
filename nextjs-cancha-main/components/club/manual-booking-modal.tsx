@@ -377,13 +377,23 @@ export function ManualBookingModal({
       const endMinutes = d.getMinutes().toString().padStart(2, "0")
       const endTime = `${endHours}:${endMinutes}`
 
+      const basePriceBeforeCoupon = isManualPriceEdited && totalPrice
+        ? Number(totalPrice) + (appliedCoupon ? appliedCoupon.discountAmount : 0)
+        : calculatedPricing.totalPrice
+
+      const promoDiscounts = calculatedPricing.hasPromo
+        ? (calculatedPricing.regularSlotPrice - calculatedPricing.unitSlotPrice) * calculatedPricing.slotCount
+        : 0
+
+      const priceBeforeCoupon = Math.max(0, basePriceBeforeCoupon - promoDiscounts)
+
       const payload = {
         courtId: selectedCourtId,
         date: dateStr,
         startTime,
         endTime,
         duration: Number(duration),
-        price: String(numTotal),
+        price: String(priceBeforeCoupon),
         userEmail: userEmail.trim(),
         paymentMethod: isBonified ? 'coupon' : paymentMethod.toLowerCase(),
         posCommission: paymentMethod === 'pos' && !isBonified ? Number(posCommission) : undefined,
@@ -395,13 +405,10 @@ export function ManualBookingModal({
           notes: notes.trim() || undefined,
         },
         pricing: {
-          basePrice: calculatedPricing.totalPrice / Number(duration),
-          discounts:
-            (calculatedPricing.hasPromo
-              ? (calculatedPricing.regularSlotPrice - calculatedPricing.unitSlotPrice) * calculatedPricing.slotCount
-              : 0) + (appliedCoupon ? appliedCoupon.discountAmount : 0),
+          basePrice: basePriceBeforeCoupon,
+          discounts: promoDiscounts,
           taxes: 0,
-          totalPrice: numTotal,
+          totalPrice: priceBeforeCoupon,
         },
         couponCode: appliedCoupon ? appliedCoupon.code : undefined,
       }

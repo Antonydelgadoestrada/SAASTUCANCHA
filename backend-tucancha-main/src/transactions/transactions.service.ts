@@ -215,31 +215,45 @@ export class TransactionsService implements OnModuleInit {
 
   async recordFromManualReservationPayment(payment: any, booking: any, registeredByUserId: string) {
     try {
-      if (!payment || payment.amount <= 0) return;
+      if (!payment || payment.amount < 0) return;
       
+      const isZero = Number(payment.amount) === 0;
       const isAdvance = payment.type === 'ADELANTO';
-      const category = isAdvance ? TransactionCategory.RESERVATION_ADVANCE : TransactionCategory.RESERVATION_FULL;
+      const category = isZero 
+        ? TransactionCategory.RESERVATION_FULL 
+        : (isAdvance ? TransactionCategory.RESERVATION_ADVANCE : TransactionCategory.RESERVATION_FULL);
+
+      const resolvedClubId =
+        booking?.club?.id ||
+        booking?.clubId ||
+        booking?.court?.club?.id ||
+        booking?.court?.club ||
+        booking?.club;
+
+      const method = payment.paymentMethod || payment.method || (isZero ? 'CUPON' : 'CASH');
 
       await this.upsertTransaction('RESERVATION', `${booking.id}:MANUAL`, {
-        clubId: booking?.club?.id || booking?.court?.club?.id || booking?.club,
+        clubId: resolvedClubId,
         reservationId: booking.id,
         occurredAt: new Date(),
         direction: TransactionDirection.IN,
         category,
         origin: TransactionOrigin.MANUAL,
         registeredByUserId,
-        paymentMethod: payment.paymentMethod || payment.method || 'CASH',
+        paymentMethod: method,
         channel: 'MANUAL',
-        grossAmount: payment.amount,
+        grossAmount: payment.amount || 0,
         feeAmount: payment.feeAmount || 0,
         feePercent: payment.method === 'CARD' && payment.feeAmount > 0 ? Number(((payment.feeAmount / payment.amount) * 100).toFixed(2)) : 0,
-        netAmount: payment.netAmount || payment.amount,
+        netAmount: payment.netAmount || payment.amount || 0,
         currency: payment.currency || 'PEN',
         reservationTotal: Number((booking.pricing as any)?.totalPrice || (booking.pricing as any)?.basePrice || 0),
-        paidAccumulated: payment.amount,
+        paidAccumulated: payment.amount || 0,
         pendingAfter: isAdvance ? Math.max(0, Number((booking.pricing as any)?.totalPrice || 0) - payment.amount) : 0,
         status: TransactionStatus.APPROVED,
-        description: `Pago Manual ${isAdvance ? 'Adelanto' : 'Total'} - ${booking.id.slice(-5)}`,
+        description: isZero
+          ? `Reserva Bonificada (Cupón) - ${booking.id.slice(-5)}`
+          : `Pago Manual ${isAdvance ? 'Adelanto' : 'Total'} - ${booking.id.slice(-5)}`,
       });
     } catch (e) {
       this.logger.error(`Error recording manual reservation payment`, e);

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, ForbiddenException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, ForbiddenException, Optional, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Booking } from './booking.entity';
 import { Repository } from 'typeorm';
@@ -56,6 +56,7 @@ const getEndTime = (startTime: string, duration: number): string => {
 
 @Injectable()
 export class BookingService implements OnModuleInit {
+  private readonly logger = new Logger(BookingService.name);
   
   constructor(
     @InjectRepository(Booking)
@@ -380,6 +381,7 @@ export class BookingService implements OnModuleInit {
     }
 
     const createdBookings = [];
+    const paymentsToRecord: { payment: any; booking: any; userId: string }[] = [];
     const finalPricing = pricing
       ? {
           ...pricing,
@@ -519,22 +521,27 @@ export class BookingService implements OnModuleInit {
             throw new BadRequestException('El servicio de fidelidad no está disponible');
           }
 
+          const rawBasePrice = Number(finalPricing?.basePrice || singleTotalPrice || 0);
+          const promoDiscounts = Number(finalPricing?.discounts || 0);
+          const priceBeforeCoupon = Math.max(0, rawBasePrice - promoDiscounts);
+          const effectiveBaseForCoupon = priceBeforeCoupon > 0 ? priceBeforeCoupon : rawBasePrice;
+
           const couponResult = await this.loyaltyService.applyManualCouponInsideTransaction(manager, {
             clubId: court.club?.id || court.club,
             userId: userReservation.id,
             couponCode: dto.couponCode,
             bookingId: savedBooking.id,
             courtId: court.id,
-            basePrice: singleTotalPrice,
+            basePrice: effectiveBaseForCoupon,
           });
 
           const discountAmount = couponResult.discountAmount;
-          const newTotalPrice = Math.max(0, Number((singleTotalPrice - discountAmount).toFixed(2)));
+          const newTotalPrice = Math.max(0, Number((effectiveBaseForCoupon - discountAmount).toFixed(2)));
 
           savedBooking.pricing = {
             ...(finalPricing || {}),
-            basePrice: singleTotalPrice,
-            discounts: Number(((finalPricing?.discounts || 0) + discountAmount).toFixed(2)),
+            basePrice: rawBasePrice,
+            discounts: Number((promoDiscounts + discountAmount).toFixed(2)),
             totalPrice: newTotalPrice,
           };
 
@@ -564,6 +571,7 @@ export class BookingService implements OnModuleInit {
             const savedPayment = await manager.save(Payment, paymentData);
             savedBooking.payment = savedPayment;
             await manager.save(Booking, savedBooking);
+            paymentsToRecord.push({ payment: savedPayment, booking: savedBooking, userId: userReservation.id });
           } else {
             // newTotalPrice > 0: Cobro del saldo restante
             const rawPaid = dto.amountPaid !== undefined && dto.amountPaid !== null && String(dto.amountPaid).trim() !== ''
@@ -605,7 +613,7 @@ export class BookingService implements OnModuleInit {
               savedBooking.payment = savedPayment;
               await manager.save(Booking, savedBooking);
 
-              this.transactionsService.recordFromManualReservationPayment(savedPayment, savedBooking, userReservation.id).catch(() => {});
+              paymentsToRecord.push({ payment: savedPayment, booking: savedBooking, userId: userReservation.id });
             } else {
               await manager.save(Booking, savedBooking);
             }
@@ -640,8 +648,7 @@ export class BookingService implements OnModuleInit {
           savedBooking.payment = savedPayment;
           await manager.save(Booking, savedBooking);
 
-          // Inyectar al Libro de Transacciones (Ojo: llamando al servicio inyectado)
-          this.transactionsService.recordFromManualReservationPayment(savedPayment, savedBooking, userReservation.id).catch(() => {});
+          paymentsToRecord.push({ payment: savedPayment, booking: savedBooking, userId: userReservation.id });
         }
 
         createdBookings.push(savedBooking);
@@ -670,6 +677,15 @@ export class BookingService implements OnModuleInit {
         }
       }
     });
+
+    // 3. Registrar en Libro de Transacciones FUERA de la transacción atómica de BD
+    for (const item of paymentsToRecord) {
+      this.transactionsService
+        .recordFromManualReservationPayment(item.payment, item.booking, item.userId)
+        .catch((err) => {
+          this.logger.error(`Error registrando transacción para reserva ${item.booking?.id}:`, err);
+        });
+    }
 
     // Despachar notificaciones correspondientes
     for (const b of createdBookings) {
