@@ -676,12 +676,20 @@ export class LoyaltyService {
   ): Promise<{
     valid: boolean;
     redemptionId?: string;
+    code?: string;
     rewardType?: LoyaltyRewardType;
+    rewardName?: string;
     discountValue?: number | null;
+    discountAmount?: number;
     calculatedDiscount?: number;
+    netPrice?: number;
     newTotalPrice?: number;
+    originalPrice?: number;
+    requiresPayment?: boolean;
+    courtPriceDay?: number;
     message?: string;
     reason?: string;
+    user?: { id: string; email: string };
   }> {
     try {
       const { enabled } = await this.isLoyaltyActiveForClub(clubId);
@@ -788,11 +796,22 @@ export class LoyaltyService {
       return {
         valid: true,
         redemptionId: redemption.id,
+        code: redemption.code,
         rewardType,
+        rewardName: redemption.rewardNameSnapshot,
         discountValue: redemption.discountValueSnapshot,
+        discountAmount,
         calculatedDiscount: discountAmount,
+        netPrice,
         newTotalPrice: netPrice,
+        originalPrice: dto.basePrice,
+        requiresPayment: netPrice > 0,
+        courtPriceDay: Number(court.priceDay) || 0,
         message: `Cupón válido: descuento de S/ ${discountAmount.toFixed(2)}`,
+        user: {
+          id: targetUserId,
+          email: dto.userEmail,
+        },
       };
     } catch (error) {
       this.logger.error(

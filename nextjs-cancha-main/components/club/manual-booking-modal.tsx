@@ -267,7 +267,7 @@ export function ManualBookingModal({
     setCouponError(null)
 
     try {
-      const res = await previewClubCoupon({
+      const res: any = await previewClubCoupon({
         code,
         courtId: selectedCourtId,
         basePrice: calculatedPricing.totalPrice,
@@ -277,9 +277,28 @@ export function ManualBookingModal({
         userEmail: userEmail.trim() || undefined,
       })
 
-      setAppliedCoupon(res)
-      setTotalPrice(String(res.netPrice))
-      setAmountPaid(String(res.netPrice))
+      if (!res.valid) {
+        throw new Error(res.reason || res.message || "El cupón no es válido para esta reserva")
+      }
+
+      const discountAmount = Number(res.discountAmount ?? res.calculatedDiscount ?? 0)
+      const netPrice = Number(res.netPrice ?? res.newTotalPrice ?? Math.max(0, calculatedPricing.totalPrice - discountAmount))
+      const rewardName = res.rewardName || "Cupón de Descuento"
+      const couponCode = res.code || code
+
+      const normalizedCoupon = {
+        ...res,
+        code: couponCode,
+        rewardName,
+        discountAmount,
+        netPrice,
+        calculatedDiscount: discountAmount,
+        newTotalPrice: netPrice,
+      }
+
+      setAppliedCoupon(normalizedCoupon)
+      setTotalPrice(String(netPrice))
+      setAmountPaid(String(netPrice))
 
       if (res.user?.email && !userEmail.trim()) {
         setUserEmail(res.user.email)
@@ -289,14 +308,15 @@ export function ManualBookingModal({
       }
 
       toast.success(
-        res.netPrice === 0
-          ? `¡Cupón aplicado! Reserva 100% bonificada (${res.rewardName})`
-          : `¡Cupón aplicado! Descuento de S/ ${res.discountAmount.toFixed(2)} (${res.rewardName})`
+        netPrice === 0
+          ? `¡Cupón aplicado! Reserva 100% bonificada (${rewardName})`
+          : `¡Cupón aplicado! Descuento de S/ ${discountAmount.toFixed(2)} (${rewardName})`
       )
     } catch (err: any) {
       console.error("Error al validar cupón:", err)
       const msg =
         err?.response?.data?.message ||
+        err?.message ||
         "No se pudo validar el cupón. Verifica que el código sea correcto y pertenezca a este club."
       setCouponError(msg)
       setAppliedCoupon(null)
