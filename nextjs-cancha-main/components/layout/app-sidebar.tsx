@@ -187,6 +187,13 @@ export function AppSidebar({ user }: AppSidebarProps) {
       active: isActive("/club/loyalty"),
       locked: isClubSuspended,
     },
+    {
+      title: "Usuarios",
+      icon: UsersIcon,
+      href: "/club/users",
+      active: isActive("/club/users"),
+      locked: isClubSuspended,
+    },
   ]
 
   // Menú para administradores
@@ -223,8 +230,34 @@ export function AppSidebar({ user }: AppSidebarProps) {
     },
   ]
 
+  const HREF_PERMISSION_MAP: Record<string, string> = {
+    "/club/dashboard": "dashboard",
+    "/club/payments": "payments",
+    "/club/transactions": "transactions",
+    "/club/schedules": "schedules",
+    "/club/events": "events",
+    "/club/courts": "courts",
+    "/club/bookings": "bookings",
+    "/club/membership": "membership",
+    "/club/loyalty": "loyalty",
+  }
+
+  // Menú filtrado para recepcionistas (según permisos asignados, sin acceso a /club/users)
+  const receptionistMenu = clubMenu.filter((item: any) => {
+    if (item.href === "/club/users") return false
+    const requiredPermission = HREF_PERMISSION_MAP[item.href]
+    return requiredPermission ? user.permissions?.includes(requiredPermission) : false
+  })
+
   // Determinar qué menú mostrar según el rol del usuario
-  const menuItems = user.role === "ADMIN" ? adminMenu : user.role === "CLUB" ? clubMenu : userMenu
+  const menuItems =
+    user.role === "ADMIN"
+      ? adminMenu
+      : user.role === "CLUB"
+      ? clubMenu
+      : user.role === "RECEPCIONISTA"
+      ? receptionistMenu
+      : userMenu
 
   const handleLockedClick = (e: React.MouseEvent, title: string) => {
     e.preventDefault()
