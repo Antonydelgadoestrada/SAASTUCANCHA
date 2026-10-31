@@ -521,10 +521,8 @@ export class BookingService implements OnModuleInit {
             throw new BadRequestException('El servicio de fidelidad no está disponible');
           }
 
-          const rawBasePrice = Number(finalPricing?.basePrice || singleTotalPrice || 0);
-          const promoDiscounts = Number(finalPricing?.discounts || 0);
-          const priceBeforeCoupon = Math.max(0, rawBasePrice - promoDiscounts);
-          const effectiveBaseForCoupon = priceBeforeCoupon > 0 ? priceBeforeCoupon : rawBasePrice;
+          // Determinar el precio base real de la cancha para el cálculo del cupón
+          const courtBasePrice = Number(finalPricing?.basePrice || singleTotalPrice || 0);
 
           const couponResult = await this.loyaltyService.applyManualCouponInsideTransaction(manager, {
             clubId: court.club?.id || court.club,
@@ -532,16 +530,16 @@ export class BookingService implements OnModuleInit {
             couponCode: dto.couponCode,
             bookingId: savedBooking.id,
             courtId: court.id,
-            basePrice: effectiveBaseForCoupon,
+            basePrice: courtBasePrice,
           });
 
           const discountAmount = couponResult.discountAmount;
-          const newTotalPrice = Math.max(0, Number((effectiveBaseForCoupon - discountAmount).toFixed(2)));
+          const newTotalPrice = Math.max(0, Number((courtBasePrice - discountAmount).toFixed(2)));
 
           savedBooking.pricing = {
             ...(finalPricing || {}),
-            basePrice: rawBasePrice,
-            discounts: Number((promoDiscounts + discountAmount).toFixed(2)),
+            basePrice: courtBasePrice,
+            discounts: discountAmount,
             totalPrice: newTotalPrice,
           };
 
