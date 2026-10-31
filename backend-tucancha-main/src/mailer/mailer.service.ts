@@ -134,44 +134,66 @@ export class MailerService {
     clubName: string;
     rawPassword: string;
   }) {
-    const credentialsHtml = `
-      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
-        <h3 style="margin-top: 0; color: #1e293b; font-size: 16px; font-weight: 700; margin-bottom: 12px;">
-          🔑 Tus credenciales de acceso
-        </h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #334155; line-height: 1.8;">
-          <tr>
-            <td style="padding: 4px 0; width: 160px; font-weight: 600;">Correo:</td>
-            <td style="padding: 4px 0;"><strong>${to}</strong></td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: 600;">Contraseña de acceso:</td>
-            <td style="padding: 4px 0;"><code style="background-color: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-size: 14px; font-family: monospace;">${rawPassword}</code></td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: 600;">Rol asignado:</td>
-            <td style="padding: 4px 0;"><span style="background-color: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">Recepcionista</span></td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: 600;">Club asignado:</td>
-            <td style="padding: 4px 0;"><strong>${clubName}</strong></td>
-          </tr>
-        </table>
+    const html = `
+      <div style="max-width: 580px; margin: 0 auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #1a1e21; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        <!-- Header Verde Superior -->
+        <div style="background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%); padding: 26px 20px; text-align: center;">
+          <h1 style="color: #111827; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">⚽ TuCancha</h1>
+          <p style="color: #1e293b; margin: 4px 0 0 0; font-size: 13px; font-weight: 600;">La plataforma líder de reservas deportivas</p>
+        </div>
+
+        <!-- Contenedor Oscuro Principal -->
+        <div style="padding: 30px 24px; color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+          <h2 style="color: #22c55e; margin: 0 0 16px 0; font-size: 20px; font-weight: 700;">¡Bienvenido al Equipo de TuCancha!</h2>
+
+          <p style="color: #ffffff; font-size: 15px; font-weight: 700; margin: 0 0 14px 0;">Hola ${staffName},</p>
+
+          <p style="margin: 0 0 14px 0; color: #cbd5e1;">
+            Has sido registrado exitosamente como <strong style="color: #ffffff;">Recepcionista</strong> en el equipo de <strong style="color: #ffffff;">${clubName}</strong>.
+          </p>
+
+          <p style="margin: 0 0 22px 0; color: #94a3b8;">
+            A partir de ahora podrás acceder a la plataforma TuCancha para gestionar reservas, verificar pagos y atender a los clientes del club.
+          </p>
+
+          <!-- Caja de Credenciales -->
+          <div style="background-color: #131618; border: 1px solid #262c30; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h3 style="margin: 0 0 14px 0; color: #86efac; font-size: 15px; font-weight: 700;">
+              🔑 Tus Credenciales de Acceso:
+            </h3>
+            <ul style="list-style: none; padding: 0; margin: 0; line-height: 2;">
+              <li style="margin-bottom: 8px; color: #4ade80;">
+                <span style="color: #4ade80; font-weight: 600;">• Correo / Gmail:</span><br/>
+                <a href="mailto:${to}" style="color: #60a5fa; text-decoration: underline; font-weight: 500; padding-left: 14px;">${to}</a>
+              </li>
+              <li style="margin-bottom: 8px; color: #4ade80;">
+                <span style="color: #4ade80; font-weight: 600;">• Contraseña de acceso:</span><br/>
+                <span style="display: inline-block; padding-left: 14px; color: #4ade80; font-family: monospace; font-size: 15px; font-weight: 700;">${rawPassword}</span>
+              </li>
+              <li style="margin-bottom: 6px; color: #4ade80;">
+                <span style="color: #4ade80; font-weight: 600;">• Rol asignado:</span> <span style="color: #86efac;">Recepcionista</span>
+              </li>
+              <li style="margin-bottom: 0; color: #4ade80;">
+                <span style="color: #4ade80; font-weight: 600;">• Club asignado:</span> <span style="color: #86efac;">${clubName}</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Botón de Acción -->
+          <div style="text-align: center; margin: 26px 0 10px 0;">
+            <a href="${this.webUrl}/login" style="background-color: #16a34a; color: #ffffff; padding: 13px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;">
+              IR AL PANEL DE CONTROL
+            </a>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #131618; border-top: 1px solid #23272d; padding: 16px; text-align: center; font-size: 11px; color: #64748b;">
+          © ${new Date().getFullYear()} TuCancha. Todos los derechos reservados.<br/>
+          Si tienes dudas sobre tus permisos, consulta directamente con el administrador de tu club.
+        </div>
       </div>
     `;
-
-    const html = this.getEmailTemplate({
-      title: '¡Bienvenido al equipo de TuCancha!',
-      greeting: `Hola ${staffName},`,
-      message: `Has sido registrado exitosamente como <strong>Recepcionista</strong> en el equipo de <strong>${clubName}</strong>.<br/><br/>A partir de ahora podrás acceder a TuCancha para gestionar las funciones que el administrador del club te haya asignado.`,
-      bookingDetailsHtml: credentialsHtml,
-      actionButton: {
-        text: 'IR AL PANEL DE CONTROL',
-        url: `${this.webUrl}/login`,
-        color: '#16A34A',
-      },
-      footerNote: `Por motivos de seguridad, te recomendamos cambiar tu contraseña luego de iniciar sesión por primera vez.<br/>Si tienes dudas sobre tus permisos asignados, consulta directamente con el administrador de tu club.<br/><br/><strong>Equipo TuCancha</strong>`,
-    });
 
     return this.sendEmail({
       to,
