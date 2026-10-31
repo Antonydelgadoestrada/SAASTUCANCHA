@@ -1320,7 +1320,7 @@ export function LoyaltyContent() {
       {/* MODAL CREAR / EDITAR PREMIO */}
       {/* ================================================================= */}
       <Dialog open={isRewardModalOpen} onOpenChange={setIsRewardModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingReward ? "Editar Premio" : "Nuevo Premio"}
@@ -1548,7 +1548,7 @@ export function LoyaltyContent() {
       {/* MODAL RECHAZAR CANJE */}
       {/* ================================================================= */}
       <Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-destructive flex items-center gap-2">
               <AlertCircleIcon className="w-5 h-5" /> Rechazar Canje
