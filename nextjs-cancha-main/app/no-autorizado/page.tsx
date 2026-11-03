@@ -12,9 +12,28 @@ export default function NoAutorizadoPage() {
   const role = session?.user?.role as string | undefined
   const email = session?.user?.email
 
+  const permissions = (session?.user as any)?.permissions || []
+
   const getDashboardUrl = () => {
     if (role === "ADMIN") return "/admin/dashboard"
-    if (role === "CLUB" || role === "RECEPCIONISTA") return "/club/dashboard"
+    if (role === "CLUB") return "/club/dashboard"
+    if (role === "RECEPCIONISTA") {
+      if (permissions.length === 0 || permissions.includes("dashboard")) {
+        return "/club/dashboard"
+      }
+      const permRouteMap: Record<string, string> = {
+        bookings: "/club/bookings",
+        courts: "/club/courts",
+        schedules: "/club/schedules",
+        events: "/club/events",
+        payments: "/club/payments",
+        transactions: "/club/transactions",
+        membership: "/club/membership",
+        loyalty: "/club/loyalty",
+      }
+      const firstValid = permissions.map((p: string) => permRouteMap[p]).find(Boolean)
+      return firstValid || "/club/bookings"
+    }
     return "/user/dashboard"
   }
 
@@ -26,12 +45,12 @@ export default function NoAutorizadoPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 bg-zinc-950 text-white overflow-hidden">
+    <div className="fixed inset-0 z-50 w-full min-h-screen flex items-center justify-center p-4 sm:p-6 bg-zinc-950 text-white overflow-y-auto">
       {/* Background glow effects */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative z-10 max-w-md w-full bg-zinc-900/80 border border-zinc-800 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
+      <div className="relative z-10 max-w-md w-full mx-auto my-auto bg-zinc-900/90 border border-zinc-800 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
         {/* Brand / Logo */}
         <div className="flex items-center justify-center gap-2 mb-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20">
