@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { Calendar, Shield, Search, CheckCircle, ChevronLeft, ChevronRight, Wallet } from "lucide-react"
+import { Calendar, Shield, Search, CheckCircle, ChevronLeft, ChevronRight, Wallet, Award, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const featuresData = [
@@ -44,6 +44,32 @@ const featuresData = [
     ],
     image: "/payment_flexibility_mockup.png",
     alt: "Flexibilidad de Pagos y Cobros"
+  },
+  {
+    tag: "Fidelización de Clientes",
+    tagIcon: <Award className="h-4.5 w-4.5" />,
+    title: "Programa de Puntos y Fidelidad para Jugadores Recurrentes",
+    desc: "Convierte a los jugadores ocasionales en clientes habituales de tu club deportivo. Recompensa cada reserva completada con puntos acumulables que pueden canjear por horas gratis, descuentos exclusivos o consumiciones, con validación rápida mediante códigos únicos.",
+    bullets: [
+      "Acumulación automática de puntos por cada reserva y hora jugada.",
+      "Catálogo de premios personalizable: horas gratis, 20% OFF y bebidas.",
+      "Mesa de validación en caja con códigos alfanuméricos en tiempo real."
+    ],
+    image: "/loyalty_points_mockup.jpg",
+    alt: "Programa de Puntos y Fidelidad para Clubes Deportivos"
+  },
+  {
+    tag: "Control y Multi-Usuario",
+    tagIcon: <Users className="h-4.5 w-4.5" />,
+    title: "Gestión de Personal y Roles con Permisos Granulares",
+    desc: "Delega la operación de tu club con total seguridad y orden. Crea perfiles independientes para recepcionistas y encargados de turno, asignándoles únicamente acceso a los módulos que necesitan sin exponer las finanzas ni métricas confidenciales del club.",
+    bullets: [
+      "Permisos específicos por módulo: reservas, canchas, horarios, pagos y fidelidad.",
+      "Invitación y envío automático de credenciales seguras por correo electrónico.",
+      "Monitoreo de actividad y activación o desactivación de accesos en un solo clic."
+    ],
+    image: "/club_users_mockup.jpg",
+    alt: "Gestión de Personal y Recepcionistas del Club"
   }
 ]
 
