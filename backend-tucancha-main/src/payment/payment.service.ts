@@ -864,8 +864,7 @@ export class PaymentService {
         b.id as "bookingId", b.pricing, b.duration, b.status as "bookingStatus",
         c."priceDay", c."priceNight"
       FROM payment p
-      LEFT JOIN payment_bookings_booking pbb ON p.id = pbb."paymentId"
-      LEFT JOIN booking b ON pbb."bookingId" = b.id
+      JOIN booking b ON b."paymentId" = p.id
       LEFT JOIN court c ON b."courtId" = c.id
       WHERE b."clubId" = $1 OR c."clubId" = $1
     `;
@@ -876,9 +875,8 @@ export class PaymentService {
         c."priceDay", c."priceNight"
       FROM booking b
       LEFT JOIN court c ON b."courtId" = c.id
-      LEFT JOIN payment_bookings_booking pbb ON b.id = pbb."bookingId"
       WHERE (b."clubId" = $1 OR c."clubId" = $1)
-      AND pbb."paymentId" IS NULL
+      AND b."paymentId" IS NULL
     `;
     
     const [rawPayments, rawBookings] = await Promise.all([
