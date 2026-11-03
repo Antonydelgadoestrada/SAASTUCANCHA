@@ -144,7 +144,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para consultar métricas de pagos');
       }
@@ -167,7 +167,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para ver los pagos del club');
       }
@@ -187,7 +187,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para auditar comprobantes de pago');
       }
@@ -203,7 +203,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para auditar comprobantes de pago');
       }
@@ -223,7 +223,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para liquidar saldos de pago');
       }
@@ -239,7 +239,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para liquidar saldos de pago');
       }
@@ -259,7 +259,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para auditar comprobantes de saldo');
       }
@@ -275,7 +275,7 @@ import { memoryStorage, File as MulterFile } from 'multer';
     ) {
       if (
         user.role === UserRole.RECEPCIONISTA &&
-        !user.permissions?.includes('payments')
+        !user.permissions?.some((p) => ['payments', 'bookings'].includes(p))
       ) {
         throw new ForbiddenException('No tienes permisos para auditar comprobantes de saldo');
       }

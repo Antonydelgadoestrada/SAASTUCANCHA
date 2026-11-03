@@ -54,12 +54,12 @@ export const STAFF_PERMISSIONS_LIST: PermissionDefinition[] = [
   {
     id: "bookings",
     label: "Reservas",
-    description: "Gestión, creación, pagos manuales y cancelación de reservas.",
+    description: "Gestión de reservas, auditoría de comprobantes de pago, cobro de saldos y cancelaciones.",
   },
   {
     id: "payments",
     label: "Pagos y Cobros",
-    description: "Auditoría de comprobantes y gestión de cobros.",
+    description: "Configuración de medios de pago del club (Yape, Plin, Mercado Pago) y cobros.",
   },
   {
     id: "transactions",
