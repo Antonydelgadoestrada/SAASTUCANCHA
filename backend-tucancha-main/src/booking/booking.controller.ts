@@ -37,7 +37,11 @@ export class BookingController {
   @UseGuards(JwtAuthGuard)
   @Get('/club')
   findAllByClub(@GetUser() user: User): Promise<Booking[]> {
-    if (user.role === UserRole.RECEPCIONISTA && !user.permissions?.includes('bookings')) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('bookings') &&
+      !user.permissions?.includes('dashboard')
+    ) {
       throw new ForbiddenException('No tienes permisos para ver las reservas del club');
     }
     return this.bookingService.findAllByClub(user.club);

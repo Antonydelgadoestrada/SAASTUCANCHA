@@ -48,7 +48,7 @@ export class CourtController {
     const canList =
       user.role === UserRole.CLUB ||
       user.role === UserRole.ADMIN ||
-      (user.role === UserRole.RECEPCIONISTA && user.permissions?.includes('courts'));
+      (user.role === UserRole.RECEPCIONISTA && Boolean(user.club?.id));
     if (!canList) {
       throw new ForbiddenException('No tienes permisos para listar canchas');
     }
