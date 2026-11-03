@@ -18,6 +18,13 @@ import {
   RefreshCw,
   Tag,
   CheckCircle2,
+  Percent,
+  Pencil,
+  Trash2,
+  Plus,
+  Power,
+  CalendarDays,
+  AlertTriangle,
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -29,6 +36,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
   DialogContent,
@@ -37,9 +45,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getHourlyOccupancyDemand } from "@/lib/dashboard"
-import { editCourts, getAllCourtsByClub } from "@/lib/courts"
+import { getAllCourtsByClub } from "@/lib/courts"
+import {
+  Promotion,
+  getClubPromotions,
+  createPromotion,
+  updatePromotion,
+  togglePromotion,
+  deletePromotion,
+  CreatePromotionDto,
+  UpdatePromotionDto,
+} from "@/lib/promotions"
+
+const DAYS_OF_WEEK = [
+  { value: 1, label: "Lun", fullLabel: "Lunes" },
+  { value: 2, label: "Mar", fullLabel: "Martes" },
+  { value: 3, label: "Mié", fullLabel: "Miércoles" },
+  { value: 4, label: "Jue", fullLabel: "Jueves" },
+  { value: 5, label: "Vie", fullLabel: "Viernes" },
+  { value: 6, label: "Sáb", fullLabel: "Sábado" },
+  { value: 0, label: "Dom", fullLabel: "Domingo" },
+]
+
+const PROMO_HOURS = [
+  "06:00", "06:30", "07:00", "07:30", "08:00", "08:30",
+  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+  "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30", "20:00", "20:30",
+  "21:00", "21:30", "22:00", "22:30", "23:00", "23:30",
+]
 
 export function HourlyOccupancyView() {
   const [loading, setLoading] = useState(true)
@@ -48,77 +95,184 @@ export function HourlyOccupancyView() {
   const [timePreset, setTimePreset] = useState<string>("30days")
   const [data, setData] = useState<any>(null)
   const [hoveredCell, setHoveredCell] = useState<{ day: number; hour: number } | null>(null)
-
-  // Estado para Modal de Configuración de Promoción Personalizada
-  const [promoModalOpen, setPromoModalOpen] = useState(false)
-  const [promoCourtId, setPromoCourtId] = useState<string>("all")
-  const [promoDayPrice, setPromoDayPrice] = useState<string>("")
-  const [promoNightPrice, setPromoNightPrice] = useState<string>("")
-  const [promoTimeRange, setPromoTimeRange] = useState<string>("")
-  const [promoDayLabel, setPromoDayLabel] = useState<string>("")
-  const [isSavingPromo, setIsSavingPromo] = useState(false)
   const [clubCourts, setClubCourts] = useState<any[]>([])
 
-  // Cargar canchas del club para el modal
+  // Estado para gestión de Promociones de Horarios Muertos
+  const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [loadingPromotions, setLoadingPromotions] = useState<boolean>(true)
+
+  // Estado para Modal de Creación / Edición de Promoción
+  const [promoModalOpen, setPromoModalOpen] = useState(false)
+  const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null)
+  const [promoName, setPromoName] = useState<string>("")
+  const [promoDescription, setPromoDescription] = useState<string>("")
+  const [promoCourtId, setPromoCourtId] = useState<string>("all")
+  const [promoDiscountPercentage, setPromoDiscountPercentage] = useState<number>(20)
+  const [promoStartTime, setPromoStartTime] = useState<string>("14:00")
+  const [promoEndTime, setPromoEndTime] = useState<string>("17:00")
+  const [promoDaysOfWeek, setPromoDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5])
+  const [promoIsActive, setPromoIsActive] = useState<boolean>(true)
+  const [isSavingPromo, setIsSavingPromo] = useState<boolean>(false)
+
+  // Estado para confirmación de eliminación
+  const [deleteConfirmPromo, setDeleteConfirmPromo] = useState<Promotion | null>(null)
+  const [isDeletingPromo, setIsDeletingPromo] = useState<boolean>(false)
+
+  // Cargar canchas del club
   useEffect(() => {
     getAllCourtsByClub()
       .then((res) => {
         if (Array.isArray(res)) setClubCourts(res)
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error("Error cargando canchas del club:", err)
+      })
   }, [])
 
-  const handleOpenPromoModal = (params: {
+  // Cargar promociones configuradas del club
+  const fetchPromotions = async () => {
+    setLoadingPromotions(true)
+    try {
+      const res = await getClubPromotions()
+      if (Array.isArray(res)) {
+        setPromotions(res)
+      }
+    } catch (err) {
+      console.error("Error al cargar promociones del club:", err)
+    } finally {
+      setLoadingPromotions(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPromotions()
+  }, [])
+
+  // Abrir modal para crear nueva promoción
+  const handleOpenCreatePromoModal = (params?: {
     timeRange?: string
     courtId?: string
     dayLabel?: string
-    suggestedPromoDay?: number
-    suggestedPromoNight?: number
+    dayNumber?: number
+    suggestedDiscount?: number
+    name?: string
   }) => {
-    setPromoTimeRange(params.timeRange || "Horario seleccionado")
-    setPromoDayLabel(params.dayLabel || "Todos los días aplicables")
-    setPromoCourtId(params.courtId || selectedCourtId || "all")
+    setEditingPromotion(null)
 
-    const target = clubCourts.find((c) => c.id?.toString() === (params.courtId || selectedCourtId))
-    if (target) {
-      setPromoDayPrice(target.promoDay ? String(target.promoDay) : target.priceDay ? String(Math.round(target.priceDay * 0.75)) : "")
-      setPromoNightPrice(target.promoNight ? String(target.promoNight) : target.priceNight ? String(Math.round(target.priceNight * 0.8)) : "")
+    let start = "14:00"
+    let end = "17:00"
+    if (params?.timeRange) {
+      const parts = params.timeRange.split("-").map((s) => s.trim())
+      if (parts.length === 2) {
+        start = parts[0].length === 5 ? parts[0] : parts[0].padStart(5, "0")
+        end = parts[1].length === 5 ? parts[1] : parts[1].padStart(5, "0")
+      }
+    }
+    setPromoStartTime(start)
+    setPromoEndTime(end)
+
+    if (typeof params?.dayNumber === "number") {
+      setPromoDaysOfWeek([params.dayNumber])
     } else {
-      setPromoDayPrice(params.suggestedPromoDay ? String(params.suggestedPromoDay) : "")
-      setPromoNightPrice(params.suggestedPromoNight ? String(params.suggestedPromoNight) : "")
+      setPromoDaysOfWeek([1, 2, 3, 4, 5])
     }
 
+    const court = params?.courtId || selectedCourtId || "all"
+    setPromoCourtId(court)
+
+    const discount = params?.suggestedDiscount || 20
+    setPromoDiscountPercentage(discount)
+
+    const dayText = params?.dayLabel ? ` (${params.dayLabel})` : ""
+    setPromoName(params?.name || `Promo Horario Muerto ${start} - ${end}${dayText}`)
+    setPromoDescription("Descuento especial automático para incentivar ocupación en horario muerto.")
+    setPromoIsActive(true)
     setPromoModalOpen(true)
   }
 
+  // Abrir modal para editar promoción existente
+  const handleOpenEditPromoModal = (promo: Promotion) => {
+    setEditingPromotion(promo)
+    setPromoName(promo.name)
+    setPromoDescription(promo.description || "")
+    setPromoCourtId(promo.applyToAllCourts || !promo.courtId ? "all" : String(promo.courtId))
+    setPromoDiscountPercentage(Number(promo.discountPercentage))
+    setPromoStartTime(promo.startTime)
+    setPromoEndTime(promo.endTime)
+    setPromoDaysOfWeek(Array.isArray(promo.daysOfWeek) ? promo.daysOfWeek : [1, 2, 3, 4, 5])
+    setPromoIsActive(promo.isActive)
+    setPromoModalOpen(true)
+  }
+
+  // Guardar (crear o actualizar) promoción
   const handleSavePromo = async () => {
-    if (!promoDayPrice && !promoNightPrice) {
-      toast.error("Por favor ingresa al menos un precio promocional diurno o nocturno")
+    if (!promoName.trim()) {
+      toast.error("Por favor ingresa un nombre para la promoción")
+      return
+    }
+
+    const discount = Number(promoDiscountPercentage)
+    if (isNaN(discount) || discount <= 0 || discount > 100) {
+      toast.error("El porcentaje de descuento debe ser mayor a 0% y como máximo 100%")
+      return
+    }
+
+    if (!promoStartTime || !promoEndTime) {
+      toast.error("Por favor especifica el horario de inicio y fin")
+      return
+    }
+
+    if (promoStartTime >= promoEndTime) {
+      toast.error("El horario de inicio debe ser anterior al horario de finalización")
+      return
+    }
+
+    if (!promoDaysOfWeek || promoDaysOfWeek.length === 0) {
+      toast.error("Selecciona al menos un día de la semana para la promoción")
       return
     }
 
     setIsSavingPromo(true)
     try {
-      const courtsToUpdate = promoCourtId === "all"
-        ? clubCourts
-        : clubCourts.filter((c) => c.id?.toString() === promoCourtId)
+      const applyToAllCourts = promoCourtId === "all"
+      const courtId = applyToAllCourts ? null : Number(promoCourtId)
 
-      if (courtsToUpdate.length === 0 && clubCourts.length > 0) {
-        courtsToUpdate.push(clubCourts[0])
-      }
-
-      for (const court of courtsToUpdate) {
-        await editCourts({
-          ...court,
-          promoDay: promoDayPrice ? Number(promoDayPrice) : null,
-          promoNight: promoNightPrice ? Number(promoNightPrice) : null,
+      if (editingPromotion) {
+        const payload: UpdatePromotionDto = {
+          name: promoName.trim(),
+          description: promoDescription.trim() || undefined,
+          discountPercentage: discount,
+          startTime: promoStartTime,
+          endTime: promoEndTime,
+          daysOfWeek: promoDaysOfWeek,
+          applyToAllCourts,
+          courtId,
+          isActive: promoIsActive,
+        }
+        await updatePromotion(editingPromotion.id, payload)
+        toast.success("¡Promoción actualizada exitosamente!")
+      } else {
+        const payload: CreatePromotionDto = {
+          name: promoName.trim(),
+          description: promoDescription.trim() || undefined,
+          discountPercentage: discount,
+          startTime: promoStartTime,
+          endTime: promoEndTime,
+          daysOfWeek: promoDaysOfWeek,
+          applyToAllCourts,
+          courtId,
+          isActive: promoIsActive,
+        }
+        await createPromotion(payload)
+        toast.success("¡Promoción creada y guardada en base de datos!", {
+          description: `Se aplicará automáticamente ${discount}% OFF en ${
+            applyToAllCourts ? "todas las canchas" : "la cancha seleccionada"
+          } de ${promoStartTime} a ${promoEndTime}.`,
         })
       }
 
-      toast.success("¡Promoción personalizada configurada exitosamente!", {
-        description: `Se aplicó precio promo a ${courtsToUpdate.length} cancha(s) para la franja ${promoTimeRange}.`,
-      })
       setPromoModalOpen(false)
+      fetchPromotions()
       fetchData()
     } catch (err: any) {
       toast.error("Error al guardar la promoción", {
@@ -128,6 +282,77 @@ export function HourlyOccupancyView() {
       setIsSavingPromo(false)
     }
   }
+
+  // Alternar estado activo / inactivo
+  const handleTogglePromotion = async (promo: Promotion) => {
+    try {
+      const updated = await togglePromotion(promo.id)
+      setPromotions((prev) =>
+        prev.map((p) => (p.id === promo.id ? { ...p, isActive: updated.isActive } : p))
+      )
+      toast.success(
+        updated.isActive
+          ? `Promoción "${promo.name}" activada`
+          : `Promoción "${promo.name}" pausada`
+      )
+      fetchData()
+    } catch (err: any) {
+      toast.error("Error al cambiar estado de la promoción", {
+        description: err.response?.data?.message || err.message,
+      })
+    }
+  }
+
+  // Eliminar promoción
+  const handleDeletePromotion = async () => {
+    if (!deleteConfirmPromo) return
+    setIsDeletingPromo(true)
+    try {
+      await deletePromotion(deleteConfirmPromo.id)
+      setPromotions((prev) => prev.filter((p) => p.id !== deleteConfirmPromo.id))
+      toast.success(`Promoción "${deleteConfirmPromo.name}" eliminada`)
+      setDeleteConfirmPromo(null)
+      fetchData()
+    } catch (err: any) {
+      toast.error("Error al eliminar la promoción", {
+        description: err.response?.data?.message || err.message,
+      })
+    } finally {
+      setIsDeletingPromo(false)
+    }
+  }
+
+  // Toggle de un día en el selector de días
+  const handleToggleDay = (dayValue: number) => {
+    if (promoDaysOfWeek.includes(dayValue)) {
+      if (promoDaysOfWeek.length === 1) {
+        toast.error("Debe quedar al menos un día seleccionado")
+        return
+      }
+      setPromoDaysOfWeek(promoDaysOfWeek.filter((d) => d !== dayValue))
+    } else {
+      setPromoDaysOfWeek([...promoDaysOfWeek, dayValue].sort((a, b) => a - b))
+    }
+  }
+
+  // Selección rápida de días
+  const handleSelectDaysPreset = (preset: "all" | "weekdays" | "weekends") => {
+    if (preset === "all") {
+      setPromoDaysOfWeek([0, 1, 2, 3, 4, 5, 6])
+    } else if (preset === "weekdays") {
+      setPromoDaysOfWeek([1, 2, 3, 4, 5])
+    } else if (preset === "weekends") {
+      setPromoDaysOfWeek([6, 0])
+    }
+  }
+
+  // Cancha objetivo para simulador de precios
+  const targetCourtForPreview = useMemo(() => {
+    if (promoCourtId !== "all") {
+      return clubCourts.find((c) => String(c.id) === promoCourtId) || clubCourts[0]
+    }
+    return clubCourts[0]
+  }, [promoCourtId, clubCourts])
 
   // Obtener fechas según preset
   const dateRange = useMemo(() => {
@@ -216,6 +441,23 @@ export function HourlyOccupancyView() {
     return "❄️ Muerto"
   }
 
+  // Formato legible de días de la semana
+  const formatDaysDisplay = (days: number[]) => {
+    if (!days || days.length === 0) return "Ninguno"
+    if (days.length === 7) return "Todos los días (Lun-Dom)"
+    const sorted = [...days].sort((a, b) => a - b)
+    if (sorted.length === 5 && [1, 2, 3, 4, 5].every((d) => sorted.includes(d))) {
+      return "Lunes a Viernes"
+    }
+    if (sorted.length === 2 && [0, 6].every((d) => sorted.includes(d))) {
+      return "Fines de Semana (Sáb-Dom)"
+    }
+    const dayMap: Record<number, string> = {
+      0: "Dom", 1: "Lun", 2: "Mar", 3: "Mié", 4: "Jue", 5: "Vie", 6: "Sáb",
+    }
+    return sorted.map((d) => dayMap[d]).join(", ")
+  }
+
   return (
     <div className="space-y-6">
       {/* Barra superior de Filtros Inteligentes */}
@@ -278,9 +520,18 @@ export function HourlyOccupancyView() {
 
         <div className="flex items-center gap-2">
           <Button
+            variant="default"
+            size="sm"
+            onClick={() => handleOpenCreatePromoModal()}
+            className="h-9 text-xs gap-1.5 bg-primary font-semibold shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nueva Promoción
+          </Button>
+          <Button
             variant="outline"
             size="sm"
-            onClick={fetchData}
+            onClick={() => { fetchData(); fetchPromotions(); }}
             disabled={loading}
             className="h-9 text-xs gap-1.5"
           >
@@ -481,8 +732,9 @@ export function HourlyOccupancyView() {
                             <Tooltip key={day}>
                               <TooltipTrigger asChild>
                                 <div
-                                  onClick={() => handleOpenPromoModal({
+                                  onClick={() => handleOpenCreatePromoModal({
                                     timeRange: `${hourLabel} - ${nextHourLabel}`,
+                                    dayNumber: day,
                                     dayLabel: dayName,
                                     courtId: selectedCourtId,
                                   })}
@@ -535,7 +787,7 @@ export function HourlyOccupancyView() {
                                 </div>
                                 {cell.occupancyRate < 20 && (
                                   <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded border border-amber-200 dark:border-amber-900 mt-1 cursor-pointer">
-                                    💡 <em>Haz clic en este bloque para configurar precio promocional aquí.</em>
+                                    💡 <em>Haz clic en este bloque para configurar promoción de horario muerto aquí.</em>
                                   </p>
                                 )}
                                 {cell.occupancyRate >= 75 && (
@@ -603,9 +855,10 @@ export function HourlyOccupancyView() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleOpenPromoModal({
+                      onClick={() => handleOpenCreatePromoModal({
                         timeRange: block.timeRange,
                         courtId: selectedCourtId,
+                        name: `Promo ${block.timeRange}`,
                       })}
                       className="h-7 text-xs text-primary font-semibold hover:bg-primary/10 gap-1 px-2.5"
                     >
@@ -668,107 +921,455 @@ export function HourlyOccupancyView() {
         </Card>
       </div>
 
-      {/* MODAL CONFIGURAR PROMOCIÓN DIRECTA */}
+      {/* SECCIÓN: GESTIÓN DE PROMOCIONES DE HORARIOS MUERTOS CONFIGURADAS */}
+      <Card className="border-border shadow-sm">
+        <CardHeader className="pb-3 border-b">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-amber-500" />
+                  Promociones Configuradas en Horarios Muertos
+                </CardTitle>
+                <Badge variant="secondary" className="text-xs font-semibold">
+                  {promotions.length} {promotions.length === 1 ? "configurada" : "configuradas"}
+                </Badge>
+              </div>
+              <CardDescription className="text-xs mt-0.5">
+                Reglas activas en PostgreSQL que se aplican automáticamente a las reservas de clientes y reservas manuales.
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => handleOpenCreatePromoModal()}
+              className="h-8 text-xs gap-1.5 bg-primary font-semibold"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nueva Promoción
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-4 sm:p-6">
+          {loadingPromotions ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : promotions.length === 0 ? (
+            <div className="py-10 text-center space-y-3 border border-dashed rounded-xl p-6 bg-muted/20">
+              <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                <Tag className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-foreground">
+                  Aún no tienes promociones configuradas
+                </p>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  Aprovecha las sugerencias de horarios muertos o haz clic en cualquier celda gris del mapa de calor para incentivar reservas con descuentos automáticos.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleOpenCreatePromoModal()}
+                className="text-xs gap-1.5 font-semibold"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Crear Mi Primera Promoción
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {promotions.map((promo) => {
+                const courtName = promo.applyToAllCourts || !promo.court
+                  ? "🏟️ Todas las canchas del club"
+                  : `🏟️ ${promo.court.name} (${formatSportName(promo.court.sport || promo.court.type || "")})`
+
+                return (
+                  <div
+                    key={promo.id}
+                    className={`p-4 rounded-xl border transition-all duration-150 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                      promo.isActive
+                        ? "bg-card border-border hover:border-primary/50 shadow-xs"
+                        : "bg-muted/40 border-muted opacity-70"
+                    }`}
+                  >
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-sm text-foreground">
+                          {promo.name}
+                        </span>
+                        <Badge
+                          variant={promo.isActive ? "default" : "secondary"}
+                          className={`text-[10px] font-semibold ${
+                            promo.isActive
+                              ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                              : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                          }`}
+                        >
+                          {promo.isActive ? "Activa" : "Pausada"}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 font-bold">
+                          {promo.discountPercentage}% OFF
+                        </Badge>
+                      </div>
+
+                      {promo.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {promo.description}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground pt-0.5">
+                        <span className="flex items-center gap-1 font-medium text-foreground">
+                          {courtName}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <strong className="text-foreground">{promo.startTime} - {promo.endTime}</strong>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <CalendarDays className="h-3.5 w-3.5 text-primary" />
+                          {formatDaysDisplay(promo.daysOfWeek)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                      <div className="flex items-center gap-1.5 mr-2">
+                        <Switch
+                          checked={promo.isActive}
+                          onCheckedChange={() => handleTogglePromotion(promo)}
+                          aria-label="Alternar promoción activa"
+                        />
+                        <span className="text-xs text-muted-foreground font-medium hidden sm:inline">
+                          {promo.isActive ? "Activa" : "Pausa"}
+                        </span>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEditPromoModal(promo)}
+                        className="h-8 text-xs gap-1 px-2.5"
+                      >
+                        <Pencil className="h-3 w-3 text-muted-foreground" />
+                        <span className="hidden sm:inline">Editar</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteConfirmPromo(promo)}
+                        className="h-8 text-xs text-destructive hover:bg-destructive/10 px-2"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* MODAL CONFIGURAR / EDITAR PROMOCIÓN */}
       <Dialog open={promoModalOpen} onOpenChange={setPromoModalOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
               <Sparkles className="h-5 w-5 text-amber-500" />
-              Configurar Promoción para Horario Muerto
+              {editingPromotion ? "Editar Promoción de Horario Muerto" : "Configurar Promoción para Horario Muerto"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Establece tarifas promocionales con descuento para incentivar reservas en los horarios de baja afluencia.
+              Configura descuentos automáticos por franja horaria y días de la semana para impulsar reservas en horarios desocupados.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="p-3 rounded-lg bg-muted/60 border text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Franja Horaria:</span>
-                <span className="font-bold text-foreground">{promoTimeRange}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Día / Período:</span>
-                <span className="font-medium text-foreground">{promoDayLabel}</span>
-              </div>
+          <div className="space-y-4 py-2 text-xs">
+            {/* Nombre de la Promoción */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Nombre de la Promoción *</Label>
+              <Input
+                placeholder="Ej. Promo Tardes Muertas 20% OFF"
+                className="text-xs"
+                value={promoName}
+                onChange={(e) => setPromoName(e.target.value)}
+              />
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold">Aplicar a la Cancha:</Label>
+            {/* Alcance de Canchas */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Canchas Aplicables</Label>
               <Select value={promoCourtId} onValueChange={setPromoCourtId}>
                 <SelectTrigger className="text-xs">
-                  <SelectValue placeholder="Seleccionar cancha" />
+                  <SelectValue placeholder="Seleccionar alcance" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">🏟️ Todas las Canchas del Club</SelectItem>
                   {clubCourts.map((c) => (
                     <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.name} ({c.sport || c.type || "Cancha"})
+                      {c.name} {c.sport || c.type ? `(${formatSportName(c.sport || c.type)})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {promoCourtId === "all"
+                  ? "Aplica a todas las canchas actuales y futuras pertenecientes a este club."
+                  : "Aplica únicamente a la cancha específica seleccionada."}
+              </p>
             </div>
 
+            {/* Días de Aplicación con Selector Rápido */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Días de Aplicación *</Label>
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDaysPreset("weekdays")}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Lun-Vie
+                  </button>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDaysPreset("weekends")}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Sáb-Dom
+                  </button>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDaysPreset("all")}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Todos
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1.5">
+                {DAYS_OF_WEEK.map((d) => {
+                  const isSelected = promoDaysOfWeek.includes(d.value)
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => handleToggleDay(d.value)}
+                      className={`h-9 rounded-lg border text-xs font-semibold transition-all ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-muted/50 text-muted-foreground hover:bg-muted border-border"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Franja Horaria (Inicio y Fin) */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Precio Promo Día (S/)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground">S/</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="Ej. 35"
-                    className="pl-8 text-xs font-semibold"
-                    value={promoDayPrice}
-                    onChange={(e) => setPromoDayPrice(e.target.value)}
-                  />
-                </div>
-                <p className="text-[10px] text-muted-foreground">Antes de las 18:00</p>
+                <Label className="text-xs font-semibold">Hora de Inicio (Desde) *</Label>
+                <Select value={promoStartTime} onValueChange={setPromoStartTime}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Inicio" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {PROMO_HOURS.map((hour) => (
+                      <SelectItem key={hour} value={hour}>
+                        {hour}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Precio Promo Noche (S/)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground">S/</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="Ej. 50"
-                    className="pl-8 text-xs font-semibold"
-                    value={promoNightPrice}
-                    onChange={(e) => setPromoNightPrice(e.target.value)}
-                  />
-                </div>
-                <p className="text-[10px] text-muted-foreground">A partir de las 18:00</p>
+                <Label className="text-xs font-semibold">Hora de Fin (Hasta) *</Label>
+                <Select value={promoEndTime} onValueChange={setPromoEndTime}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Fin" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {PROMO_HOURS.map((hour) => (
+                      <SelectItem key={hour} value={hour}>
+                        {hour}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            <p className="text-[11px] text-muted-foreground bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded border border-amber-200 dark:border-amber-900 flex items-start gap-1.5">
-              <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <span>
-                Esta tarifa promocional se reflejará directamente en el calendario y durante la búsqueda de los clientes. Deja en blanco para no aplicar promo a ese turno.
-              </span>
-            </p>
+            {/* Porcentaje de Descuento */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Porcentaje de Descuento (%) *</Label>
+                <span className="text-xs font-bold text-primary">
+                  {promoDiscountPercentage}% de descuento
+                </span>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">%</span>
+                <Input
+                  type="number"
+                  min="1"
+                  max="100"
+                  step="1"
+                  placeholder="Ej. 20"
+                  className="pl-8 text-xs font-bold"
+                  value={promoDiscountPercentage}
+                  onChange={(e) => setPromoDiscountPercentage(Number(e.target.value))}
+                />
+              </div>
+
+              {/* Botones rápidos de descuento */}
+              <div className="flex items-center gap-1.5 pt-1">
+                {[10, 15, 20, 25, 30, 40].map((pct) => (
+                  <Button
+                    key={pct}
+                    type="button"
+                    variant={promoDiscountPercentage === pct ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPromoDiscountPercentage(pct)}
+                    className="h-6 text-[10px] px-2"
+                  >
+                    {pct}%
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* SIMULADOR DE PRECIOS EN VIVO */}
+            {targetCourtForPreview && (
+              <div className="p-3 rounded-xl bg-muted/60 border space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5 text-primary" />
+                    Simulación de Tarifas con {promoDiscountPercentage}% OFF
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Cancha: {targetCourtForPreview.name}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                  {/* Tarifa Día */}
+                  <div className="p-2 rounded-lg bg-card border">
+                    <p className="text-muted-foreground font-medium">Tarifa Diurna (antes 18:00)</p>
+                    <div className="mt-1 flex items-baseline gap-1.5">
+                      <span className="text-muted-foreground line-through text-[10px]">
+                        S/ {(Number(targetCourtForPreview.priceDay || 0) * 2).toFixed(2)}/h
+                      </span>
+                      <span className="font-bold text-emerald-600 text-xs">
+                        S/ {(Number(targetCourtForPreview.priceDay || 0) * 2 * (1 - (Number(promoDiscountPercentage) || 0) / 100)).toFixed(2)}/h
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">
+                      S/ {(Number(targetCourtForPreview.priceDay || 0) * (1 - (Number(promoDiscountPercentage) || 0) / 100)).toFixed(2)} / bloque 30 min
+                    </span>
+                  </div>
+
+                  {/* Tarifa Noche */}
+                  <div className="p-2 rounded-lg bg-card border">
+                    <p className="text-muted-foreground font-medium">Tarifa Nocturna (desde 18:00)</p>
+                    <div className="mt-1 flex items-baseline gap-1.5">
+                      <span className="text-muted-foreground line-through text-[10px]">
+                        S/ {(Number(targetCourtForPreview.priceNight || targetCourtForPreview.priceDay || 0) * 2).toFixed(2)}/h
+                      </span>
+                      <span className="font-bold text-emerald-600 text-xs">
+                        S/ {(Number(targetCourtForPreview.priceNight || targetCourtForPreview.priceDay || 0) * 2 * (1 - (Number(promoDiscountPercentage) || 0) / 100)).toFixed(2)}/h
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">
+                      S/ {(Number(targetCourtForPreview.priceNight || targetCourtForPreview.priceDay || 0) * (1 - (Number(promoDiscountPercentage) || 0) / 100)).toFixed(2)} / bloque 30 min
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Interruptor de activación */}
+            <div className="flex items-center justify-between p-2.5 rounded-lg border bg-card">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-semibold cursor-pointer">Activar inmediatamente</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Si se desactiva, la promoción quedará guardada pero en pausa.
+                </p>
+              </div>
+              <Switch
+                checked={promoIsActive}
+                onCheckedChange={setPromoIsActive}
+              />
+            </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" size="sm" onClick={() => setPromoModalOpen(false)}>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPromoModalOpen(false)}
+              disabled={isSavingPromo}
+            >
               Cancelar
             </Button>
-            <Button size="sm" onClick={handleSavePromo} disabled={isSavingPromo} className="gap-1.5">
+            <Button
+              size="sm"
+              onClick={handleSavePromo}
+              disabled={isSavingPromo}
+              className="gap-1.5 bg-primary font-semibold"
+            >
               {isSavingPromo ? (
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <CheckCircle2 className="h-3.5 w-3.5" />
               )}
-              {isSavingPromo ? "Guardando..." : "Guardar Promoción"}
+              {isSavingPromo ? "Guardando en BD..." : editingPromotion ? "Actualizar Promoción" : "Guardar Promoción"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* DIÁLOGO DE CONFIRMACIÓN DE ELIMINACIÓN */}
+      <AlertDialog
+        open={!!deleteConfirmPromo}
+        onOpenChange={(open) => !open && setDeleteConfirmPromo(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              ¿Eliminar promoción de horario muerto?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs leading-relaxed">
+              Estás a punto de eliminar la promoción <strong>&quot;{deleteConfirmPromo?.name}&quot;</strong>.
+              Esta acción eliminará la regla de descuento de la base de datos PostgreSQL. Las reservas existentes ya emitidas no se verán afectadas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingPromo} className="text-xs">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeletingPromo}
+              onClick={handleDeletePromotion}
+              className="text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingPromo ? "Eliminando..." : "Sí, eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

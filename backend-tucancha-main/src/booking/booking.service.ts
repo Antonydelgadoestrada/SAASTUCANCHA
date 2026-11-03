@@ -23,6 +23,8 @@ import { Payment, PaymentType } from '../payment/payment.entity';
 import { PaymentMethod } from '../payment/payment-method.enum';
 import { TransactionsService } from '../transactions/transactions.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { PromotionService } from '../promotion/promotion.service';
+import { calculatePromotionPricing } from '../promotion/utils/promotion-calculator';
 
 function generateTimeSlots(start: string, duration: number): string[] {
   const [hours, minutes] = start.split(':').map(Number);
@@ -73,6 +75,8 @@ export class BookingService implements OnModuleInit {
     private readonly transactionsService: TransactionsService,
     @Optional()
     private readonly loyaltyService?: LoyaltyService,
+    @Optional()
+    private readonly promotionService?: PromotionService,
   ) {}
 
   async onModuleInit() {
@@ -156,16 +160,60 @@ export class BookingService implements OnModuleInit {
     const endTime = getEndTime(startTime, parsedDuration);
     if (!court) throw new NotFoundException('Cancha no encontrada');
 
-    const isNightTime = isNight(startTime);
-    const regularSlotPrice = Number(isNightTime ? (court.priceNight ?? court.priceDay) : court.priceDay) || 0;
-    const promoSlotPrice = Number(isNightTime ? court.promoNight : court.promoDay);
-    const hasPromo = !isNaN(promoSlotPrice) && promoSlotPrice > 0 && promoSlotPrice < regularSlotPrice;
-    const unitSlotPrice = hasPromo ? promoSlotPrice : regularSlotPrice;
+    let regularTotalPrice = 0;
+    let finalTotalPrice = 0;
+    let discountAmount = 0;
+    let hasPromo = false;
+    let appliedPromoPrice: number | null = null;
 
-    const slotCount = Math.round(parsedDuration * 2);
-    const regularTotalPrice = Number((regularSlotPrice * slotCount).toFixed(2));
-    const finalTotalPrice = Number((unitSlotPrice * slotCount).toFixed(2));
-    const discountAmount = Math.max(0, Number((regularTotalPrice - finalTotalPrice).toFixed(2)));
+    // 1. Evaluar promociones activas por franja horaria si el servicio está disponible
+    if (this.promotionService && court.club?.id) {
+      try {
+        const activePromos = await this.promotionService.findActiveByCourt(court.club.id, court.id);
+        if (activePromos && activePromos.length > 0) {
+          const promoResult = calculatePromotionPricing({
+            date: date,
+            startTime: startTime,
+            duration: parsedDuration,
+            court: {
+              id: court.id,
+              name: court.name,
+              priceDay: Number(court.priceDay) || 0,
+              priceNight: court.priceNight ? Number(court.priceNight) : null,
+              promoDay: court.promoDay ? Number(court.promoDay) : null,
+              promoNight: court.promoNight ? Number(court.promoNight) : null,
+            },
+            promotions: activePromos,
+          });
+
+          if (promoResult.hasPromotion) {
+            regularTotalPrice = promoResult.regularTotalPrice;
+            finalTotalPrice = promoResult.finalTotalPrice;
+            discountAmount = promoResult.totalDiscount;
+            hasPromo = true;
+            appliedPromoPrice = promoResult.finalTotalPrice;
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Error al calcular promociones por franja para cancha ${court.id}: ${err?.message}`);
+      }
+    }
+
+    // 2. Si no se aplicó promoción por franja horaria, recurrir al cálculo estándar/legacy (court.promoDay / promoNight)
+    if (!hasPromo) {
+      const isNightTime = isNight(startTime);
+      const regularSlotPrice = Number(isNightTime ? (court.priceNight ?? court.priceDay) : court.priceDay) || 0;
+      const promoSlotPrice = Number(isNightTime ? court.promoNight : court.promoDay);
+      const hasLegacyPromo = !isNaN(promoSlotPrice) && promoSlotPrice > 0 && promoSlotPrice < regularSlotPrice;
+      const unitSlotPrice = hasLegacyPromo ? promoSlotPrice : regularSlotPrice;
+
+      const slotCount = Math.round(parsedDuration * 2);
+      regularTotalPrice = Number((regularSlotPrice * slotCount).toFixed(2));
+      finalTotalPrice = Number((unitSlotPrice * slotCount).toFixed(2));
+      discountAmount = Math.max(0, Number((regularTotalPrice - finalTotalPrice).toFixed(2)));
+      hasPromo = hasLegacyPromo;
+      appliedPromoPrice = hasLegacyPromo ? promoSlotPrice : null;
+    }
 
     return {
       user,
@@ -182,8 +230,8 @@ export class BookingService implements OnModuleInit {
         notes: customerInfo?.notes || dto.notes || '',
       },
       pricing:{
-        basePrice: regularSlotPrice,
-        promoPrice: hasPromo ? promoSlotPrice : null,
+        basePrice: regularTotalPrice,
+        promoPrice: hasPromo ? appliedPromoPrice : null,
         discounts: discountAmount,
         taxes: 0,
         totalPrice: finalTotalPrice,

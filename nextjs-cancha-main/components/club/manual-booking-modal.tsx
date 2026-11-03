@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { createReservationManual } from "@/lib/reservation"
 import { getAllCourtsByQuery } from "@/lib/courts"
 import { previewClubCoupon, PreviewCouponResult } from "@/lib/loyalty"
+import { calculatePromotionPrice, CalculatePromotionPriceResult } from "@/lib/promotions"
 
 interface ManualBookingModalProps {
   open: boolean
@@ -36,6 +37,21 @@ interface ManualBookingModalProps {
   initialDate?: Date | string
   initialTime?: string
   onSuccess?: () => void
+}
+
+
+function generateReservationSlots(startTime: string, durationHours: number): string[] {
+  const [hStr, mStr] = (startTime || "08:00").split(":")
+  let currentMin = (parseInt(hStr, 10) || 0) * 60 + (parseInt(mStr, 10) || 0)
+  const slotCount = Math.round(durationHours * 2)
+  const slots: string[] = []
+  for (let i = 0; i < slotCount; i++) {
+    const h = Math.floor(currentMin / 60)
+    const m = currentMin % 60
+    slots.push(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`)
+    currentMin += 30
+  }
+  return slots
 }
 
 const ALL_TIME_SLOTS = [
@@ -72,6 +88,7 @@ export function ManualBookingModal({
   const [notes, setNotes] = useState<string>("")
   const [isSaving, setIsSaving] = useState<boolean>(false)
   const [isManualPriceEdited, setIsManualPriceEdited] = useState<boolean>(false)
+  const [activeTimePromo, setActiveTimePromo] = useState<CalculatePromotionPriceResult | null>(null)
   const [remoteAvailabilities, setRemoteAvailabilities] = useState<string[] | null>(null)
 
   // Estados para cupón de fidelidad
@@ -191,6 +208,39 @@ export function ManualBookingModal({
     }
   }, [availableTimeSlots, startTime])
 
+  
+  // Consultar promociones activas por franja horaria para la cancha y fecha seleccionadas
+  useEffect(() => {
+    if (!open || !selectedCourtId || !dateStr || !startTime || !duration) {
+      setActiveTimePromo(null)
+      return
+    }
+
+    let isMounted = true
+    const slots = generateReservationSlots(startTime, Number(duration))
+
+    calculatePromotionPrice({
+      courtId: Number(selectedCourtId),
+      date: dateStr,
+      slots,
+    })
+      .then((res) => {
+        if (!isMounted) return
+        if (res && res.hasPromotion) {
+          setActiveTimePromo(res)
+        } else {
+          setActiveTimePromo(null)
+        }
+      })
+      .catch(() => {
+        if (isMounted) setActiveTimePromo(null)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [open, selectedCourtId, dateStr, startTime, duration])
+
   // Limpiar cupón si cambian detalles de la reserva (cancha, fecha, hora, duración)
   useEffect(() => {
     if (appliedCoupon) {
@@ -270,7 +320,7 @@ export function ManualBookingModal({
       const res: any = await previewClubCoupon({
         code,
         courtId: selectedCourtId,
-        basePrice: calculatedPricing.totalPrice,
+        basePrice: activeTimePromo?.hasPromotion ? activeTimePromo.totalPromotionalPrice : calculatedPricing.totalPrice,
         date: dateStr,
         startTime,
         duration: Number(duration),

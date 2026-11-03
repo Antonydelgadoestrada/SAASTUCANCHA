@@ -14,6 +14,7 @@ import { AwsModule } from '../aws/aws.module';
 import { MailerModule } from '../mailer/mailer.module';
 import { Payment } from '../payment/payment.entity';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { PromotionModule } from '../promotion/promotion.module';
 
 @Module({
   imports: [
@@ -26,10 +27,10 @@ import { TransactionsModule } from '../transactions/transactions.module';
     MailerModule,
     UserModule, 
     TransactionsModule,
+    PromotionModule,
   ],
   providers: [BookingService, BookingCronService],
   controllers: [BookingController],
   exports: [BookingService, BookingCronService],
 })
 export class BookingModule {}
-
