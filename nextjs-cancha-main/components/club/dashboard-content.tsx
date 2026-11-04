@@ -5,7 +5,6 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import {
   CalendarIcon,
-  DownloadIcon,
   CalendarDaysIcon,
   SettingsIcon,
   MapPinIcon,
@@ -17,7 +16,15 @@ import {
   UserIcon,
   Flame,
   Snowflake,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  ShieldCheck,
 } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { useUserStore } from "@/stores/userStore"
+import api from "@/lib/axios"
+import { exportClubReportToExcel, exportClubReportToPDF, type ClubInfoData } from "@/lib/export-reports"
 import { toast } from "sonner"
 import Link from "next/link"
 
@@ -99,34 +106,105 @@ export function ClubDashboardContent() {
   const [isReservationsLoading, setIsReservationsLoading] = useState(true)
   const [isEventsLoading, setIsEventsLoading] = useState(true)
 
-  // Función para exportar datos a CSV
-  const exportToCSV = () => {
-    setIsLoading(true)
-    const data:any[] = report;
-    if (data.length > 0) {
-      // Convertir a CSV
-      const headers = Object.keys(data[0]).join(",")
-      const rows = data.map((item) => Object.values(item).join(","))
-      const csv = [headers, ...rows].join("\n")
+  // --- Datos del Club y Exportación Administrativa (Excel & PDF) ---
+  const { data: session } = useSession()
+  const storeUser = useUserStore((state) => state.user)
+  const [clubInfo, setClubInfo] = useState<ClubInfoData | null>(null)
+  const [isExportingExcel, setIsExportingExcel] = useState(false)
+  const [isExportingPDF, setIsExportingPDF] = useState(false)
 
-      // Crear y descargar el archivo
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      const filename = `report_tucancha_${format(new Date(), "yyyy-MM-dd-HH-mm-ss")}.csv`
+  // Consultar información del club autenticado
+  useEffect(() => {
+    const fetchClubData = async () => {
+      const targetClubId = session?.user?.clubId || storeUser?.clubId
+      if (!targetClubId) return
+      try {
+        const res = await api.get(`/clubs/${targetClubId}`)
+        if (res.data) {
+          setClubInfo(res.data)
+        }
+      } catch (err) {
+        console.error("Error al cargar datos del club para reportes:", err)
+      }
+    }
+    fetchClubData()
+  }, [session?.user?.clubId, storeUser?.clubId])
 
-      link.setAttribute("href", url)
-      link.setAttribute("download", `${filename}`)
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+  // Obtener etiqueta descriptiva del período para el reporte
+  const getPeriodLabel = (): string => {
+    if (isCustomDate && dateRange.from && dateRange.to) {
+      return `${format(dateRange.from, "dd/MM/yyyy", { locale: es })} al ${format(dateRange.to, "dd/MM/yyyy", { locale: es })}`
+    }
+    const today = new Date()
+    switch (timeRange) {
+      case "day":
+        return `Hoy (${format(today, "dd/MM/yyyy", { locale: es })})`
+      case "week": {
+        const start = startOfWeek(today, { weekStartsOn: 1 })
+        const end = endOfWeek(today, { weekStartsOn: 1 })
+        return `Semana actual (${format(start, "dd/MM/yyyy")} - ${format(end, "dd/MM/yyyy")})`
+      }
+      case "month": {
+        return `Mes actual (${format(today, "MMMM yyyy", { locale: es })})`
+      }
+      case "year": {
+        return `Año ${format(today, "yyyy")}`
+      }
+      default:
+        return "Período general"
+    }
+  }
 
-      toast.success(`Reporte exportado correctamente`)
-    } else {
-      toast.error("No reporte para exportar")
+  // Exportar reporte administrativo a Excel
+  const handleExportExcel = async () => {
+    if (!report || report.length === 0) {
+      toast.warning("No hay registros de reservas en el período seleccionado para exportar a Excel.")
+      return
     }
 
-    setIsLoading(false)
+    try {
+      setIsExportingExcel(true)
+      await exportClubReportToExcel({
+        club: clubInfo,
+        report,
+        summary,
+        popularCourts,
+        dateRangeLabel: getPeriodLabel(),
+        auditorName: session?.user?.name || storeUser?.name || "Administración del Club",
+      })
+      toast.success("Reporte administrativo en Excel generado con éxito")
+    } catch (error) {
+      console.error("Error al exportar a Excel:", error)
+      toast.error("Ocurrió un error al generar el reporte en Excel")
+    } finally {
+      setIsExportingExcel(false)
+    }
+  }
+
+  // Exportar informe oficial de gestión a PDF
+  const handleExportPDF = async () => {
+    if (!report || report.length === 0) {
+      toast.warning("No hay registros de reservas en el período seleccionado para exportar a PDF.")
+      return
+    }
+
+    try {
+      setIsExportingPDF(true)
+      await exportClubReportToPDF({
+        club: clubInfo,
+        report,
+        summary,
+        popularCourts,
+        dateRangeLabel: getPeriodLabel(),
+        auditorName: session?.user?.name || storeUser?.name || "Administración del Club",
+      })
+      toast.success("Informe oficial en PDF generado con éxito")
+    } catch (error) {
+      console.error("Error al exportar a PDF:", error)
+      toast.error("Ocurrió un error al generar el informe en PDF")
+    } finally {
+      setIsExportingPDF(false)
+    }
   }
 
   const getDateRangeFromTimeRange = (range: string): { from: Date; to: Date } | null => {
@@ -680,17 +758,53 @@ export function ClubDashboardContent() {
         </Card>
       </section>
 
-      {/* Sección de exportación de datos */}
-      <section className="rounded-lg border bg-card p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-lg font-medium">Exportar Datos</h3>
-            <p className="text-sm text-muted-foreground">Descarga los datos de tu club en formato CSV</p>
+      {/* Sección de exportación de datos administrativos (Excel & PDF) */}
+      <section className="rounded-xl border bg-card p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold tracking-tight">Exportar Reporte Administrativo</h3>
+              <Badge variant="outline" className="border-primary/30 text-primary font-normal text-xs">
+                Control & Auditoría
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Descarga el informe oficial de gestión, inspección y cuadre operativo para{" "}
+              <strong className="text-foreground">{clubInfo?.name || storeUser?.name || "tu Club"}</strong>.
+            </p>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Membrete y datos consolidados dinámicos por sede | Formatos disponibles:</span>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => exportToCSV()} disabled={isLoading}>
-              <DownloadIcon className="mr-2 h-4 w-4" />
-              Reporte
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={isLoading || isExportingExcel}
+              className="border-emerald-600/40 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 dark:text-emerald-400 font-medium h-9 px-3.5 shadow-sm transition-all"
+            >
+              {isExportingExcel ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin text-emerald-600" />
+              ) : (
+                <FileSpreadsheet className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              )}
+              Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={isLoading || isExportingPDF}
+              className="border-rose-600/40 text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 dark:text-rose-400 font-medium h-9 px-3.5 shadow-sm transition-all"
+            >
+              {isExportingPDF ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin text-rose-600" />
+              ) : (
+                <FileText className="mr-2 h-4 w-4 text-rose-600 dark:text-rose-400" />
+              )}
+              PDF
             </Button>
           </div>
         </div>

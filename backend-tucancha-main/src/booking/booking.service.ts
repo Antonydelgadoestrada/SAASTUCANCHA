@@ -895,14 +895,21 @@ export class BookingService implements OnModuleInit {
       .leftJoin('booking.court', 'court')
       .select([
         'booking.id AS id',
+        'booking.bookingReference AS "bookingReference"',
         'booking.date AS date',
-        'user.name AS userName',
-        'user.email AS userEmail',
+        'booking.startTime AS "startTime"',
+        'booking.endTime AS "endTime"',
+        'booking.customerInfo AS "customerInfo"',
+        'user.name AS "userName"',
+        'user.email AS "userEmail"',
         'court.name AS court',
+        'court.type AS sport',
         'booking.duration AS duration',
         "(booking.pricing->>'totalPrice')::numeric AS price",
         'booking.status AS status',
-        'booking.paymentMethod AS paymentMethod',
+        'booking.paymentStatus AS "paymentStatus"',
+        'booking.paymentMethod AS "paymentMethod"',
+        'booking.createdAt AS "createdAt"',
       ])
       .where('booking.club.id = :clubId', { clubId });
   
@@ -915,17 +922,45 @@ export class BookingService implements OnModuleInit {
   
     const result = await query.orderBy('booking.date', 'DESC').getRawMany();
   
-    return result.map((row) => ({
-      id: row.id,
-      date: row.date,
-      userName: row.userName,
-      userEmail: row.useremail,
-      court: row.court,
-      duration: Number(row.duration),
-      price: Number(row.price),
-      status: row.status,
-      paymentMethod: row.paymentmethod,
-    }));
+    return result.map((row) => {
+      const customerInfo = typeof row.customerInfo === 'string'
+        ? (()=>{ try { return JSON.parse(row.customerInfo); } catch { return {}; } })()
+        : (row.customerInfo || {});
+
+      const ref = row.bookingReference || row.bookingreference || (row.id ? String(row.id).slice(0, 8).toUpperCase() : '-');
+      const uName = row.userName || row.username || customerInfo.name || 'Cliente general';
+      const uEmail = row.userEmail || row.useremail || customerInfo.email || '-';
+      const uPhone = customerInfo.phone || '-';
+      const cCourt = row.court || 'Cancha general';
+      const cSport = row.sport || '-';
+      const sTime = row.startTime || row.starttime || '';
+      const eTime = row.endTime || row.endtime || '';
+      const dur = Number(row.duration) || 1;
+      const prc = Number(row.price) || 0;
+      const st = row.status || 'pending';
+      const pStatus = row.paymentStatus || row.paymentstatus || 'pending';
+      const pMethod = row.paymentMethod || row.paymentmethod || 'manual';
+      const cAt = row.createdAt || row.createdat;
+
+      return {
+        id: row.id,
+        bookingReference: ref,
+        date: row.date,
+        startTime: sTime,
+        endTime: eTime,
+        userName: uName,
+        userEmail: uEmail,
+        userPhone: uPhone,
+        court: cCourt,
+        sport: cSport,
+        duration: dur,
+        price: prc,
+        status: st,
+        paymentStatus: pStatus,
+        paymentMethod: pMethod,
+        createdAt: cAt,
+      };
+    });
   }
 
   async getHourlyOccupancyDemand(
