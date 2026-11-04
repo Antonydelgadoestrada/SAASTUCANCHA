@@ -1,12 +1,12 @@
 import {
-    Entity,
-    PrimaryGeneratedColumn,
-    Column,
-    OneToMany,
-    ManyToOne,
-    CreateDateColumn,
-    UpdateDateColumn,
-  } from 'typeorm';
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { User } from '../user/user.entity';
 import { Booking } from '../booking/booking.entity';
 import { Promotion } from '../promotion/promotion.entity';
@@ -52,139 +52,144 @@ export class EncryptionTransformer {
     }
   }
 }
-  
-  @Entity()
-  export class Club {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
-  
-    @ManyToOne(() => User, (user) => user.club, { onDelete: 'CASCADE' })
-    owner: User;
-  
-    @Column()
-    name: string;
-  
-    @Column()
-    email: string;
-  
-    @Column()
-    phone: string;
-  
-    @Column()
-    address: string;
-  
-    @Column({ nullable: true })
-    district: string;
-  
-    @Column()
-    description: string;
-  
-    @Column({ nullable: true })
-    logo?: string;
-  
-    @Column('text', { array: true, default: [] })
-    images: string[];
-  
-    @Column('json', { nullable: true })
-    socialMedia?: {
-      facebook?: string;
-      instagram?: string;
-      twitter?: string;
-    };
-  
-    @Column('json', { nullable: true })
-    coordinates: {
-      lat: number;
-      lng: number;
-    };
-  
-    @Column('text', { array: true, default: [] })
-    services: string[];
-  
-    @Column({ default: 'PENDING' })
-    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
-  
-    @Column({ nullable: true })
-    approvedAt?: Date;
 
-    @Column({ type: 'timestamp', nullable: true })
-    trialStartDate?: Date;
+@Entity()
+export class Club {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ type: 'timestamp', nullable: true })
-    trialEndDate?: Date;
-  
-    @CreateDateColumn()
-    createdAt: Date;
-    // Mercado pago tokens
-    @Column({ nullable: true })
-    mpUserId: string;
+  @ManyToOne(() => User, (user) => user.club, { onDelete: 'CASCADE' })
+  owner: User;
 
-    @Column({ nullable: true, transformer: new EncryptionTransformer() })
-    mpAccessToken: string;
+  @Column()
+  name: string;
 
-    @Column({ nullable: true, transformer: new EncryptionTransformer() })
-    mpRefreshToken: string;
+  @Column()
+  email: string;
 
-    @Column({ nullable: true })
-    mpTokenExpiresAt: Date;
+  @Column()
+  phone: string;
 
-    // Configuración de recaudación y pagos
-    @Column({ default: false })
-    aceptaMercadopago: boolean;
+  @Column()
+  address: string;
 
-    @Column({ default: true })
-    aceptaYape: boolean;
+  @Column({ nullable: true })
+  district: string;
 
-    @Column({ default: true })
-    aceptaPlin: boolean;
+  @Column()
+  description: string;
 
-    @Column({ nullable: true })
-    whatsapp?: string;
+  @Column({ nullable: true })
+  logo?: string;
 
-    @Column({ nullable: true })
-    yapeNumero?: string;
+  @Column('text', { array: true, default: [] })
+  images: string[];
 
-    @Column({ nullable: true })
-    yapeQrUrl?: string;
+  @Column('json', { nullable: true })
+  socialMedia?: {
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+  };
 
-    @Column({ nullable: true })
-    yapeTitular?: string;
+  @Column('json', { nullable: true })
+  coordinates: {
+    lat: number;
+    lng: number;
+  };
 
-    @Column({ nullable: true })
-    plinNumero?: string;
+  @Column('text', { array: true, default: [] })
+  services: string[];
 
-    @Column({ nullable: true })
-    plinQrUrl?: string;
+  @Column({ default: 'PENDING' })
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
 
-    @Column({ nullable: true })
-    plinTitular?: string;
+  @Column({ nullable: true })
+  approvedAt?: Date;
 
-    @Column({ type: 'int', default: 50 })
-    porcentajeAdelantoDefault: number;
+  @Column({ type: 'timestamp', nullable: true })
+  trialStartDate?: Date;
 
-    @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-    adelantoMinimo?: number;
+  @Column({ type: 'timestamp', nullable: true })
+  trialEndDate?: Date;
 
-    // Dentro de la clase Club:
-    @OneToMany(() => Booking, (booking) => booking.club)
-    bookings: Booking[];
-  
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 
-    @OneToMany(() => Promotion, (promotion) => promotion.club)
-    promotions: Promotion[];
+  // Mercado pago tokens
+  @Column({ nullable: true })
+  mpUserId: string;
 
-    @OneToMany(() => Review, (review) => review.club)
-    reviews: Review[];
+  @Column({ nullable: true, transformer: new EncryptionTransformer() })
+  mpAccessToken: string;
 
-    @OneToMany(() => Court, (court) => court.club)
-    courts: Court[]
+  @Column({ nullable: true, transformer: new EncryptionTransformer() })
+  mpRefreshToken: string;
+
+  @Column({ nullable: true })
+  mpTokenExpiresAt: Date;
+
+  // Configuración de recaudación y pagos
+  @Column({ default: false })
+  aceptaMercadopago: boolean;
+
+  @Column({ default: true })
+  aceptaYape: boolean;
+
+  @Column({ default: true })
+  aceptaPlin: boolean;
+
+  @Column({ nullable: true })
+  whatsapp?: string;
+
+  @Column({ nullable: true })
+  yapeNumero?: string;
+
+  @Column({ nullable: true })
+  yapeQrUrl?: string;
+
+  @Column({ nullable: true })
+  yapeTitular?: string;
+
+  @Column({ nullable: true })
+  plinNumero?: string;
+
+  @Column({ nullable: true })
+  plinQrUrl?: string;
+
+  @Column({ nullable: true })
+  plinTitular?: string;
+
+  @Column({ type: 'int', default: 50 })
+  porcentajeAdelantoDefault: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  adelantoMinimo?: number;
+
+  // Dentro de la clase Club:
+  @OneToMany(() => Booking, (booking) => booking.club)
+  bookings: Booking[];
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @OneToMany(() => Promotion, (promotion) => promotion.club)
+  promotions: Promotion[];
+
+  @OneToMany(() => Review, (review) => review.club)
+  reviews: Review[];
+
+  @OneToMany(() => Court, (court) => court.club)
+  courts: Court[];
+
   // opcional, por si quieres acceso inverso
-    @OneToMany(() => ScheduleTemplate, (template) => template.club)
-    scheduleTemplates: ScheduleTemplate[];
+  @OneToMany(() => ScheduleTemplate, (template) => template.club)
+  scheduleTemplates: ScheduleTemplate[];
 
-    @OneToMany('ClubMembership', (membership: any) => membership.club)
-    memberships: any[];
-  }
-  
+  @OneToMany('ClubMembership', (membership: any) => membership.club)
+  memberships: any[];
+
+  // Usuarios del club (recepcionistas)
+  @OneToMany(() => User, (user) => user.assignedClub)
+  users: User[];
+}

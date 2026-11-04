@@ -91,6 +91,7 @@ export function CourtForm({ onSubmit, court, onCancel, templates = [], onTemplat
   const [localTemplates, setLocalTemplates] = useState<any[]>(templates || [])
   const [isCreateTemplateDialogOpen, setIsCreateTemplateDialogOpen] = useState(false)
 
+
   const form = useForm<CourtFormData>({
     defaultValues: {
       name: "",

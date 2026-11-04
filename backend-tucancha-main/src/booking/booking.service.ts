@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit, ForbiddenException, Optional, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Booking } from './booking.entity';
 import { Repository } from 'typeorm';
@@ -22,6 +22,7 @@ import { isNight } from '../helpers/helpers';
 import { Payment, PaymentType } from '../payment/payment.entity';
 import { PaymentMethod } from '../payment/payment-method.enum';
 import { TransactionsService } from '../transactions/transactions.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 function generateTimeSlots(start: string, duration: number): string[] {
   const [hours, minutes] = start.split(':').map(Number);
@@ -55,6 +56,7 @@ const getEndTime = (startTime: string, duration: number): string => {
 
 @Injectable()
 export class BookingService implements OnModuleInit {
+  private readonly logger = new Logger(BookingService.name);
   
   constructor(
     @InjectRepository(Booking)
@@ -69,6 +71,8 @@ export class BookingService implements OnModuleInit {
     private readonly mailerService: MailerService,
     private readonly s3Service: S3Service,
     private readonly transactionsService: TransactionsService,
+    @Optional()
+    private readonly loyaltyService?: LoyaltyService,
   ) {}
 
   async onModuleInit() {
@@ -218,6 +222,14 @@ export class BookingService implements OnModuleInit {
    await this.scheduleTemplateService.bulkUpdate(payload as any);
 
    await this.mailerService.sendBookingCancelledEmail(result.customerInfo.email, result);
+
+   // Hook Loyalty Points: Reversión por cancelación de reserva
+   if (this.loyaltyService) {
+     this.loyaltyService.handleBookingCancelled({ bookingId: booking.id }).catch((err) => {
+       console.error(`⚠️ [Loyalty Hook Cancel] Error no bloqueante: ${err?.message}`);
+     });
+   }
+
    return booking;
   }
 
@@ -233,6 +245,23 @@ export class BookingService implements OnModuleInit {
    slots= slots.map((slot)=>(Object.assign(slot, { status: 'occupied' })))
    await this.scheduleTemplateService.bulkUpdate(slots);
    await this.mailerService.sendBookingPaidNotifications(result);
+
+   // Hook Loyalty Points: Reserva manual marcada como pagada
+   if (this.loyaltyService) {
+     const clubId = booking.club?.id || booking.court?.club?.id;
+     const userId = booking.user?.id;
+     if (clubId && userId) {
+       this.loyaltyService.handleBookingPaid({
+         clubId,
+         userId,
+         bookingId: booking.id,
+         bookingStartTime: booking.startTime || booking.date,
+       }).catch((err) => {
+         console.error(`⚠️ [Loyalty Hook Manual] Error no bloqueante: ${err?.message}`);
+       });
+     }
+   }
+
    return booking;
  }
 
@@ -336,6 +365,12 @@ export class BookingService implements OnModuleInit {
       throw new BadRequestException('Se requiere una fecha o un arreglo de fechas');
     }
 
+    if (dto.couponCode && dto.couponCode.trim() !== '' && datesToBook.length > 1) {
+      throw new BadRequestException(
+        'Los cupones de descuento solo pueden aplicarse a reservas individuales, no a reservas recurrentes',
+      );
+    }
+
     const court: any = await this.courtService.findOne(dto.courtId, ['club', 'club.owner']);
     if (!court) throw new NotFoundException('Cancha no encontrada');
 
@@ -346,6 +381,7 @@ export class BookingService implements OnModuleInit {
     }
 
     const createdBookings = [];
+    const paymentsToRecord: { payment: any; booking: any; userId: string }[] = [];
     const finalPricing = pricing
       ? {
           ...pricing,
@@ -458,7 +494,8 @@ export class BookingService implements OnModuleInit {
 
       allBookingsToCreate.push(bookingData);
 
-      slots = slots.map((slot) => Object.assign(slot, { status: isUnpaid ? 'on-hold' : 'occupied' }));
+      const isSlotUnpaid = dto.couponCode ? false : isUnpaid;
+      slots = slots.map((slot) => Object.assign(slot, { status: isSlotUnpaid ? 'on-hold' : 'occupied' }));
       allSlotsPayload.push(...slots);
     }
 
@@ -478,8 +515,109 @@ export class BookingService implements OnModuleInit {
           throw error;
         }
 
-        // Si el club registró un cobro (completo o adelanto), crear el registro Payment correspondiente
-        if (!isUnpaid) {
+        // Aplicación de cupón de fidelidad (Nivel 2)
+        if (dto.couponCode) {
+          if (!this.loyaltyService) {
+            throw new BadRequestException('El servicio de fidelidad no está disponible');
+          }
+
+          // Determinar el precio base real de la cancha para el cálculo del cupón
+          const courtBasePrice = Number(finalPricing?.basePrice || singleTotalPrice || 0);
+
+          const couponResult = await this.loyaltyService.applyManualCouponInsideTransaction(manager, {
+            clubId: court.club?.id || court.club,
+            userId: userReservation.id,
+            couponCode: dto.couponCode,
+            bookingId: savedBooking.id,
+            courtId: court.id,
+            basePrice: courtBasePrice,
+          });
+
+          const discountAmount = couponResult.discountAmount;
+          const newTotalPrice = Math.max(0, Number((courtBasePrice - discountAmount).toFixed(2)));
+
+          savedBooking.pricing = {
+            ...(finalPricing || {}),
+            basePrice: courtBasePrice,
+            discounts: discountAmount,
+            totalPrice: newTotalPrice,
+          };
+
+          if (newTotalPrice === 0) {
+            // Reserva 100% bonificada por hora gratis o cupón total
+            savedBooking.status = BookingStatus.CONFIRMED;
+            savedBooking.paymentStatus = PaymentStatus.PAID;
+            savedBooking.paymentMethod = 'coupon';
+
+            const paymentData = manager.create(Payment, {
+              bookings: [savedBooking],
+              user: userReservation,
+              amount: 0,
+              netAmount: 0,
+              feeAmount: 0,
+              currency: 'PEN',
+              method: PaymentMethod.EFECTIVO,
+              paymentMethod: PaymentMethod.EFECTIVO,
+              status: PaymentStatus.PAID,
+              type: PaymentType.PAGO_COMPLETO,
+              saldoStatus: 'NO_APLICA',
+              saldoAmount: 0,
+              pendingAudit: false,
+              confirmadoPor: user,
+              fechaConfirmacion: new Date(),
+            });
+            const savedPayment = await manager.save(Payment, paymentData);
+            savedBooking.payment = savedPayment;
+            await manager.save(Booking, savedBooking);
+            paymentsToRecord.push({ payment: savedPayment, booking: savedBooking, userId: userReservation.id });
+          } else {
+            // newTotalPrice > 0: Cobro del saldo restante
+            const rawPaid = dto.amountPaid !== undefined && dto.amountPaid !== null && String(dto.amountPaid).trim() !== ''
+              ? Number(dto.amountPaid)
+              : newTotalPrice;
+            const effectivePaid = isNaN(rawPaid) ? 0 : Math.min(rawPaid, newTotalPrice);
+            const isCouponFullPaid = effectivePaid >= newTotalPrice - 0.05;
+            const isCouponUnpaid = effectivePaid <= 0;
+
+            savedBooking.status = isCouponUnpaid ? BookingStatus.PENDING : BookingStatus.CONFIRMED;
+            savedBooking.paymentStatus = isCouponFullPaid ? PaymentStatus.PAID : PaymentStatus.PENDING;
+
+            if (!isCouponUnpaid) {
+              let netAmount = effectivePaid;
+              let feeAmount = 0;
+              if (safeMethod === PaymentMethod.POS && dto.posCommission) {
+                feeAmount = effectivePaid * (Number(dto.posCommission) / 100);
+                netAmount = effectivePaid - feeAmount;
+              }
+
+              const paymentData = manager.create(Payment, {
+                bookings: [savedBooking],
+                user: userReservation,
+                amount: effectivePaid,
+                netAmount: Number(netAmount.toFixed(2)),
+                feeAmount: Number(feeAmount.toFixed(2)),
+                currency: 'PEN',
+                method: safeMethod,
+                paymentMethod: safeMethod,
+                status: PaymentStatus.PAID,
+                type: isCouponFullPaid ? PaymentType.PAGO_COMPLETO : PaymentType.ADELANTO,
+                saldoStatus: isCouponFullPaid ? 'NO_APLICA' : 'PENDIENTE',
+                saldoAmount: isCouponFullPaid ? 0 : Math.max(0, Number((newTotalPrice - effectivePaid).toFixed(2))),
+                pendingAudit: false,
+                confirmadoPor: user,
+                fechaConfirmacion: new Date(),
+              });
+              const savedPayment = await manager.save(Payment, paymentData);
+              savedBooking.payment = savedPayment;
+              await manager.save(Booking, savedBooking);
+
+              paymentsToRecord.push({ payment: savedPayment, booking: savedBooking, userId: userReservation.id });
+            } else {
+              await manager.save(Booking, savedBooking);
+            }
+          }
+        } else if (!isUnpaid) {
+          // Si el club registró un cobro (completo o adelanto) sin cupón, comportamiento original
           let netAmount = amountPaidPerBooking;
           let feeAmount = 0;
           if (safeMethod === PaymentMethod.POS && dto.posCommission) {
@@ -508,8 +646,7 @@ export class BookingService implements OnModuleInit {
           savedBooking.payment = savedPayment;
           await manager.save(Booking, savedBooking);
 
-          // Inyectar al Libro de Transacciones (Ojo: llamando al servicio inyectado)
-          this.transactionsService.recordFromManualReservationPayment(savedPayment, savedBooking, userReservation.id).catch(() => {});
+          paymentsToRecord.push({ payment: savedPayment, booking: savedBooking, userId: userReservation.id });
         }
 
         createdBookings.push(savedBooking);
@@ -538,6 +675,15 @@ export class BookingService implements OnModuleInit {
         }
       }
     });
+
+    // 3. Registrar en Libro de Transacciones FUERA de la transacción atómica de BD
+    for (const item of paymentsToRecord) {
+      this.transactionsService
+        .recordFromManualReservationPayment(item.payment, item.booking, item.userId)
+        .catch((err) => {
+          this.logger.error(`Error registrando transacción para reserva ${item.booking?.id}:`, err);
+        });
+    }
 
     // Despachar notificaciones correspondientes
     for (const b of createdBookings) {

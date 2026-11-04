@@ -1,4 +1,4 @@
-import { IsArray, IsDateString, IsEmail, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsEmail, IsEnum, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BookingStatus } from './booking-status.enum';
 import { PaymentStatus } from '../payment/payment-status.enum';
@@ -133,8 +133,15 @@ export class CreateManualBookingDto {
   paymentMethod?: string;
 
   @IsOptional()
+  @IsOptional()
   posCommission?: number;
 
   @IsOptional()
   amountPaid?: number | string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20, { message: 'El código de cupón no puede exceder 20 caracteres' })
+  couponCode?: string;
 }
+

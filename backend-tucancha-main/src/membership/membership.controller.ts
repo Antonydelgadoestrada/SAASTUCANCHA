@@ -130,6 +130,12 @@ export class MembershipController {
   @UseGuards(JwtAuthGuard)
   @Get('history')
   async getMyMembershipHistory(@GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('membership')
+    ) {
+      throw new ForbiddenException('No tienes permisos para ver el historial de membresía');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible para este usuario');
     }
@@ -140,6 +146,12 @@ export class MembershipController {
   @UseGuards(JwtAuthGuard)
   @Get('payments')
   async getMyPayments(@GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('membership')
+    ) {
+      throw new ForbiddenException('No tienes permisos para ver los pagos de membresía');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible para este usuario');
     }
@@ -150,6 +162,12 @@ export class MembershipController {
   @UseGuards(JwtAuthGuard)
   @Post('cancel-autorenew')
   async cancelAutoRenew(@GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('membership')
+    ) {
+      throw new ForbiddenException('No tienes permisos para cancelar la renovación de membresía');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible para este usuario');
     }
@@ -163,6 +181,12 @@ export class MembershipController {
     @Body() body: SubscribePlanDto,
     @GetUser() user: Partial<User>,
   ) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('membership')
+    ) {
+      throw new ForbiddenException('No tienes permisos para gestionar la suscripción de membresía');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible para este usuario');
     }

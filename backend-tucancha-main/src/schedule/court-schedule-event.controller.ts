@@ -15,6 +15,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
 import { User } from '../user/user.entity';
+import { UserRole } from '../user/user-role.enum';
 import { CourtScheduleEventService } from './court-schedule-event.service';
 import { CreateCourtScheduleEventDto } from './dto/create-court-schedule-event.dto';
 import { UpdateCourtScheduleEventDto } from './dto/update-court-schedule-event.dto';
@@ -26,6 +27,12 @@ export class CourtScheduleEventController {
   @UseGuards(JwtAuthGuard)
   @Get('court/:courtId/list')
   async listByCourt(@Param('courtId') courtId: string, @GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.some((p) => ['events', 'bookings', 'dashboard', 'schedules'].includes(p))
+    ) {
+      throw new ForbiddenException('No tienes permisos para consultar eventos de cancha');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible');
     }
@@ -36,6 +43,12 @@ export class CourtScheduleEventController {
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async create(@Body() dto: CreateCourtScheduleEventDto, @GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('events')
+    ) {
+      throw new ForbiddenException('No tienes permisos para crear eventos o bloqueos');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible');
     }
@@ -50,6 +63,12 @@ export class CourtScheduleEventController {
     @Body() dto: UpdateCourtScheduleEventDto,
     @GetUser() user: Partial<User>,
   ) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('events')
+    ) {
+      throw new ForbiddenException('No tienes permisos para modificar eventos o bloqueos');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible');
     }
@@ -59,6 +78,12 @@ export class CourtScheduleEventController {
   @UseGuards(JwtAuthGuard)
   @Delete(':eventId')
   async remove(@Param('eventId') eventId: string, @GetUser() user: Partial<User>) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.includes('events')
+    ) {
+      throw new ForbiddenException('No tienes permisos para eliminar eventos o bloqueos');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible');
     }
@@ -79,6 +104,12 @@ export class CourtScheduleEventController {
     @Query('endDate') endDate: string,
     @GetUser() user: Partial<User>,
   ) {
+    if (
+      user.role === UserRole.RECEPCIONISTA &&
+      !user.permissions?.some((p) => ['events', 'bookings', 'dashboard', 'schedules'].includes(p))
+    ) {
+      throw new ForbiddenException('No tienes permisos para consultar eventos de cancha');
+    }
     if (!user?.club?.id) {
       throw new ForbiddenException('Club no disponible');
     }
